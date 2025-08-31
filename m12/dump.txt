@@ -16,3 +16,19 @@ Chaque banque semble formée de la même manière:
 |---------------------------------------|
 |???                                    |
 |---------------------------------------|
+
+
+Exemple de fonction de saut:
+
+dump_Bz6_p1.bin:
+  e000:
+  SETB P1.0
+  LCALL e000
+  CLR P1.0
+  RET
+
+dump_Bz6_p2.bin:
+  SETB P1.0
+  LCALL 07fe
+  CLR P1.0
+  RET
