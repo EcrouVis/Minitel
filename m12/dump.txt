@@ -11,7 +11,7 @@ Chaque banque semble formée de la même manière:
 |---------------------------------------|
 |Code spécifique à la banque            |
 |---------------------------------------|
-|0xE0 - :                               |
+|0xE000 - :                             |
 |Fonctions de saut vers d'autres banques|
 |---------------------------------------|
 |???                                    |
