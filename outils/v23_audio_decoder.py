@@ -65,7 +65,7 @@ def decode_transitions(tr,v,dt):
 
 for i in range(1,len(sys.argv)):
     
-    audio_file=sys.argv[i]#"E_ULLA.wav"
+    audio_file=sys.argv[i]
     
     if not path.isfile(audio_file):
         print(audio_file,"n'existe pas")
