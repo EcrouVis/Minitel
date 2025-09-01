@@ -51,7 +51,7 @@ def decode_transitions(tr,v,dt):
                     i2+=dt
                     if tr[int(i2)]:
                         a+=(1<<j)
-                i2+=dt2
+                i2+=dt
                 d={"time":i}
                 d["byte"]=a&0x7F
                 i=int(i2)
