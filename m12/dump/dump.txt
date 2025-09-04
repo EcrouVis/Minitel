@@ -7,18 +7,36 @@ Les 2 entrées d'adresse gérées de manière externe par le circuit électroniq
 Chaque banque semble formée de la même manière:
 
 |---------------------------------------|
-|Code d'initialisation/Reset?           |
+|Code d'initialisation/Reset            |
 |---------------------------------------|
 |Code spécifique à la banque            |
 |---------------------------------------|
-|0xE000 - :                             |
+|0xE000 - 0xE614:                       |
 |Fonctions de saut vers d'autres banques|
 |---------------------------------------|
 |???                                    |
 |---------------------------------------|
 
+---------- Commun à toutes les banques ----------
 
-Exemple de fonction de saut:
+Fonctions de saut de banque:
+
+-vers p1:
+  0xE2C0 - 0xE608
+  105 fonctions
+
+-vers p2:
+  0xE000 - 0xE2C0
+  88 fonctions
+
+-vers p3:
+  0xE608 - 0xE614
+  1 fonction - lecteur de l'audio du répondeur minitel
+
+-vers p4:
+  rien
+
+Exemple de fonction de saut (adresse 0xE000):
 
 dump_Bz6_p1.bin:
   e000:
@@ -32,3 +50,50 @@ dump_Bz6_p2.bin:
   LCALL 07fe
   CLR P1.0
   RET
+
+---------- ROM partie 1 (dump_Bz6_p1.bin) ----------
+
+---------- ROM partie 2 (dump_Bz6_p2.bin) ----------
+
+Contient le protocole ?
+
+Contient énormément d'instructions JMP
+
+Il faut désactiver l'analyse des switch/case dans Ghidra et faire la décompilation des JMP manuellement pour ne pas avoir de problèmes lors de la décompilation.
+
+---------- ROM partie 3 (dump_Bz6_p3.bin) ----------
+
+Contient:
+  -la fonction d'initialisation
+  -les vecteurs d'interruptions
+  -la table de saut
+  -le lecteur audio
+  -la piste audio
+
+Code du lecteur audio:
+  0x966B - 0x96B3
+
+Audio du répondeur minitel:
+  0x01D1 - 0x4196
+  Audio sous forme PWM puis filtré (passe bande 300-3400Hz pour la téléphonie)
+  Le bit de poids fort est lu en premier
+  L'oscillateur a une période de 14.7456MHz
+  1 bit est joué toutes les 324 périodes
+
+
+---------- ROM partie 4 (dump_Bz6_p4.bin) ----------
+
+Ne semble pas être utilisée
+
+Contient:
+  -la fonction d'initialisation
+  -les vecteurs d'interruptions
+  -la table de saut
+
+Code non utilisé:
+  0x01D1 - 0x0271
+
+  0x031A - 0x032F
+
+  0xFFAD - 0xFFF1:
+    Checksum sur 16 bit de la ROM entière puis envoi le résultat quelque part en base 16
