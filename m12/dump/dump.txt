@@ -53,7 +53,17 @@ dump_Bz6_p2.bin:
 
 ---------- ROM partie 1 (dump_Bz6_p1.bin) ----------
 
+En cours de décompilation
+
+Contient:
+  -la fonction d'initialisation
+  -les vecteurs d'interruptions
+  -la table de saut
+  -d'autres fonctions
+
 ---------- ROM partie 2 (dump_Bz6_p2.bin) ----------
+
+En cours de décompilation
 
 Contient le protocole ?
 
@@ -74,12 +84,22 @@ Code du lecteur audio:
   0x966B - 0x96B3
 
 Audio du répondeur minitel:
-  0x01D1 - 0x4196
+  0x01D1 - 0x9542
   Audio sous forme PWM puis filtré (passe bande 300-3400Hz pour la téléphonie)
   Le bit de poids fort est lu en premier
   L'oscillateur a une période de 14.7456MHz
   1 bit est joué toutes les 324 périodes
 
+Code non utilisé:
+  0x0008 - 0x000A:
+    Fin des données audio
+
+  0x9542 - 0x95E2
+
+  0x96D3 - 0x96E8
+
+  0xFFAD - 0xFFF1
+    Checksum sur 16 bit de la ROM entière puis envoi le résultat quelque part en base 16
 
 ---------- ROM partie 4 (dump_Bz6_p4.bin) ----------
 
