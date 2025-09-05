@@ -1,4 +1,5 @@
 from scipy import signal,io
+import numpy as np
 
 #paramètres d'entrée
 rom="../m12/dump/dump_Bz6_p3.bin"
@@ -27,5 +28,6 @@ sos=signal.cheby2(16,60,fc,btype="bandpass",output="sos",fs=fech)
 
 d=signal.sosfiltfilt(sos,d)
 d=signal.resample(d,int(len(d)*fech2/fech))
+d=d/np.max(np.abs(d))
 
 io.wavfile.write("../m12/dump/répondeur.wav",fech2,d)
