@@ -8,6 +8,7 @@ Chaque banque semble formée de la même manière:
 
 |---------------------------------------|
 |Code d'initialisation/Reset            |
+|Vecteurs d'interruption                |
 |---------------------------------------|
 |Code spécifique à la banque            |
 |---------------------------------------|
@@ -88,7 +89,7 @@ Audio du répondeur minitel:
   Audio sous forme PWM puis filtré (passe bande 300-3400Hz pour la téléphonie)
   Le bit de poids fort est lu en premier
   L'oscillateur a une période de 14.7456MHz
-  1 bit est joué toutes les 324 périodes
+  1 bit est joué toutes les 27.5*12 périodes en moyenne
 
 Code non utilisé:
   0x0008 - 0x000A:
@@ -117,3 +118,83 @@ Code non utilisé:
 
   0xFFAD - 0xFFF1:
     Checksum sur 16 bit de la ROM entière puis envoi le résultat quelque part en base 16
+
+
+
+
+---------- Emulation de la liaison série microcontrôleur - modem ----------
+RX:
+
+forme du message: 1 start bit + 8 bits + 2 stops bits
+
+variables gérées en interne:
+i7D: x bits restants
+i7B: pause x cycle
+i7C: message en cours de réception
+i26.5: message détecté
+i26.6: réessayer de réceptionner le message si erreur sur le premier bit stop
+
+variable de contrôle de la réception:
+i75: message non lu reçu
+i76: message non lu reçu précédent
+i2C.5: vitesse de réception 0: 1200 bauds / 1: 75 bauds
+i22.0: message présent
+i22.1: quel message à écraser en cas de nouvelle réception 0: nouveau / 1: ancien
+i29.3: message précédent écrasé
+
+MAIN
+  TMOD=0x23
+  TCON=0x50
+
+IE1
+  if INT1 return
+  clear EX1 //désactivation de l'interruption
+  TH0=0x0F
+  clear TF1 //remise à zéro de l'interruption du timmer
+  set ET1 //activation du timmer
+  set i26.5 //initialisation de la réception du message
+  set i26.6
+  i7D=8
+  i7B=2
+  if i2C.5 //dans le cas de la réception à 75 bauds
+    TH0=0x13
+    i7B=0x20
+  return
+
+IT1
+  i7B-=1
+  if i7B>0 return //attends le prochain bit
+  i7B=4 //prochain bit dans 4 cycles
+  if i2C.5 i7B=0x40
+  if i26.5 //dans le cas où un message est détecté
+    i7C=(i7C>>1)|(INT1?0x80:0)
+    i7D-=1
+    if i7D==0:
+      clear i26.5 //fin du message
+    return
+  if i26.6
+    clear i26.6
+    if not INT1 //erreur dans la réception du premier bit stop, réessayer
+      set i26.5
+      return
+  else
+    if INT1 //transfert du message + flags
+      if i22.1
+        i76=i75
+        set i29.3
+      else
+        set i22.1
+      i75=i7C
+      set i22.0
+  clear ET1 //désactivation du timmer
+  set EX1 //activation de l'interruption
+  return
+
+TX:
+
+MAIN
+
+F_TX
+
+IT0
+  
