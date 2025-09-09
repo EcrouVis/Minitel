@@ -121,20 +121,30 @@ Code non utilisé:
 
 
 
+---------- Partage du bus de données entre la ROM, la RAM, la puce vidéo et le CPLD MBSL-4000FH5-5 ----------
+
+Quand P1.5=1, la ROM et la RAM sont accédées de manière normale. On peut supposer que le CPLD fait office de tampon pour les 8 bits de poids fort de l'adresse.
+
+Quand P1.5=0, la puce vidéo est virtuellement montée aux adresses 0xXX20 à 0xXX2F à la place de la RAM. On peut supposer que les autres entrées sorties du CPLD peuvent être accédées de la même manière mais à d'autres adresses.
+
+
 
 ---------- Emulation de la liaison série microcontrôleur - modem ----------
 RX:
 
-forme du message: 1 start bit + 8 bits + 2 stops bits
+Le timer augmente de 1 à une fréquence de f_osc/12 et déborde à une fréquence de f_osc/12/256
+Cela donne une vitesse de réception de f_osc/(i2C.5?196608:12288) bauds (soit 75/1200 bauds avec un oscillateur de 14.7456MHz)
 
-variables gérées en interne:
+Forme du message: 1 start bit + 8 bits + 2 stops bits
+
+Variables gérées en interne:
 i7D: x bits restants
 i7B: pause x cycle
 i7C: message en cours de réception
 i26.5: message détecté
 i26.6: réessayer de réceptionner le message si erreur sur le premier bit stop
 
-variable de contrôle de la réception:
+Variables de contrôle de la réception:
 i75: message non lu reçu
 i76: message non lu reçu précédent
 i2C.5: vitesse de réception 0: 1200 bauds / 1: 75 bauds
@@ -143,15 +153,15 @@ i22.1: quel message à écraser en cas de nouvelle réception 0: nouveau / 1: an
 i29.3: message précédent écrasé
 
 MAIN
-  TMOD=0x23
+  TMOD=0x23 //timer 1: 8-bit contrôlé par TH0 (timer 0 en mode 3) avec rechargement automatique / timer 0: 8-bit
   TCON=0x50
 
 IE1
   if INT1 return
   clear EX1 //désactivation de l'interruption
-  TH0=0x0F
-  clear TF1 //remise à zéro de l'interruption du timmer
-  set ET1 //activation du timmer
+  TH0=0x0F //ajustement de la valeur de départ du timer
+  clear TF1 //remise à zéro de l'interruption du timer
+  set ET1 //activation du timer
   set i26.5 //initialisation de la réception du message
   set i26.6
   i7D=8
@@ -186,15 +196,69 @@ IT1
         set i22.1
       i75=i7C
       set i22.0
-  clear ET1 //désactivation du timmer
+  clear ET1 //désactivation du timer
   set EX1 //activation de l'interruption
   return
 
 TX:
 
-MAIN
+L'utilisation d'IT0 est partagé avec une autre fonction qui n'est pas pris en compte ci-dessous pour plus de simplicité
 
-F_TX
+Variables gérées en interne:
+i7A: compteur pause x cycles (4800->1200 cycles par secondes)
+i7E: compteur division des cycles par x (1200->75 cycles par secondes)
+i78: message en cours d'émission
+
+Variables de contrôle de l'émission:
+i24.6: émission du message en cours
+i24.7: message non envoyé présent
+i26.3: émission du message quand 0
+i26.4: message à envoyer présent
+i26.0,i26.1,i26.2: x bits envoyés
+i28.0: vitesse d'émission 0: 75 bauds / 1: 1200 bauds
+i79: message à envoyer
+
+MAIN
+  TMOD=0x23
+  TCON=0x50
+
+F_TX //dans la partie 2 de la ROM à l'adresse 0x70C6
+  i79=A //message à envoyer
+  set i24.7 //message présent
+  if not i24.6 //réinitialisation des variables
+    i26|=0x18
+  set i24.6
 
 IT0
-  
+  i7A-=1
+  if i7A>0 return
+  i7A=4
+  if not i24.6 return
+  if not 28.0 //dans le cas d'un envoi à 75 bauds
+    i7E-=1
+    if i7E return //ne laisser passer qu'un cycle sur 16 (1200/75=16)
+    i7E=0x10
+  if i26.3
+    clear i26.3
+    if i26.4
+      clear i26.4
+      i78=i79
+      clear i24.7
+      clear P1.3 //start bit
+      return
+    i26|=0x18
+    if not i24.7
+      set P1.3 //stop bit
+      clear i24.6
+      return
+  else
+    A=(i78>>1)|(i78<<7)&0xFF
+    i26+=1
+    B=i78&0x01
+    i78=A
+    if B: //envoi d'un bit du message
+      set P1.3
+    else
+      clear P1.3
+
+Changement de vitesse:
