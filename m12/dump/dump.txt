@@ -98,6 +98,7 @@ Code non utilisé:
   0x9542 - 0x95E2
 
   0x96D3 - 0x96E8
+    Copie la ROM (partie 3 seulement) dans la RAM externe puis s'arrête (boucle infinie)
 
   0xFFAD - 0xFFF1
     Checksum sur 16 bit de la ROM entière puis envoi le résultat quelque part en base 16
@@ -115,6 +116,7 @@ Code non utilisé:
   0x01D1 - 0x0271
 
   0x031A - 0x032F
+    Copie la ROM (partie 4 seulement) dans la RAM externe puis s'arrête (boucle infinie)
 
   0xFFAD - 0xFFF1:
     Checksum sur 16 bit de la ROM entière puis envoi le résultat quelque part en base 16
@@ -123,9 +125,9 @@ Code non utilisé:
 
 ---------- Partage du bus de données entre la ROM, la RAM, la puce vidéo et le CPLD MBSL-4000FH5-5 ----------
 
-Quand P1.5=1, la ROM et la RAM sont accédées de manière normale. On peut supposer que le CPLD fait office de tampon pour les 8 bits de poids fort de l'adresse.
+Quand P1.5=1, la ROM et la RAM externe sont accédées de manière normale. On peut supposer que le CPLD fait office de tampon pour les 8 bits de poids fort de l'adresse.
 
-Quand P1.5=0, la puce vidéo est virtuellement montée aux adresses 0xXX20 à 0xXX2F à la place de la RAM. On peut supposer que les autres entrées sorties du CPLD peuvent être accédées de la même manière mais à d'autres adresses.
+Quand P1.5=0, la puce vidéo est virtuellement montée aux adresses 0xXX20 à 0xXX2F à la place de la RAM externe. On peut supposer que les autres entrées sorties du CPLD peuvent être accédées de la même manière mais à d'autres adresses.
 
 
 
