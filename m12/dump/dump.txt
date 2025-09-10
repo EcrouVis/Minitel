@@ -142,6 +142,30 @@ De potentielles adresses (en recherchant la séquence 0xC2 0x95 - CLR P1.5 dans 
 
 
 
+---------- Sauts indirects ----------
+JMP @A+DPTR
+
+ROM partie 2 adresse 0x6792 (juste pourquoi ne pas utiliser JMP @A+DPTR ???):
+F_JMP:
+  RL A
+  MOV R0, A
+  INC R0
+  MOVC A, @A+DPTR
+  PUSH A
+  MOV A, R0
+  MOVC A, @A+DPTR
+  PUSH A
+  RET
+
+Une implémentation qui pourrai complexifier le code comme ci-dessous n'as pas encore été trouvée:
+POP X
+…
+POP Y
+…
+RET
+
+
+
 ---------- Emulation de la liaison série microcontrôleur - modem ----------
 RX:
 
