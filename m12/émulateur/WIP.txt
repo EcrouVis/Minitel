@@ -1,0 +1,12 @@
+Travail en cours:
+80C32: fait - non testé
+latch: fait
+câblage: fait
+SRAM: fait
+ROM: fait
+CPLD: pas fait
+Circuit reset: pas fait
+TS7514: pas fait
+TS9347: pas fait
+Circuit clavier: pas fait
+Interface: pas fait
