@@ -2,6 +2,10 @@
 #define DLATCH_H
 class DLatchBus{
 	public:
+		DLatchBus(){
+			
+			this->sendOUT=[](unsigned char d){};
+		}
 		void CChangeIn(bool b){
 			this->c=b;
 			this->updateState();
