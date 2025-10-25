@@ -1,0 +1,227 @@
+#include "thread_messaging.h"
+#include "circuit/80C32.h"
+#include "circuit/SRAM_64k.h"
+#include "circuit/ROM_256k.h"
+#include "circuit/IOLogger.h"
+#include "circuit/Latch.h"
+
+#include <chrono>
+
+#include <cstdio>
+
+#include <fstream>
+
+#include <cstring>
+
+#include <iostream>
+
+#include <chrono>
+#include <thread>
+
+void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video,thread_mailbox* p_mb_audio,thread_mailbox* p_mb_log,GlobalState* p_gState){
+	//create ic
+	SRAM_64k eram;
+	ROM_256k erom;
+	IOLogger iol;//debug
+	m80C32 uc;
+	EdgeTriggeredLatchBus ALLatch;
+	EdgeTriggeredLatchWire A16Latch;
+	EdgeTriggeredLatchWire A17Latch;
+	
+	//construct circuit
+	auto Dbus=[&ALLatch,&eram,&uc,&iol](unsigned char d){//in ic
+		//printf("Dbus %#02X\n",d);
+		ALLatch.INChangeIn(d);
+		eram.DChangeIn(d);
+		uc.PXChangeIn(0,d);
+		iol.DChangeIn(d);
+	};
+	uc.subscribeP0(Dbus);//out ic
+	eram.subscribeD(Dbus);
+	erom.subscribeD(Dbus);
+	iol.subscribeD(Dbus);
+	
+	auto ALbus=[&eram,&erom](unsigned char d){
+		//printf("ALbus %#02X\n",d);
+		eram.ALChangeIn(d);
+		erom.ALChangeIn(d);
+	};
+	ALLatch.subscribeOUT(ALbus);
+	
+	auto AHbus=[&eram,&erom,&uc](unsigned char d){
+		//printf("AHbus %#02X\n",d);
+		eram.AHChangeIn(d);
+		erom.AHChangeIn(d);
+		uc.PXChangeIn(2,d);
+	};
+	uc.subscribeP2(AHbus);
+	
+	auto nPSENwire=[&erom](bool b){
+		/*printf("nPSENwire ");
+		printf(b?"true":"false");
+		printf("\n");*/
+		erom.nGChangeIn(b);
+	};
+	uc.subscribenPSEN(nPSENwire);
+	
+	auto ALEwire=[&ALLatch,&A16Latch,&A17Latch,&iol](bool b){
+		/*printf("ALEwire ");
+		printf(b?"true":"false");
+		printf("\n");*/
+		ALLatch.CChangeIn(b);
+		A16Latch.CChangeIn(b);
+		A17Latch.CChangeIn(b);
+		iol.ALEChangeIn(b);
+	};
+	uc.subscribeALE(ALEwire);
+	
+	auto A16wire=[&erom](bool b){
+		/*printf("A16wire ");
+		printf(b?"true":"false");
+		printf("\n");*/
+		erom.A16ChangeIn(b);
+	};
+	A16Latch.subscribeOUT(A16wire);
+	
+	auto A17wire=[&erom](bool b){
+		/*printf("A17wire ");
+		printf(b?"true":"false");
+		printf("\n");*/
+		erom.A17ChangeIn(b);
+	};
+	A17Latch.subscribeOUT(A17wire);
+	
+	auto P1bus=[&A16Latch,&A17Latch,&eram,&iol,&uc](unsigned char d){
+		//printf("P1bus %#02X\n",d);
+		A16Latch.INChangeIn((bool)(d&1));
+		A17Latch.INChangeIn((bool)(d&2));
+		bool nCSVideo=(bool)(d&(1<<5));
+		//printf((!nCSVideo)?"nCS ram 1\n":"nCS ram 0\n");
+		eram.nCSChangeIn(!nCSVideo);
+		iol.nCSChangeIn(nCSVideo);
+		uc.PXChangeIn(1,d);
+	};
+	uc.subscribeP1(P1bus);
+	
+	//todo -> nWR,nRD in this bus
+	auto P3bus=[&eram,&iol,&uc](unsigned char d){
+		bool nRD=(bool)(d&0x80);
+		bool nWR=(bool)(d&0x40);
+		eram.nWEChangeIn(nWR);
+		iol.nWEChangeIn(nWR);
+		eram.nOEChangeIn(nRD);
+		iol.nOEChangeIn(nRD);
+		uc.PXChangeIn(3,d);
+	};
+	uc.subscribeP3(P3bus);
+	
+	/*auto nRDwire=[&eram,&iol](bool b){
+		printf("nRDwire ");
+		printf(b?"true":"false");
+		printf("\n");
+		eram.nOEChangeIn(b);
+		iol.nOEChangeIn(b);
+	};
+	uc.subscribenRD(nRDwire);
+	
+	auto nWRwire=[&eram,&iol](bool b){
+		printf("nWRwire ");
+		printf(b?"true":"false");
+		printf("\n");
+		eram.nWEChangeIn(b);
+		iol.nWEChangeIn(b);
+	};
+	uc.subscribenWR(nWRwire);*/
+	
+	thread_message ms_p_ram;
+	ms_p_ram.p=(void*)&eram;
+	ms_p_ram.cmd=ERAM;
+	thread_send_message(p_mb_video,&ms_p_ram);
+	
+	thread_message ms_p_rom;
+	ms_p_rom.p=(void*)&erom;
+	ms_p_rom.cmd=EROM;
+	thread_send_message(p_mb_video,&ms_p_rom);
+	
+	/*thread_message ms_p_notif;
+	ms_p_notif.cmd=NOTIFICATION_BUZZER;
+	for (int i=0;i<16;i++) thread_send_message(p_mb_video,&ms_p_notif);*/
+	bool next_step=false;
+	
+	while (!p_gState->shutdown.load(std::memory_order_relaxed)){
+		
+		thread_message ms;
+		std::ifstream eram_file;
+		std::ifstream erom_file;
+		const char* eram_fn;
+		const char* erom_fn;
+		while (thread_receive_message(p_mb_circuit,&ms)>=0){
+			switch(ms.cmd){
+				case LOAD_ERAM:
+					if (ms.p==NULL){
+						unsigned char eram_cpy[ERAM_SIZE];
+						std::fill_n(eram_cpy,ERAM_SIZE,0);
+						eram.set(eram_cpy);
+						printf("erase eram\n");
+					}
+					else{
+						eram_fn=(const char*)ms.p;
+						unsigned char eram_cpy[ERAM_SIZE];
+						eram_file.open(eram_fn,std::ios::in|std::ios::binary);
+						eram_file.read((char*)eram_cpy,ERAM_SIZE);
+						eram_file.close();
+						eram.set(eram_cpy);
+						printf("load eram ");
+						printf(eram_fn);
+						printf("\n");
+						free(ms.p);
+					}
+					break;
+				case LOAD_EROM:
+					if(ms.p==NULL){
+						unsigned char erom_cpy[EROM_SIZE];
+						std::fill_n(erom_cpy,EROM_SIZE,0);
+						erom.set(erom_cpy);
+						printf("erase erom\n");
+					}
+					else{
+						erom_fn=(const char*)ms.p;
+						unsigned char erom_cpy[EROM_SIZE];
+						erom_file.open(erom_fn,std::ios::in|std::ios::binary);
+						erom_file.read((char*)erom_cpy,EROM_SIZE);
+						erom_file.close();
+						erom.set(erom_cpy);
+						printf("load erom ");
+						printf(erom_fn);
+						printf("\n");
+						free(ms.p);
+					}
+					break;
+				case EMU_ON:
+					uc.Reset();
+					p_gState->minitelOn.store(true,std::memory_order_relaxed);
+					printf("power on\n");
+					break;
+				case EMU_OFF:
+					p_gState->minitelOn.store(false,std::memory_order_relaxed);
+					printf("power off\n");
+					break;
+				case EMU_NEXT_STEP:
+					next_step=true;
+					break;
+				default:
+					fprintf(stdout,"unknown cmd %i\n",ms.cmd);
+					break;
+			}
+		}
+		if (p_gState->minitelOn.load(std::memory_order_relaxed)&&(!p_gState->stepByStep.load(std::memory_order_relaxed)||next_step)){
+			uc.CLKTickIn();
+			next_step=false;
+			static int div_=0;
+			if (div_==0) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+			div_++;
+			div_%=50;
+		}
+		//eram.last_memory_operation.store((eram.last_memory_operation.load(std::memory_order_acquire)+1)%65536,std::memory_order_relaxed);
+	}
+}

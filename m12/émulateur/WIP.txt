@@ -1,5 +1,5 @@
 Travail en cours:
-80C32: fait - non testé
+80C32: fait - corriger l'accès aux sfr (seulement de manière directe ou par le hardware -> par exemple MOV SP 0xAF / MOV @R0 A produit des résultats non souhaités - les instructions MOVX ont étés modifiées pour l'instant mais devraient changer dans le futur)
 latch: fait
 câblage: fait
 SRAM: fait
@@ -9,4 +9,4 @@ Circuit reset: pas fait
 TS7514: pas fait
 TS9347: pas fait
 Circuit clavier: pas fait
-Interface: pas fait
+Interface: pas terminé

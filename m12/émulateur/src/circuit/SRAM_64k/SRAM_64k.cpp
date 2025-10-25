@@ -1,4 +1,6 @@
-#include "SRAM_64k.h"
+#include "circuit/SRAM_64k.h"
+
+#include <cstdio>
 void SRAM_64k::ALChangeIn(unsigned char a){
 	this->address&=0xFF00;
 	this->address|=(unsigned short)a;
@@ -25,7 +27,8 @@ void SRAM_64k::nCSChangeIn(bool b){
 	this->nCS=b;
 	this->updateState();
 }
-void SRAM_64k::subscribeD(void (*f)(unsigned char)){
+//void SRAM_64k::subscribeD(void (*f)(unsigned char)){
+void SRAM_64k::subscribeD(std::function<void(unsigned char)> f){
 	this->sendD=f;
 }
 bool SRAM_64k::isInput(){
@@ -35,10 +38,37 @@ bool SRAM_64k::isOutput(){
 	return this->nWE&&!(this->nCS||this->nOE);
 }
 void SRAM_64k::updateState(){
+	/*printf("nCS ");
+	printf(this->nCS?"1":"0");
+	printf(" / nWE ");
+	printf(this->nWE?"1":"0");
+	printf(" / nOE ");
+	printf(this->nOE?"1":"0");
+	printf("\n");*/
+	
 	if (this->isInput()){
-		this->eRAM[this->address]=this->data;
+		//printf("ram in %02X\n",this->data);
+		this->RAM[this->address].store(this->data,std::memory_order_relaxed);
+		this->last_memory_operation.store(this->address+ERAM_SIZE,std::memory_order_relaxed);
 	}
 	else if (this->isOutput()){
-		(*(this->sendD))(this->eRAM[this->address]);
+		//(*(this->sendD))(this->RAM[this->address].load(std::memory_order_relaxed));
+		//printf("ram out\n");
+		unsigned char d=this->RAM[this->address].load(std::memory_order_relaxed);
+		if (this->data!=d){//avoid feedback loop
+			this->sendD(d);
+			this->last_memory_operation.store(this->address,std::memory_order_relaxed);
+		}
+	}
+}
+
+void SRAM_64k::copy(unsigned char* array){
+	for (int i=0;i<ERAM_SIZE;i++){
+		array[i]=this->RAM[i].load(std::memory_order_relaxed);
+	}
+}
+void SRAM_64k::set(unsigned char* array){
+	for (int i=0;i<ERAM_SIZE;i++){
+		this->RAM[i].store(array[i],std::memory_order_relaxed);
 	}
 }
