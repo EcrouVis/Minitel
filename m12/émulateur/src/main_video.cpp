@@ -1,6 +1,7 @@
 #include "thread_messaging.h"
 #include "circuit/SRAM_64k.h"
 #include "circuit/ROM_256k.h"
+#include "circuit/80C32.h"
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -240,6 +241,7 @@ void imguiStartFrame(Parameters* p_params,NotificationServer* p_notif,thread_mai
 	}
 	if (p_params->debug.eram.mem!=NULL&&p_params->debug.eram.show) memoryWindow("RAM externe",&p_params->debug.eram);
 	if (p_params->debug.erom.mem!=NULL&&p_params->debug.erom.show) memoryWindow("ROM externe",&p_params->debug.erom);
+	if (p_params->debug.iram.mem!=NULL&&p_params->debug.iram.show) memoryWindow("RAM interne",&p_params->debug.iram);
 	p_notif->notification_window();
 	//if (use_font) ImGui::PopFont();
 }
@@ -371,6 +373,13 @@ void thread_video_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video,G
 					PARAMETERS.debug.erom.op=&(((ROM_256k*)ms.p)->last_memory_operation);
 					fprintf(stdout,"erom address pointer %p\n",PARAMETERS.debug.erom.op);
 					PARAMETERS.debug.erom.mem_size=EROM_SIZE;
+					break;
+				case UC:
+					PARAMETERS.debug.iram.mem=((m80C32*)ms.p)->iRAM;
+					fprintf(stdout,"erom pointer %p\n",PARAMETERS.debug.iram.mem);
+					PARAMETERS.debug.iram.op=&(((m80C32*)ms.p)->last_memory_operation);
+					fprintf(stdout,"iram address pointer %p\n",PARAMETERS.debug.iram.op);
+					PARAMETERS.debug.iram.mem_size=IRAM_SIZE;
 					break;
 				case NOTIFICATION:
 					Notification.notify((const char*)ms.p,true);

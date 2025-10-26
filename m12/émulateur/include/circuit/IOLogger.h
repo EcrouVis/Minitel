@@ -23,7 +23,7 @@ class IOLogger{
 			this->nOE=b;
 		}
 		void nWEChangeIn(bool b){
-			if(!b&&this->nWE&&(!this->nCS)) printf("IO O %#02X %#02X\n",this->address,this->data);
+			if(b&&(!this->nWE)&&(!this->nCS)) printf("IO O %#02X %#02X\n",this->address,this->data);
 			this->nWE=b;
 		}
 		void nCSChangeIn(bool b){

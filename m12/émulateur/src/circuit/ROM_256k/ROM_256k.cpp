@@ -4,7 +4,6 @@
 void ROM_256k::ALChangeIn(unsigned char a){
 	this->address&=0x0003FF00;
 	this->address|=(long)a;
-	printf("AL change %02X\n",a);
 	this->updateState();
 }
 void ROM_256k::AHChangeIn(unsigned char a){

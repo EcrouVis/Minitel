@@ -435,6 +435,9 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 		if (p_params->debug.erom.mem!=NULL){
 			ImGui::Checkbox("Afficher le contenu de la ROM externe",&(p_params->debug.erom.show));
 		}
+		if (p_params->debug.iram.mem!=NULL){
+			ImGui::Checkbox("Afficher le contenu de la RAM interne",&(p_params->debug.iram.show));
+		}
 		ImGui::Text("Statistiques");
 	}
 	if (ImGui::CollapsingHeader("À propos")){

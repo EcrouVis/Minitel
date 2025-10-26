@@ -115,24 +115,6 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	};
 	uc.subscribeP3(P3bus);
 	
-	/*auto nRDwire=[&eram,&iol](bool b){
-		printf("nRDwire ");
-		printf(b?"true":"false");
-		printf("\n");
-		eram.nOEChangeIn(b);
-		iol.nOEChangeIn(b);
-	};
-	uc.subscribenRD(nRDwire);
-	
-	auto nWRwire=[&eram,&iol](bool b){
-		printf("nWRwire ");
-		printf(b?"true":"false");
-		printf("\n");
-		eram.nWEChangeIn(b);
-		iol.nWEChangeIn(b);
-	};
-	uc.subscribenWR(nWRwire);*/
-	
 	thread_message ms_p_ram;
 	ms_p_ram.p=(void*)&eram;
 	ms_p_ram.cmd=ERAM;
@@ -142,6 +124,11 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	ms_p_rom.p=(void*)&erom;
 	ms_p_rom.cmd=EROM;
 	thread_send_message(p_mb_video,&ms_p_rom);
+	
+	thread_message ms_p_uc;
+	ms_p_uc.p=(void*)&uc;
+	ms_p_uc.cmd=UC;
+	thread_send_message(p_mb_video,&ms_p_uc);
 	
 	/*thread_message ms_p_notif;
 	ms_p_notif.cmd=NOTIFICATION_BUZZER;
@@ -215,12 +202,15 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 			}
 		}
 		if (p_gState->minitelOn.load(std::memory_order_relaxed)&&(!p_gState->stepByStep.load(std::memory_order_relaxed)||next_step)){
-			uc.CLKTickIn();
+			//while (!uc.exec_instruction){
+				uc.CLKTickIn();
+			//}
+			uc.exec_instruction=false;
 			next_step=false;
-			static int div_=0;
+			/*static int div_=0;
 			if (div_==0) std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			div_++;
-			div_%=50;
+			div_%=50;*/
 		}
 		//eram.last_memory_operation.store((eram.last_memory_operation.load(std::memory_order_acquire)+1)%65536,std::memory_order_relaxed);
 	}

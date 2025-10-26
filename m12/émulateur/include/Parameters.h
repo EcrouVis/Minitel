@@ -54,7 +54,7 @@ struct P_IO{
 };
 struct P_Debug{
 	imguiMemoryView eram;
-	//imguiMemoryView iram;
+	imguiMemoryView iram;
 	imguiMemoryView erom;
 };
 struct P_Info{

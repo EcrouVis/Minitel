@@ -1,11 +1,17 @@
 #ifndef M80C32_H
 #define M80C32_H
+#include <atomic>
 #include <functional>
+
+const int IRAM_SIZE=256;
 
 class m80C32{
 	public:
-		const int mem_size=256;
-		unsigned char iRAM[256];
+		bool exec_instruction=false;
+	
+		std::atomic_uchar iRAM[IRAM_SIZE];
+		std::atomic_uint last_memory_operation;
+		unsigned char SFR[128];
 		unsigned char PX_out[4];
 		unsigned char SBUF_out;
 		unsigned char SBUF_in;//buffer
@@ -31,8 +37,6 @@ class m80C32{
 		void subscribeP1(std::function<void(unsigned char)> f){this->sendP1=f;}
 		void subscribeP2(std::function<void(unsigned char)> f){this->sendP2=f;}
 		void subscribeP3(std::function<void(unsigned char)> f){this->sendP3=f;}
-		void subscribenRD(std::function<void(bool)> f){this->sendnRD=f;}
-		void subscribenWR(std::function<void(bool)> f){this->sendnWR=f;}
 		void subscribeTxD(std::function<void(bool)> f){this->sendTxD=f;}
 		void subscribeRxD(std::function<void(bool)> f){this->sendRxD=f;}
 		void subscribeALE(std::function<void(bool)> f){this->sendALE=f;}
@@ -44,32 +48,49 @@ class m80C32{
 		const unsigned char periodPerCycle=12;
 		
 		//address
-		//const unsigned char ACC=0xE0;
-		const unsigned char B=0xF0;
-		const unsigned char DPH=0x83;
-		const unsigned char DPL=0x82;
-		/*const unsigned char IE=0xA8;
-		const unsigned char IP=0xB8;
-		const unsigned char P0=0x80;
-		const unsigned char P1=0x90;
-		const unsigned char P2=0xA0;
-		const unsigned char P3=0xB0;*/
 		enum Constants{
 			ACC=0xE0,
+			B=0xF0,
+			DPH=0x83,
+			DPL=0x82,
 			IE=0xA8,
 			IP=0xB8,
 			P0=0x80,
 			P1=0x90,
 			P2=0xA0,
 			P3=0xB0,
+			PCON=0x87,
+			PSW=0xD0,
+			RCAP2H=0xCB,
+			RCAP2L=0xCA,
 			SBUF=0x99,
-			PCON=0x87
+			SCON=0x98,
+			SP=0x81,
+			TCON=0x88,
+			T2CON=0xC8,
+			TH0=0x8C,
+			TH1=0x8D,
+			TH2=0xCD,
+			TL0=0x8A,
+			TL1=0x8B,
+			TL2=0xCC,
+			TMOD=0x89
 		};
-		//const unsigned char PCON=0x87;
+		/*const unsigned char ACC=0xE0;
+		const unsigned char B=0xF0;
+		const unsigned char DPH=0x83;
+		const unsigned char DPL=0x82;
+		const unsigned char IE=0xA8;
+		const unsigned char IP=0xB8;
+		const unsigned char P0=0x80;
+		const unsigned char P1=0x90;
+		const unsigned char P2=0xA0;
+		const unsigned char P3=0xB0;
+		const unsigned char PCON=0x87;
 		const unsigned char PSW=0xD0;
 		const unsigned char RCAP2H=0xCB;
 		const unsigned char RCAP2L=0xCA;
-		//const unsigned char SBUF=0x99;
+		const unsigned char SBUF=0x99;
 		const unsigned char SCON=0x98;
 		const unsigned char SP=0x81;
 		const unsigned char TCON=0x88;
@@ -80,7 +101,7 @@ class m80C32{
 		const unsigned char TL0=0x8A;
 		const unsigned char TL1=0x8B;
 		const unsigned char TL2=0xCC;
-		const unsigned char TMOD=0x89;
+		const unsigned char TMOD=0x89;*/
 		
 		//bit address
 		const unsigned char EA=0xAF;
@@ -196,13 +217,18 @@ class m80C32{
 		
 		bool getBitIn(unsigned char);
 		//change state + callback for PX port change
-		void SetBitIn(unsigned char,bool);
+		void setBitIn(unsigned char,bool);
 		
-		unsigned char getCharIn(unsigned char);
+		//unsigned char getCharIn(unsigned char);
+		unsigned char getRAMByte(unsigned char);
+		unsigned char getSFRByteIn(unsigned char);
 		//for read-modify-write instruction
-		unsigned char getCharOut(unsigned char);
+		//unsigned char getCharOut(unsigned char);
+		unsigned char getSFRByteOut(unsigned char);
 		//change state + callback for PX port change
-		void setChar(unsigned char,unsigned char);
+		//void setChar(unsigned char,unsigned char);
+		void setRAMByte(unsigned char,unsigned char);
+		void setSFRByte(unsigned char,unsigned char);
 		
 		unsigned char getR(unsigned char);
 		
@@ -229,9 +255,12 @@ class m80C32{
 		void CPLb(unsigned char);
 		void DA();
 		void DEC(unsigned char);
+		void DECd(unsigned char);
 		void DIV();
 		void DJNZ(unsigned char);
+		void DJNZd(unsigned char);
 		void INC(unsigned char);
+		void INCd(unsigned char);
 		void INCdptr();
 		void JB();
 		void JBC();
@@ -244,6 +273,7 @@ class m80C32{
 		void LCALL();
 		void LJMP();
 		void MOV(unsigned char,unsigned char);
+		void MOVd(unsigned char,unsigned char);
 		void MOVdptr();
 		void MOVb(unsigned char,unsigned char);
 		void MOVC(unsigned short);
@@ -267,6 +297,7 @@ class m80C32{
 		void SUBB(unsigned char);
 		void SWAP();
 		void XCH(unsigned char);
+		void XCHd(unsigned char);
 		void XCHD(unsigned char);
 		void XRL(unsigned char,unsigned char);
 		
