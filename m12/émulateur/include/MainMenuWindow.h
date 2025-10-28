@@ -146,6 +146,7 @@ void sendCommandMEM(thread_mailbox* p_mb_circuit,const int cmd,const char* str=N
 }
 	
 void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
+	static const Parameters default_parameters;
 	ImGui::Begin("Menu",&(p_params->imgui.show_menu),ImGuiWindowFlags_AlwaysAutoResize);
 	ImGui::Text("Appuyez sur F1 pour afficher/cacher le menu");
 	if (ImGui::CollapsingHeader("UI")){
@@ -408,7 +409,7 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 		ImGui::Indent();
 		ImGui::SliderFloat("##crt_width", &(p_params->io.crt.width_factor), 0.5, 1.5, "x%.3f");
 		ImGui::SameLine();
-		if(ImGui::Button("Réinitialiser")) p_params->io.crt.width_factor=1.;
+		if(ImGui::Button("Réinitialiser")) p_params->io.crt.width_factor=default_parameters.io.crt.width_factor;
 		ImGui::Unindent();
 		ImGui::Checkbox("Sortie vidéo RGB",&(p_params->io.crt.rgb));
 		ImGui::SameLine();
@@ -417,8 +418,9 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 		ImGui::Checkbox("Filtre vidéo CRT",&crt_filter);
 	}
 	if (ImGui::CollapsingHeader("Débuggage")){
-		static bool sbs=false;
-		ImGui::Checkbox("Execution pas à pas",&sbs);
+		//static bool sbs=false;
+		bool sbs=p_params->p_gState->stepByStep.load(std::memory_order_relaxed);
+		ImGui::Checkbox("Pauser l'exécution",&sbs);
 		p_params->p_gState->stepByStep.store(sbs,std::memory_order_relaxed);
 		if (sbs){
 			ImGui::Indent();
@@ -438,7 +440,9 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 		if (p_params->debug.iram.mem!=NULL){
 			ImGui::Checkbox("Afficher le contenu de la RAM interne",&(p_params->debug.iram.show));
 		}
+		ImGui::Checkbox("Afficher les registres spéciaux du microcontrôleur",&(p_params->debug.sfr.show));
 		ImGui::Text("Statistiques");
+		ImGui::Text("%.1f FPS",ImGui::GetIO().Framerate);
 	}
 	if (ImGui::CollapsingHeader("À propos")){
 		ImGui::Text(p_params->info.title);

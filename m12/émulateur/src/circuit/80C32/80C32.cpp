@@ -4,6 +4,9 @@
 #include <cstdio>
 
 m80C32::m80C32(){
+	for (int i=0;i<SFR_SIZE;i++){
+		this->SFR[i].store(0xFF,std::memory_order_relaxed);
+	}
 	this->Reset();
 	auto vc=[](unsigned char d){};
 	auto vb=[](bool b){};
@@ -32,12 +35,7 @@ void m80C32::bitaddress2address(unsigned char* address, unsigned char* bit){
 bool m80C32::getBitIn(unsigned char address){
 	unsigned char bit;
 	this->bitaddress2address(&address,&bit);
-	if ((bool)(address&0x80)){
-		return (bool)((this->getSFRByteIn(address)>>bit)&0x01);
-	}
-	else{
-		return (bool)((this->getRAMByte(address)>>bit)&0x01);
-	}
+	return (bool)((this->getDirectByteIn(address)>>bit)&0x01);
 }
 //change state + callback for PX port change
 void m80C32::setBitIn(unsigned char address, bool b){
@@ -62,7 +60,38 @@ unsigned char m80C32::getRAMByte(unsigned char address){
 	return this->iRAM[address].load(std::memory_order_relaxed);
 }
 unsigned char m80C32::getSFRByteIn(unsigned char address){
-	return this->SFR[address&0x7F];
+	switch (address){
+		case this->P0:
+		case this->P1:
+		case this->P2:
+		case this->P3:
+		case this->ACC:
+		case this->IE:
+		case this->IP:
+		case this->PCON:
+		case this->SBUF:
+		case this->B:
+		case this->DPH:
+		case this->DPL:
+		case this->PSW:
+		case this->RCAP2H:
+		case this->RCAP2L:
+		case this->SCON:
+		case this->SP:
+		case this->TCON:
+		case this->T2CON:
+		case this->TH0:
+		case this->TH1:
+		case this->TH2:
+		case this->TL0:
+		case this->TL1:
+		case this->TL2:
+		case this->TMOD:
+			return this->SFR[address&0x7F].load(std::memory_order_relaxed);
+		default:
+			printf("read sfr in %02X\n",address);
+			return 0xFF;
+	}
 }
 unsigned char m80C32::getSFRByteOut(unsigned char address){
 	switch (address){
@@ -74,10 +103,39 @@ unsigned char m80C32::getSFRByteOut(unsigned char address){
 			return this->PX_out[2];
 		case this->P3:
 			return this->PX_out[3];
+		case this->ACC:
+		case this->IE:
+		case this->IP:
+		case this->PCON:
+		case this->SBUF:
+		case this->B:
+		case this->DPH:
+		case this->DPL:
+		case this->PSW:
+		case this->RCAP2H:
+		case this->RCAP2L:
+		case this->SCON:
+		case this->SP:
+		case this->TCON:
+		case this->T2CON:
+		case this->TH0:
+		case this->TH1:
+		case this->TH2:
+		case this->TL0:
+		case this->TL1:
+		case this->TL2:
+		case this->TMOD:
+			return this->SFR[address&0x7F].load(std::memory_order_relaxed);
 		default:
-			break;
+			printf("read sfr out %02X\n",address);
+			return 0xFF;
 	}
-	return this->SFR[address&0x7F];
+}
+unsigned char m80C32::getDirectByteIn(unsigned char address){
+	return ((bool)(address&0x80))?this->getSFRByteIn(address):this->getRAMByte(address);
+}
+unsigned char m80C32::getDirectByteOut(unsigned char address){
+	return ((bool)(address&0x80))?this->getSFRByteOut(address):this->getRAMByte(address);
 }
 //change state + callback for PX port change
 void m80C32::setRAMByte(unsigned char address, unsigned char d){
@@ -87,12 +145,12 @@ void m80C32::setRAMByte(unsigned char address, unsigned char d){
 void m80C32::setSFRByte(unsigned char address, unsigned char d){
 	switch (address){
 		case this->ACC:
-			this->SFR[address&0x7F]=d;
+			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
 			this->setACCParity();
 			break;
 		case this->IE:
 		case this->IP:
-			this->SFR[address&0x7F]=d;
+			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
 			this->interrupt_change=true;
 			break;
 		case this->P0:
@@ -120,7 +178,7 @@ void m80C32::setSFRByte(unsigned char address, unsigned char d){
 			}
 			break;
 		case this->PCON:
-			this->SFR[address&0x7F]=d;
+			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
 			this->PCONChange();
 			break;
 		case this->SBUF:
@@ -144,9 +202,10 @@ void m80C32::setSFRByte(unsigned char address, unsigned char d){
 		case this->TL1:
 		case this->TL2:
 		case this->TMOD:
-			this->SFR[address&0x7F]=d;
+			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
 			break;
 		default:
+			printf("write sfr %02X\n",address);
 			break;
 	}
 }
@@ -220,7 +279,7 @@ void m80C32::PXChangeIn(unsigned char x,unsigned char d){
 	const unsigned char ax[4]={this->P0,this->P1,this->P2,this->P3};
 	x=ax[x];
 	unsigned char v=this->getSFRByteIn(x);//this->SFR[x&0x7F];
-	this->SFR[x&0x7F]=d;//don't trigger infinite loop + don't write to TX_out
+	this->SFR[x&0x7F].store(d,std::memory_order_relaxed);//don't trigger infinite loop + don't write to TX_out
 	this->checkPortChangeConsequences(x,v^d);
 	
 }
@@ -741,6 +800,7 @@ void m80C32::checkInterrupts(){
 						this->instruction[2]=0x2B;
 						break;
 				}
+				printf("interrupt!!!\n");
 				this->i_part_n=3;
 				this->i_cycle_n=0;
 				this->interrupt_level|=mask;
@@ -817,8 +877,12 @@ void m80C32::execInstruction(){
 	unsigned char ptrc;
 	switch (this->instruction[0]){
 		default:
+			printf("erreur instruction %02X\n",this->instruction[0]);
+			break;
 		case 0:
+			break;
 		case 0xA5://nop / reserved
+			printf("erreur instruction propriétaire\n");
 			break;
 		
 		case 0x11:
@@ -849,9 +913,7 @@ void m80C32::execInstruction(){
 			goto i_cjne;
 		case 0xB5:
 			d1=this->getSFRByteIn(this->ACC);
-			d2=this->instruction[1];
-			if ((bool)(d2&0x80)) d2=this->getSFRByteIn(d2);
-			else d2=this->getRAMByte(d2);
+			d2=this->getDirectByteIn(this->instruction[1]);
 			goto i_cjne;
 		case 0xB6:
 			d1=this->getRAMByte(this->getRAMByte(this->getR(0)));
@@ -879,9 +941,7 @@ void m80C32::execInstruction(){
 			d=this->instruction[1];
 			goto i_add;
 		case 0x25:
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_add;
 		case 0x26:
 			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
@@ -906,9 +966,7 @@ void m80C32::execInstruction(){
 			d=this->instruction[1];
 			goto i_addc;
 		case 0x35:
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_addc;
 		case 0x36:
 			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
@@ -943,9 +1001,7 @@ void m80C32::execInstruction(){
 			goto i_anl;
 		case 0x55:
 			a=this->ACC;
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_anl;
 		case 0x56:
 			a=this->ACC;
@@ -1003,12 +1059,10 @@ void m80C32::execInstruction(){
 			break;
 			
 		case 0x14:
-			a=this->ACC;
-			goto i_decd;
+			this->DECd(this->ACC);//!!!!!
+			break;
 		case 0x15:
-			a=this->instruction[1];
-			i_decd:
-			this->DECd(a);//!!!!!
+			this->DECd(this->instruction[1]);//!!!!!
 			break;
 		case 0x16:
 			a=this->getRAMByte(this->getR(0));
@@ -1149,9 +1203,7 @@ void m80C32::execInstruction(){
 			goto i_mov;
 		case 0x85:
 			a=this->instruction[2];//!!!!!!!!!!!!!!!!
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_movd;
 		case 0x86:
 			a=this->instruction[1];
@@ -1174,15 +1226,11 @@ void m80C32::execInstruction(){
 			goto i_movd;
 		case 0xA6:
 			a=this->getRAMByte(this->getR(0));
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_mov;
 		case 0xA7:
 			a=this->getRAMByte(this->getR(1));
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_mov;
 		case 0xA8:
 		case 0xA9:
@@ -1193,15 +1241,11 @@ void m80C32::execInstruction(){
 		case 0xAE:
 		case 0xAF:
 			a=this->getR(this->instruction[0]&0x07);
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_mov;
 		case 0xE5:
 			a=this->ACC;
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_movd;
 		case 0xE6:
 			a=this->ACC;
@@ -1312,9 +1356,7 @@ void m80C32::execInstruction(){
 			goto i_orl;
 		case 0x45:
 			a=this->ACC;
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_orl;
 		case 0x46:
 			a=this->ACC;
@@ -1392,9 +1434,7 @@ void m80C32::execInstruction(){
 			d=this->instruction[1];
 			goto i_subb;
 		case 0x95:
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_subb;
 		case 0x96:
 			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
@@ -1463,9 +1503,7 @@ void m80C32::execInstruction(){
 			goto i_xrl;
 		case 0x65:
 			a=this->ACC;
-			d=this->instruction[1];
-			if ((bool)(d&0x80)) d=this->getSFRByteIn(d);
-			else d=this->getRAMByte(d);
+			d=this->getDirectByteIn(this->instruction[1]);
 			goto i_xrl;
 		case 0x66:
 			a=this->ACC;
@@ -1624,11 +1662,17 @@ void m80C32::DJNZd(unsigned char a){
 	if ((bool)(a&0x80)){
 		unsigned char v=this->getSFRByteOut(a)-1;
 		if (v!=0){
-			this->PC+=(unsigned short)(signed char)this->instruction[1];
+			this->PC+=(unsigned short)(signed char)this->instruction[2];
 		}
 		this->setSFRByte(a,v);
 	}
-	else DJNZ(a);
+	else {
+		unsigned char v=this->getRAMByte(a)-1;
+		if (v!=0){
+			this->PC+=(unsigned short)(signed char)this->instruction[2];
+		}
+		this->setRAMByte(a,v);
+	}
 }
 void m80C32::INC(unsigned char a){
 	//printf("INC\n");
@@ -1756,52 +1800,56 @@ void m80C32::MOVC(unsigned short ptr){
 }
 void m80C32::MOVXin(unsigned char a){//8 bit address
 	//printf("MOVXin 8bit\n");
-	this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	//printf("in ic %02X\n",a);
 	this->sendP0(a);
 	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP3((this->PX_out[3]&0x3F)|0x40);
 	this->setSFRByte(this->ACC,this->getSFRByteIn(this->P0));
-	this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP3(this->PX_out[3]);
 	this->sendP0(this->PX_out[0]);
+	//printf("in ic - %02X %02X\n",a,this->getSFRByteIn(this->ACC));
 }
 void m80C32::MOVXin(unsigned short a){//16 bit address
 	//printf("MOVXin 16bit\n");
-	this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP0((unsigned char)(a&0xFF));
 	this->sendP2((unsigned char)(a>>8));
 	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP3((this->PX_out[3]&0x3F)|0x40);
 	this->setSFRByte(this->ACC,this->getSFRByteIn(this->P0));
-	this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP3(this->PX_out[3]);
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
 }
 void m80C32::MOVXout(unsigned char a){//8 bit address
 	//printf("MOVXout 8bit\n");
-	this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	//printf("out ic %02X %02X\n",a,this->getSFRByteIn(this->ACC));
 	this->sendP0(a);
 	this->sendALE(true);
 	this->sendALE(false);
-	this->sendP3((this->PX_out[3]&0x3F)|0x80);
 	this->sendP0(this->getSFRByteIn(this->ACC));
-	this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	this->sendP3((this->PX_out[3]&0x3F)|0x80);
+	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP3(this->PX_out[3]);
 	this->sendP0(this->PX_out[0]);
+	//printf("out ic - %02X\n",a);
 }
 void m80C32::MOVXout(unsigned short a){//16 bit address
 	//printf("MOVXout 16bit\n");
-	this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP0((unsigned char)(a&0xFF));
 	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP2((unsigned char)(a>>8));
-	this->sendP3((this->PX_out[3]&0x3F)|0x80);
 	this->sendP0(this->getSFRByteIn(this->ACC));
-	this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	this->sendP3((this->PX_out[3]&0x3F)|0x80);
+	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP3(this->PX_out[3]);
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
@@ -1820,7 +1868,7 @@ void m80C32::ORL(unsigned char a,unsigned char d){
 	else this->setRAMByte(a,this->getRAMByte(a)|d);
 }
 void m80C32::ORLcy(bool b){
-	printf("ORLcy\n");
+	//printf("ORLcy\n");
 	if (b) this->setBitIn(this->CY,true);
 }
 void m80C32::POP(){

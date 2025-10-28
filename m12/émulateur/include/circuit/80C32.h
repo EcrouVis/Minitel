@@ -4,14 +4,45 @@
 #include <functional>
 
 const int IRAM_SIZE=256;
+const int SFR_SIZE=128;
 
 class m80C32{
 	public:
 		bool exec_instruction=false;
+		
+		//address
+		enum Constants{
+			ACC=0xE0,
+			B=0xF0,
+			DPH=0x83,
+			DPL=0x82,
+			IE=0xA8,
+			IP=0xB8,
+			P0=0x80,
+			P1=0x90,
+			P2=0xA0,
+			P3=0xB0,
+			PCON=0x87,
+			PSW=0xD0,
+			RCAP2H=0xCB,
+			RCAP2L=0xCA,
+			SBUF=0x99,
+			SCON=0x98,
+			SP=0x81,
+			TCON=0x88,
+			T2CON=0xC8,
+			TH0=0x8C,
+			TH1=0x8D,
+			TH2=0xCD,
+			TL0=0x8A,
+			TL1=0x8B,
+			TL2=0xCC,
+			TMOD=0x89
+		};
 	
 		std::atomic_uchar iRAM[IRAM_SIZE];
 		std::atomic_uint last_memory_operation;
-		unsigned char SFR[128];
+		std::atomic_uchar SFR[SFR_SIZE];
 		unsigned char PX_out[4];
 		unsigned char SBUF_out;
 		unsigned char SBUF_in;//buffer
@@ -47,35 +78,6 @@ class m80C32{
 	
 		const unsigned char periodPerCycle=12;
 		
-		//address
-		enum Constants{
-			ACC=0xE0,
-			B=0xF0,
-			DPH=0x83,
-			DPL=0x82,
-			IE=0xA8,
-			IP=0xB8,
-			P0=0x80,
-			P1=0x90,
-			P2=0xA0,
-			P3=0xB0,
-			PCON=0x87,
-			PSW=0xD0,
-			RCAP2H=0xCB,
-			RCAP2L=0xCA,
-			SBUF=0x99,
-			SCON=0x98,
-			SP=0x81,
-			TCON=0x88,
-			T2CON=0xC8,
-			TH0=0x8C,
-			TH1=0x8D,
-			TH2=0xCD,
-			TL0=0x8A,
-			TL1=0x8B,
-			TL2=0xCC,
-			TMOD=0x89
-		};
 		/*const unsigned char ACC=0xE0;
 		const unsigned char B=0xF0;
 		const unsigned char DPH=0x83;
@@ -222,9 +224,11 @@ class m80C32{
 		//unsigned char getCharIn(unsigned char);
 		unsigned char getRAMByte(unsigned char);
 		unsigned char getSFRByteIn(unsigned char);
+		unsigned char getDirectByteIn(unsigned char);
 		//for read-modify-write instruction
 		//unsigned char getCharOut(unsigned char);
 		unsigned char getSFRByteOut(unsigned char);
+		unsigned char getDirectByteOut(unsigned char);
 		//change state + callback for PX port change
 		//void setChar(unsigned char,unsigned char);
 		void setRAMByte(unsigned char,unsigned char);

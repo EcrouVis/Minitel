@@ -242,6 +242,7 @@ void imguiStartFrame(Parameters* p_params,NotificationServer* p_notif,thread_mai
 	if (p_params->debug.eram.mem!=NULL&&p_params->debug.eram.show) memoryWindow("RAM externe",&p_params->debug.eram);
 	if (p_params->debug.erom.mem!=NULL&&p_params->debug.erom.show) memoryWindow("ROM externe",&p_params->debug.erom);
 	if (p_params->debug.iram.mem!=NULL&&p_params->debug.iram.show) memoryWindow("RAM interne",&p_params->debug.iram);
+	if (p_params->debug.sfr.show) sfr80C32Window(&p_params->debug.sfr);
 	p_notif->notification_window();
 	//if (use_font) ImGui::PopFont();
 }
@@ -375,12 +376,41 @@ void thread_video_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video,G
 					PARAMETERS.debug.erom.mem_size=EROM_SIZE;
 					break;
 				case UC:
-					PARAMETERS.debug.iram.mem=((m80C32*)ms.p)->iRAM;
-					fprintf(stdout,"erom pointer %p\n",PARAMETERS.debug.iram.mem);
-					PARAMETERS.debug.iram.op=&(((m80C32*)ms.p)->last_memory_operation);
+				{
+					m80C32* uc=(m80C32*)ms.p;
+					PARAMETERS.debug.iram.mem=uc->iRAM;
+					fprintf(stdout,"iram pointer %p\n",PARAMETERS.debug.iram.mem);
+					PARAMETERS.debug.iram.op=&(uc->last_memory_operation);
 					fprintf(stdout,"iram address pointer %p\n",PARAMETERS.debug.iram.op);
 					PARAMETERS.debug.iram.mem_size=IRAM_SIZE;
+					PARAMETERS.debug.sfr.ACC=&(uc->SFR[uc->ACC&0x7F]);
+					PARAMETERS.debug.sfr.B=&(uc->SFR[uc->B&0x7F]);
+					PARAMETERS.debug.sfr.DPH=&(uc->SFR[uc->DPH&0x7F]);
+					PARAMETERS.debug.sfr.DPL=&(uc->SFR[uc->DPL&0x7F]);
+					PARAMETERS.debug.sfr.IE=&(uc->SFR[uc->IE&0x7F]);
+					PARAMETERS.debug.sfr.IP=&(uc->SFR[uc->IP&0x7F]);
+					PARAMETERS.debug.sfr.P0=&(uc->SFR[uc->P0&0x7F]);
+					PARAMETERS.debug.sfr.P1=&(uc->SFR[uc->P1&0x7F]);
+					PARAMETERS.debug.sfr.P2=&(uc->SFR[uc->P2&0x7F]);
+					PARAMETERS.debug.sfr.P3=&(uc->SFR[uc->P3&0x7F]);
+					PARAMETERS.debug.sfr.PCON=&(uc->SFR[uc->PCON&0x7F]);
+					PARAMETERS.debug.sfr.PSW=&(uc->SFR[uc->PSW&0x7F]);
+					PARAMETERS.debug.sfr.RCAP2H=&(uc->SFR[uc->RCAP2H&0x7F]);
+					PARAMETERS.debug.sfr.RCAP2L=&(uc->SFR[uc->RCAP2L&0x7F]);
+					PARAMETERS.debug.sfr.SBUF=&(uc->SFR[uc->SBUF&0x7F]);
+					PARAMETERS.debug.sfr.SCON=&(uc->SFR[uc->SCON&0x7F]);
+					PARAMETERS.debug.sfr.SP=&(uc->SFR[uc->SP&0x7F]);
+					PARAMETERS.debug.sfr.TCON=&(uc->SFR[uc->TCON&0x7F]);
+					PARAMETERS.debug.sfr.T2CON=&(uc->SFR[uc->T2CON&0x7F]);
+					PARAMETERS.debug.sfr.TH0=&(uc->SFR[uc->TH0&0x7F]);
+					PARAMETERS.debug.sfr.TH1=&(uc->SFR[uc->TH1&0x7F]);
+					PARAMETERS.debug.sfr.TH2=&(uc->SFR[uc->TH2&0x7F]);
+					PARAMETERS.debug.sfr.TL0=&(uc->SFR[uc->TL0&0x7F]);
+					PARAMETERS.debug.sfr.TL1=&(uc->SFR[uc->TL1&0x7F]);
+					PARAMETERS.debug.sfr.TL2=&(uc->SFR[uc->TL2&0x7F]);
+					PARAMETERS.debug.sfr.TMOD=&(uc->SFR[uc->TMOD&0x7F]);
 					break;
+				}
 				case NOTIFICATION:
 					Notification.notify((const char*)ms.p,true);
 					//imgui_notify((const char*)ms.p,true);

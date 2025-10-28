@@ -103,7 +103,6 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	};
 	uc.subscribeP1(P1bus);
 	
-	//todo -> nWR,nRD in this bus
 	auto P3bus=[&eram,&iol,&uc](unsigned char d){
 		bool nRD=(bool)(d&0x80);
 		bool nWR=(bool)(d&0x40);
@@ -114,6 +113,38 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 		uc.PXChangeIn(3,d);
 	};
 	uc.subscribeP3(P3bus);
+	
+	//debug
+	auto dbgIOIN=[p_gState](unsigned char a,unsigned char d){
+		printf("To ");
+		if ((a&0xF0)==0x20){
+			printf("TS9347 ");
+		}
+		else{
+			printf("IO ");
+			p_gState->stepByStep.store(true,std::memory_order_relaxed);
+		}
+		printf("A: 0x%02X / D: 0x%02X\n",a,d);
+		
+	};
+	iol.subscribeIN(dbgIOIN);
+	auto dbgIOOUT=[p_gState](unsigned char a){
+		unsigned char r=0;
+		printf("From ");
+		if ((a&0xF0)==0x20){
+			printf("TS9347 ");
+		}
+		else{
+			printf("IO ");
+			p_gState->stepByStep.store(true,std::memory_order_relaxed);
+		}
+		printf("A: 0x%02X / D: 0x%02X\n",a,r);
+		if(a!=0x20) r=0xff;
+		return r;
+	};
+	iol.subscribeOUT(dbgIOOUT);
+	
+	
 	
 	thread_message ms_p_ram;
 	ms_p_ram.p=(void*)&eram;
@@ -202,15 +233,15 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 			}
 		}
 		if (p_gState->minitelOn.load(std::memory_order_relaxed)&&(!p_gState->stepByStep.load(std::memory_order_relaxed)||next_step)){
-			//while (!uc.exec_instruction){
+			while (!uc.exec_instruction){
 				uc.CLKTickIn();
-			//}
+			}
 			uc.exec_instruction=false;
 			next_step=false;
-			/*static int div_=0;
+			static int div_=0;
 			if (div_==0) std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			div_++;
-			div_%=50;*/
+			div_%=50;
 		}
 		//eram.last_memory_operation.store((eram.last_memory_operation.load(std::memory_order_acquire)+1)%65536,std::memory_order_relaxed);
 	}

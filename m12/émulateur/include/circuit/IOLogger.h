@@ -1,6 +1,7 @@
 #ifndef IOLOGGER_H
 #define IOLOGGER_H
 #include <cstdio>
+#include <iostream>
 #include <functional>
 class IOLogger{
 	public:
@@ -15,15 +16,21 @@ class IOLogger{
 		}
 		void nOEChangeIn(bool b){
 			if((!b)&&this->nOE&&(!this->nCS)) {
-				unsigned char r=0;
-				printf("IO I %#02X %#02X\n",this->address,r);
 				//(*this->sendD)(r);
-				this->sendD(r);
+				this->sendD(this->sendOUT(this->address));
+				/*if (this->address==0x96){
+				int a;
+				std::cin>>a;
+				}*/
 			}
 			this->nOE=b;
 		}
 		void nWEChangeIn(bool b){
-			if(b&&(!this->nWE)&&(!this->nCS)) printf("IO O %#02X %#02X\n",this->address,this->data);
+			if(b&&(!this->nWE)&&(!this->nCS)){
+				this->sendIN(this->address,this->data);
+				/*int a;
+				std::cin>>a;*/
+			}
 			this->nWE=b;
 		}
 		void nCSChangeIn(bool b){
@@ -33,6 +40,12 @@ class IOLogger{
 		void subscribeD(std::function<void(unsigned char)> f){
 			this->sendD=f;
 		}
+		void subscribeIN(std::function<void(unsigned char,unsigned char)> f){
+			this->sendIN=f;
+		}
+		void subscribeOUT(std::function<unsigned char(unsigned char)> f){
+			this->sendOUT=f;
+		}
 	private:
 		bool nCS=true;
 		bool nOE=true;
@@ -41,6 +54,8 @@ class IOLogger{
 		unsigned char address=0;
 		unsigned char data=0;
 		std::function<void(unsigned char)> sendD;
+		std::function<void(unsigned char,unsigned char)> sendIN=[](unsigned char a,unsigned char d){};
+		std::function<unsigned char(unsigned char)> sendOUT=[](unsigned char a){return 0;};
 		//void (*sendD)(unsigned char);
 };
 #endif
