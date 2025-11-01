@@ -1,6 +1,7 @@
 #include "thread_messaging.h"
 #include "circuit/SRAM_64k.h"
 #include "circuit/ROM_256k.h"
+#include "circuit/TS9347.h"
 #include "circuit/80C32.h"
 
 #include "imgui.h"
@@ -243,6 +244,7 @@ void imguiStartFrame(Parameters* p_params,NotificationServer* p_notif,thread_mai
 	if (p_params->debug.erom.mem!=NULL&&p_params->debug.erom.show) memoryWindow("ROM externe",&p_params->debug.erom);
 	if (p_params->debug.iram.mem!=NULL&&p_params->debug.iram.show) memoryWindow("RAM interne",&p_params->debug.iram);
 	if (p_params->debug.sfr.show) sfr80C32Window(&p_params->debug.sfr);
+	if (p_params->debug.vram.mem!=NULL&&p_params->debug.vram.show) memoryWindow("VRAM",&p_params->debug.vram);
 	p_notif->notification_window();
 	//if (use_font) ImGui::PopFont();
 }
@@ -262,14 +264,6 @@ void thread_video_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video,G
 	Parameters PARAMETERS;
 	PARAMETERS.p_gState=p_gState;
 	NotificationServer Notification;
-	
-	for (const auto& entry : std::filesystem::directory_iterator("./")) {
-		if (entry.is_regular_file()){
-		fprintf(stdout,(const char*)entry.path().string().c_str());
-		fprintf(stdout,"\n");
-		}
-    }
-	
 	
     glfwSetErrorCallback(error_callback);
  
@@ -374,6 +368,11 @@ void thread_video_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video,G
 					PARAMETERS.debug.erom.op=&(((ROM_256k*)ms.p)->last_memory_operation);
 					fprintf(stdout,"erom address pointer %p\n",PARAMETERS.debug.erom.op);
 					PARAMETERS.debug.erom.mem_size=EROM_SIZE;
+					break;
+				case VC:
+					PARAMETERS.debug.vram.mem=((TS9347wVRAM*)ms.p)->VRAM;
+					fprintf(stdout,"vram pointer %p\n",PARAMETERS.debug.vram.mem);
+					PARAMETERS.debug.vram.mem_size=VRAM_SIZE;
 					break;
 				case UC:
 				{

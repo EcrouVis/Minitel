@@ -85,6 +85,7 @@ struct P_Debug{
 	imguiMemoryView eram;
 	imguiMemoryView iram;
 	imguiMemoryView erom;
+	imguiMemoryView vram;
 	imgui80C32SFRView sfr;
 };
 struct P_Info{

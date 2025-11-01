@@ -441,6 +441,9 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 			ImGui::Checkbox("Afficher le contenu de la RAM interne",&(p_params->debug.iram.show));
 		}
 		ImGui::Checkbox("Afficher les registres spéciaux du microcontrôleur",&(p_params->debug.sfr.show));
+		if (p_params->debug.vram.mem!=NULL){
+			ImGui::Checkbox("Afficher le contenu de la RAM vidéo",&(p_params->debug.vram.show));
+		}
 		ImGui::Text("Statistiques");
 		ImGui::Text("%.1f FPS",ImGui::GetIO().Framerate);
 	}

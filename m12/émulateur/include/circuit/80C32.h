@@ -54,6 +54,7 @@ class m80C32{
 		void ResetChangeIn(bool);
 		void Reset();
 		void PXChangeIn(unsigned char,unsigned char);
+		void PXYChangeIn(unsigned char,unsigned char,bool);
 		/*void subscribeP0(void (*f)(unsigned char)){this->sendP0=f;}
 		void subscribeP1(void (*f)(unsigned char)){this->sendP1=f;}
 		void subscribeP2(void (*f)(unsigned char)){this->sendP2=f;}
@@ -215,11 +216,16 @@ class m80C32{
 			2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1
 			};
 		
-		void bitaddress2address(unsigned char*,unsigned char*);
+		static void bitaddress2address(unsigned char*,unsigned char*);
+		
+		static unsigned char getBitMask(unsigned char);
+		static unsigned char getBitDirectAddress(unsigned char);
 		
 		bool getBitIn(unsigned char);
+		bool getBitOut(unsigned char);
 		//change state + callback for PX port change
 		void setBitIn(unsigned char,bool);
+		void setBitOut(unsigned char,bool);
 		
 		//unsigned char getCharIn(unsigned char);
 		unsigned char getRAMByte(unsigned char);
@@ -233,6 +239,7 @@ class m80C32{
 		//void setChar(unsigned char,unsigned char);
 		void setRAMByte(unsigned char,unsigned char);
 		void setSFRByte(unsigned char,unsigned char);
+		void setDirectByte(unsigned char,unsigned char);
 		
 		unsigned char getR(unsigned char);
 		
@@ -246,64 +253,55 @@ class m80C32{
 		unsigned char i_cycle_n=0xFF;
 		unsigned char i_part_n;
 		
-		void ACALL();
-		void AJMP();
-		void ADD(unsigned char);
-		void ADDC(unsigned char);
-		void ANL(unsigned char,unsigned char);
-		void ANLcy(bool);
-		void CJNE(unsigned char,unsigned char);
-		void CLRa();
-		void CLRb(unsigned char);
-		void CPLa();
-		void CPLb(unsigned char);
+		void ACALL(unsigned short);
+		void ADD_A(unsigned char);
+		void ADDC_A(unsigned char);
+		void AJMP(unsigned short);
+		static unsigned char ANL(unsigned char,unsigned char);
+		void ANL_C(bool);
+		void CJNE(unsigned char,unsigned char,signed char);
+		void CLR_A();
+		static unsigned char CLR_bit(unsigned char,unsigned char);
+		void CPL_A();
+		static unsigned char CPL_bit(unsigned char,unsigned char);
 		void DA();
-		void DEC(unsigned char);
-		void DECd(unsigned char);
+		static unsigned char DEC(unsigned char);
 		void DIV();
-		void DJNZ(unsigned char);
-		void DJNZd(unsigned char);
-		void INC(unsigned char);
-		void INCd(unsigned char);
-		void INCdptr();
-		void JB();
-		void JBC();
-		void JC();
+		unsigned char DJNZ(unsigned char,signed char);
+		static unsigned char INC(unsigned char);
+		void INC_DPTR();
+		void JB(unsigned char,unsigned char,signed char);
+		unsigned char JBC(unsigned char,unsigned char,signed char);
+		void JC(signed char);
 		void JMP();
-		void JNB();
-		void JNC();
-		void JNZ();
-		void JZ();
-		void LCALL();
-		void LJMP();
-		void MOV(unsigned char,unsigned char);
-		void MOVd(unsigned char,unsigned char);
-		void MOVdptr();
-		void MOVb(unsigned char,unsigned char);
+		void JNB(unsigned char,unsigned char,signed char);
+		void JNC(signed char);
+		void JNZ(signed char);
+		void JZ(signed char);
+		void LCALL(unsigned short);
+		void LJMP(unsigned short);
 		void MOVC(unsigned short);
-		void MOVXin(unsigned char);
-		void MOVXin(unsigned short);
-		void MOVXout(unsigned char);
-		void MOVXout(unsigned short);
+		void MOVX_I(unsigned char);
+		void MOVX_I(unsigned short);
+		void MOVX_O(unsigned char);
+		void MOVX_O(unsigned short);
 		void MUL();
-		void ORL(unsigned char,unsigned char);
-		void ORLcy(bool);
-		void POP();
-		void PUSH();
+		static unsigned char ORL(unsigned char,unsigned char);
+		void ORL_C(bool);
+		unsigned char POP();
+		void PUSH(unsigned char);
 		void RET();
 		void RETI();
 		void RL();
 		void RLC();
 		void RR();
 		void RRC();
-		void SETB(unsigned char);
-		void SJMP();
+		void SJMP(signed char);
 		void SUBB(unsigned char);
 		void SWAP();
-		void XCH(unsigned char);
-		void XCHd(unsigned char);
-		void XCHD(unsigned char);
-		void XRL(unsigned char,unsigned char);
+		unsigned char XCH(unsigned char);
+		unsigned char XCHD(unsigned char);
+		static unsigned char XRL(unsigned char,unsigned char);
 		
 		void nextCycleALU();
 		void execInstruction();

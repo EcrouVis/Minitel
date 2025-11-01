@@ -2,6 +2,7 @@
 #define NIBBLE_MAX 15
 #include "circuit/80c32.h"
 #include <cstdio>
+#include <iostream>
 
 m80C32::m80C32(){
 	for (int i=0;i<SFR_SIZE;i++){
@@ -32,10 +33,26 @@ void m80C32::bitaddress2address(unsigned char* address, unsigned char* bit){
 		*address=0x20+((*address)>>3);
 	}
 }
+unsigned char m80C32::getBitMask(unsigned char address){
+	return 1<<(address&0x07);
+}
+unsigned char m80C32::getBitDirectAddress(unsigned char address){
+	if ((bool)(address&0x80)){
+		return address&0xF8;
+	}
+	else{
+		return 0x20+(address>>3);
+	}
+}
 bool m80C32::getBitIn(unsigned char address){
 	unsigned char bit;
 	this->bitaddress2address(&address,&bit);
 	return (bool)((this->getDirectByteIn(address)>>bit)&0x01);
+}
+bool m80C32::getBitOut(unsigned char address){
+	unsigned char bit;
+	this->bitaddress2address(&address,&bit);
+	return (bool)((this->getDirectByteOut(address)>>bit)&0x01);
 }
 //change state + callback for PX port change
 void m80C32::setBitIn(unsigned char address, bool b){
@@ -44,6 +61,23 @@ void m80C32::setBitIn(unsigned char address, bool b){
 	unsigned char mask=1<<bit;
 	if ((bool)(address&0x80)){
 		unsigned char v=this->getSFRByteIn(address);
+		v&=~mask;
+		v|=b?mask:0x00;
+		this->setSFRByte(address,v);
+	}
+	else{
+		unsigned char v=this->getRAMByte(address);
+		v&=~mask;
+		v|=b?mask:0x00;
+		this->setRAMByte(address,v);
+	}
+}
+void m80C32::setBitOut(unsigned char address, bool b){
+	unsigned char bit;
+	this->bitaddress2address(&address,&bit);
+	unsigned char mask=1<<bit;
+	if ((bool)(address&0x80)){
+		unsigned char v=this->getSFRByteOut(address);
 		v&=~mask;
 		v|=b?mask:0x00;
 		this->setSFRByte(address,v);
@@ -209,40 +243,20 @@ void m80C32::setSFRByte(unsigned char address, unsigned char d){
 			break;
 	}
 }
+void m80C32::setDirectByte(unsigned char address, unsigned char d){
+	if ((bool)(address&0x80)) this->setSFRByte(address,d);
+	else this->setRAMByte(address,d);
+}
 
 unsigned char m80C32::getR(unsigned char r){
 	return (this->getSFRByteIn(this->PSW)&0x18)|r;
 }
-
-/*void m80C32::PXChange(unsigned char address, unsigned char d){
-	unsigned char X=(address>>4)&0x03;
-	this->PX_out[X]=d;
-	switch (X){
-		case 0:
-			//(*this->sendP0)(d);
-			this->sendP0(d);
-			break;
-		case 1:
-			//(*this->sendP1)(d);
-			this->sendP1(d);
-			break;
-		case 2:
-			//(*this->sendP2)(d);
-			this->sendP2(d);
-			break;
-		case 3:
-			//(*this->sendP3)(d);
-			this->sendP3(d);
-			break;
-	}
-}*/
 
 /*
 =============== IO ===============
 */
 void m80C32::CLKTickIn(){
 	this->fixedSerialClockTick();
-	//printf("0 %02X / 1 %02X / 2 %02X / 3 %02X\n",PX_out[0],PX_out[1],PX_out[2],PX_out[3]);
 	
 	this->period++;
 	if ((this->period&0x01)==1) return;// f/2->state time
@@ -279,6 +293,17 @@ void m80C32::PXChangeIn(unsigned char x,unsigned char d){
 	const unsigned char ax[4]={this->P0,this->P1,this->P2,this->P3};
 	x=ax[x];
 	unsigned char v=this->getSFRByteIn(x);//this->SFR[x&0x7F];
+	this->SFR[x&0x7F].store(d,std::memory_order_relaxed);//don't trigger infinite loop + don't write to TX_out
+	this->checkPortChangeConsequences(x,v^d);
+	
+}
+void m80C32::PXYChangeIn(unsigned char x,unsigned char y,bool b){
+	const unsigned char ax[4]={this->P0,this->P1,this->P2,this->P3};
+	x=ax[x];
+	y=y&0x07;
+	y=1<<y;
+	unsigned char v=this->getSFRByteIn(x);//this->SFR[x&0x7F];
+	unsigned char d=(v&(~y))|(b?y:0);
 	this->SFR[x&0x7F].store(d,std::memory_order_relaxed);//don't trigger infinite loop + don't write to TX_out
 	this->checkPortChangeConsequences(x,v^d);
 	
@@ -395,12 +420,13 @@ void m80C32::Reset(){
 	this->interrupt_change=false;
 }
 void m80C32::Idle(){
-	
+	this->sendALE(true);
+	this->sendnPSEN(true);
 }
 void m80C32::PowerDown(){
 	/*(*this->sendALE)(false);
 	(*this->sendnPSEN)(false);*/
-	this->sendALE(true);
+	this->sendALE(false);
 	this->sendnPSEN(false);
 }
 void m80C32::PCONChange(){
@@ -758,8 +784,7 @@ void m80C32::checkInterrupts(){
 		interrupt_signal|=this->getBitIn(this->TF1)?0x08:0x00;
 		interrupt_signal|=(this->getBitIn(this->RI)||this->getBitIn(this->TI))?0x10:0x00;
 		interrupt_signal|=(this->getBitIn(this->TF2)||this->getBitIn(this->EXF2))?0x20:0x00;
-		
-		interrupt_signal&=this->getSFRByteIn(this->IE)&0x38;
+		interrupt_signal&=this->getSFRByteIn(this->IE)&0x3F;
 		unsigned char ip=this->getSFRByteIn(this->IP);
 		
 		bool int_high=((this->interrupt_level&ip)!=0);
@@ -800,7 +825,6 @@ void m80C32::checkInterrupts(){
 						this->instruction[2]=0x2B;
 						break;
 				}
-				printf("interrupt!!!\n");
 				this->i_part_n=3;
 				this->i_cycle_n=0;
 				this->interrupt_level|=mask;
@@ -856,6 +880,7 @@ void m80C32::nextCycleALU(){
 			printf("%02X",this->instruction[i]);
 		}
 		printf(" 0x%06X %i\n",this->PC-l,l);*/
+		//if (this->PC-l==0x74) printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		this->exec_instruction=true;
 		this->execInstruction();
 	}
@@ -869,771 +894,452 @@ void m80C32::setACCParity(){
 	this->setBitIn(this->P,p!=0);
 }
 void m80C32::execInstruction(){
-	unsigned char d1;
-	unsigned char d2;
 	unsigned char d;
 	unsigned char a;
-	unsigned short ptrs;
-	unsigned char ptrc;
 	switch (this->instruction[0]){
-		default:
-			printf("erreur instruction %02X\n",this->instruction[0]);
-			break;
-		case 0:
-			break;
-		case 0xA5://nop / reserved
-			printf("erreur instruction propriétaire\n");
-			break;
+		default:printf("erreur instruction %02X\n",this->instruction[0]);break;
+		case 0xA5:printf("erreur instruction propriétaire\n");break;//reserved
 		
-		case 0x11:
-		case 0x31:
-		case 0x51:
-		case 0x71:
-		case 0x91:
-		case 0xB1:
-		case 0xD1:
-		case 0xF1://acall
-			this->ACALL();
-			break;
-			
-		case 0x01:
-		case 0x21:
-		case 0x41:
-		case 0x61:
-		case 0x81:
-		case 0xA1:
-		case 0xC1:
-		case 0xE1://ajmp
-			this->AJMP();
-			break;
-			
-		case 0xB4:
-			d1=this->getSFRByteIn(this->ACC);
-			d2=this->instruction[1];
-			goto i_cjne;
-		case 0xB5:
-			d1=this->getSFRByteIn(this->ACC);
-			d2=this->getDirectByteIn(this->instruction[1]);
-			goto i_cjne;
-		case 0xB6:
-			d1=this->getRAMByte(this->getRAMByte(this->getR(0)));
-			d2=this->instruction[1];
-			goto i_cjne;
-		case 0xB7:
-			d1=this->getRAMByte(this->getRAMByte(this->getR(1)));
-			d2=this->instruction[1];
-			goto i_cjne;
-		case 0xB8:
-		case 0xB9:
-		case 0xBA:
-		case 0xBB:
-		case 0xBC:
-		case 0xBD:
-		case 0xBE:
-		case 0xBF://cjne
-			d1=this->getRAMByte(this->getR(this->instruction[0]&0x07));
-			d2=this->instruction[1];
-			i_cjne:
-			this->CJNE(d1,d2);
-			break;
+		case 0x11:this->ACALL(this->instruction[1]);break;
+		case 0x31:this->ACALL(0x0100|this->instruction[1]);break;
+		case 0x51:this->ACALL(0x0200|this->instruction[1]);break;
+		case 0x71:this->ACALL(0x0300|this->instruction[1]);break;
+		case 0x91:this->ACALL(0x0400|this->instruction[1]);break;
+		case 0xB1:this->ACALL(0x0500|this->instruction[1]);break;
+		case 0xD1:this->ACALL(0x0600|this->instruction[1]);break;
+		case 0xF1:this->ACALL(0x0700|this->instruction[1]);break;
 		
-		case 0x24:
-			d=this->instruction[1];
-			goto i_add;
-		case 0x25:
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_add;
-		case 0x26:
-			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
-			goto i_add;
-		case 0x27:
-			d=this->getRAMByte(this->getRAMByte(this->getR(1)));
-			goto i_add;
-		case 0x28:
-		case 0x29:
-		case 0x2A:
-		case 0x2B:
-		case 0x2C:
-		case 0x2D:
-		case 0x2E:
-		case 0x2F://add
-			d=this->getRAMByte(this->getR(this->instruction[0]&0x07));
-			i_add:
-			this->ADD(d);
-			break;
-			
-		case 0x34:
-			d=this->instruction[1];
-			goto i_addc;
-		case 0x35:
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_addc;
-		case 0x36:
-			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
-			goto i_addc;
-		case 0x37:
-			d=this->getRAMByte(this->getRAMByte(this->getR(1)));
-			goto i_addc;
-		case 0x38:
-		case 0x39:
-		case 0x3A:
-		case 0x3B:
-		case 0x3C:
-		case 0x3D:
-		case 0x3E:
-		case 0x3F://addc
-			d=this->getRAMByte(this->getR(this->instruction[0]&0x07));
-			i_addc:
-			this->ADDC(d);
-			break;
-			
-		case 0x52:
-			a=this->instruction[1];
-			d=this->getSFRByteIn(this->ACC);
-			goto i_anl;
-		case 0x53:
-			a=this->instruction[1];
-			d=this->instruction[2];
-			goto i_anl;
-		case 0x54:
-			a=this->ACC;
-			d=this->instruction[1];
-			goto i_anl;
-		case 0x55:
-			a=this->ACC;
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_anl;
-		case 0x56:
-			a=this->ACC;
-			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
-			goto i_anl;
-		case 0x57:
-			a=this->ACC;
-			d=this->getRAMByte(this->getRAMByte(this->getR(1)));
-			goto i_anl;
-		case 0x58:
-		case 0x59:
-		case 0x5A:
-		case 0x5B:
-		case 0x5C:
-		case 0x5D:
-		case 0x5E:
-		case 0x5F://anl char
-			a=this->ACC;
-			d=this->getRAMByte(this->getR(this->instruction[0]&0x07));
-			i_anl:
-			this->ANL(a,d);
-			break;
+		case 0x24:this->ADD_A(this->instruction[1]);break;
+		case 0x25:this->ADD_A(this->getDirectByteIn(this->instruction[1]));break;
+		case 0x26:this->ADD_A(this->getRAMByte(this->getRAMByte(this->getR(0))));break;
+		case 0x27:this->ADD_A(this->getRAMByte(this->getRAMByte(this->getR(1))));break;
+		case 0x28:this->ADD_A(this->getRAMByte(this->getR(0)));break;
+		case 0x29:this->ADD_A(this->getRAMByte(this->getR(1)));break;
+		case 0x2A:this->ADD_A(this->getRAMByte(this->getR(2)));break;
+		case 0x2B:this->ADD_A(this->getRAMByte(this->getR(3)));break;
+		case 0x2C:this->ADD_A(this->getRAMByte(this->getR(4)));break;
+		case 0x2D:this->ADD_A(this->getRAMByte(this->getR(5)));break;
+		case 0x2E:this->ADD_A(this->getRAMByte(this->getR(6)));break;
+		case 0x2F:this->ADD_A(this->getRAMByte(this->getR(7)));break;
 		
-		case 0x82:
-			this->ANLcy(this->getBitIn(this->instruction[1]));
-			break;
-		case 0xB0://anl c
-			this->ANLcy(!this->getBitIn(this->instruction[1]));
-			break;
+		case 0x34:this->ADDC_A(this->instruction[1]);break;
+		case 0x35:this->ADDC_A(this->getDirectByteIn(this->instruction[1]));break;
+		case 0x36:this->ADDC_A(this->getRAMByte(this->getRAMByte(this->getR(0))));break;
+		case 0x37:this->ADDC_A(this->getRAMByte(this->getRAMByte(this->getR(1))));break;
+		case 0x38:this->ADDC_A(this->getRAMByte(this->getR(0)));break;
+		case 0x39:this->ADDC_A(this->getRAMByte(this->getR(1)));break;
+		case 0x3A:this->ADDC_A(this->getRAMByte(this->getR(2)));break;
+		case 0x3B:this->ADDC_A(this->getRAMByte(this->getR(3)));break;
+		case 0x3C:this->ADDC_A(this->getRAMByte(this->getR(4)));break;
+		case 0x3D:this->ADDC_A(this->getRAMByte(this->getR(5)));break;
+		case 0x3E:this->ADDC_A(this->getRAMByte(this->getR(6)));break;
+		case 0x3F:this->ADDC_A(this->getRAMByte(this->getR(7)));break;
 			
-		case 0xE4://clr a
-			this->CLRa();
-			break;
+		case 0x01:this->AJMP(this->instruction[1]);break;
+		case 0x21:this->AJMP(0x0100|this->instruction[1]);break;
+		case 0x41:this->AJMP(0x0200|this->instruction[1]);break;
+		case 0x61:this->AJMP(0x0300|this->instruction[1]);break;
+		case 0x81:this->AJMP(0x0400|this->instruction[1]);break;
+		case 0xA1:this->AJMP(0x0500|this->instruction[1]);break;
+		case 0xC1:this->AJMP(0x0600|this->instruction[1]);break;
+		case 0xE1:this->AJMP(0x0700|this->instruction[1]);break;
+			
+		case 0x52:this->setDirectByte(this->instruction[1],this->ANL(this->getDirectByteOut(this->instruction[1]),this->getSFRByteIn(this->ACC)));break;
+		case 0x53:this->setDirectByte(this->instruction[1],this->ANL(this->getDirectByteOut(this->instruction[1]),this->instruction[2]));break;
+		case 0x54:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->instruction[1]));break;
+		case 0x55:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getDirectByteIn(this->instruction[1])));break;
+		case 0x56:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getRAMByte(this->getR(0)))));break;
+		case 0x57:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getRAMByte(this->getR(1)))));break;
+		case 0x58:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(0))));break;
+		case 0x59:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(1))));break;
+		case 0x5A:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(2))));break;
+		case 0x5B:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(3))));break;
+		case 0x5C:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(4))));break;
+		case 0x5D:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(5))));break;
+		case 0x5E:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(6))));break;
+		case 0x5F:this->setSFRByte(this->ACC,this->ANL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(7))));break;
+		
+		case 0x82:this->ANL_C(this->getBitIn(this->instruction[1]));break;
+		case 0xB0:this->ANL_C(!this->getBitIn(this->instruction[1]));break;
+			
+		case 0xB4:this->CJNE(this->getSFRByteIn(this->ACC),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xB5:this->CJNE(this->getSFRByteIn(this->ACC),this->getDirectByteIn(this->instruction[1]),(signed char)this->instruction[2]);break;
+		case 0xB6:this->CJNE(this->getRAMByte(this->getRAMByte(this->getR(0))),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xB7:this->CJNE(this->getRAMByte(this->getRAMByte(this->getR(1))),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xB8:this->CJNE(this->getRAMByte(this->getR(0)),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xB9:this->CJNE(this->getRAMByte(this->getR(1)),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xBA:this->CJNE(this->getRAMByte(this->getR(2)),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xBB:this->CJNE(this->getRAMByte(this->getR(3)),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xBC:this->CJNE(this->getRAMByte(this->getR(4)),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xBD:this->CJNE(this->getRAMByte(this->getR(5)),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xBE:this->CJNE(this->getRAMByte(this->getR(6)),this->instruction[1],(signed char)this->instruction[2]);break;
+		case 0xBF:this->CJNE(this->getRAMByte(this->getR(7)),this->instruction[1],(signed char)this->instruction[2]);break;
+			
+		case 0xE4:this->CLR_A();break;
 		
 		case 0xC2:
-			this->CLRb(this->instruction[1]);
+			a=this->getBitDirectAddress(this->instruction[1]);
+			this->setDirectByte(a,this->CLR_bit(this->getDirectByteOut(a),this->getBitMask(this->instruction[1])));
 			break;
-		case 0xC3://clr bit
-			this->CLRb(this->CY);
+		case 0xC3:
+			a=this->getBitDirectAddress(this->CY);
+			this->setSFRByte(a,this->CLR_bit(this->getSFRByteIn(a),this->getBitMask(this->CY)));
 			break;
 			
-		case 0xF4://cpl a
-			this->CPLa();
-			break;
+		case 0xF4:this->CPL_A();break;
 		
 		case 0xB2:
-			this->CPLb(this->instruction[1]);
+			a=this->getBitDirectAddress(this->instruction[1]);
+			this->setDirectByte(a,this->CPL_bit(this->getDirectByteOut(a),this->getBitMask(this->instruction[1])));
 			break;
-		case 0xB3://cpl bit
-			this->CPLb(this->CY);
+		case 0xB3:
+			a=this->getBitDirectAddress(this->CY);
+			this->setSFRByte(a,this->CPL_bit(this->getSFRByteIn(a),this->getBitMask(this->CY)));
 			break;
 		
-		case 0xD4://da
-			this->DA();
-			break;
+		case 0xD4:this->DA();break;
 			
-		case 0x14:
-			this->DECd(this->ACC);//!!!!!
-			break;
-		case 0x15:
-			this->DECd(this->instruction[1]);//!!!!!
-			break;
+		case 0x14:this->setSFRByte(this->ACC,this->DEC(this->getSFRByteIn(this->ACC)));break;
+		case 0x15:this->setDirectByte(this->instruction[1],this->DEC(this->getDirectByteOut(this->instruction[1])));break;
 		case 0x16:
 			a=this->getRAMByte(this->getR(0));
-			goto i_dec;
+			this->setRAMByte(a,this->DEC(this->getRAMByte(a)));
+			break;
 		case 0x17:
 			a=this->getRAMByte(this->getR(1));
-			goto i_dec;
-		case 0x18:
-		case 0x19:
-		case 0x1A:
-		case 0x1B:
-		case 0x1C:
-		case 0x1D:
-		case 0x1E:
-		case 0x1F://dec
-			a=this->getR(this->instruction[0]&0x07);
-			i_dec:
-			this->DEC(a);
+			this->setRAMByte(a,this->DEC(this->getRAMByte(a)));
 			break;
+		case 0x18:this->setRAMByte(this->getR(0),this->DEC(this->getRAMByte(this->getR(0))));break;
+		case 0x19:this->setRAMByte(this->getR(1),this->DEC(this->getRAMByte(this->getR(1))));break;
+		case 0x1A:this->setRAMByte(this->getR(2),this->DEC(this->getRAMByte(this->getR(2))));break;
+		case 0x1B:this->setRAMByte(this->getR(3),this->DEC(this->getRAMByte(this->getR(3))));break;
+		case 0x1C:this->setRAMByte(this->getR(4),this->DEC(this->getRAMByte(this->getR(4))));break;
+		case 0x1D:this->setRAMByte(this->getR(5),this->DEC(this->getRAMByte(this->getR(5))));break;
+		case 0x1E:this->setRAMByte(this->getR(6),this->DEC(this->getRAMByte(this->getR(6))));break;
+		case 0x1F:this->setRAMByte(this->getR(7),this->DEC(this->getRAMByte(this->getR(7))));break;
 			
-		case 0x84://div
-			this->DIV();
-			break;
+		case 0x84:this->DIV();break;
 		
-		case 0xD5:
-			a=this->instruction[1];
-			this->DJNZd(a);
-			break;
-		case 0xD8:
-		case 0xD9:
-		case 0xDA:
-		case 0xDB:
-		case 0xDC:
-		case 0xDD:
-		case 0xDE:
-		case 0xDF://djnz
-			a=this->getR(this->instruction[0]&0x07);
-			this->DJNZ(a);
-			break;
+		case 0xD5:this->setDirectByte(this->instruction[1],this->DJNZ(this->getDirectByteOut(this->instruction[1]),(signed char)this->instruction[2]));break;
+		case 0xD8:this->setRAMByte(this->getR(0),this->DJNZ(this->getRAMByte(this->getR(0)),(signed char)this->instruction[1]));break;
+		case 0xD9:this->setRAMByte(this->getR(1),this->DJNZ(this->getRAMByte(this->getR(1)),(signed char)this->instruction[1]));break;
+		case 0xDA:this->setRAMByte(this->getR(2),this->DJNZ(this->getRAMByte(this->getR(2)),(signed char)this->instruction[1]));break;
+		case 0xDB:this->setRAMByte(this->getR(3),this->DJNZ(this->getRAMByte(this->getR(3)),(signed char)this->instruction[1]));break;
+		case 0xDC:this->setRAMByte(this->getR(4),this->DJNZ(this->getRAMByte(this->getR(4)),(signed char)this->instruction[1]));break;
+		case 0xDD:this->setRAMByte(this->getR(5),this->DJNZ(this->getRAMByte(this->getR(5)),(signed char)this->instruction[1]));break;
+		case 0xDE:this->setRAMByte(this->getR(6),this->DJNZ(this->getRAMByte(this->getR(6)),(signed char)this->instruction[1]));break;
+		case 0xDF:this->setRAMByte(this->getR(7),this->DJNZ(this->getRAMByte(this->getR(7)),(signed char)this->instruction[1]));break;
 		
-		case 0x04:
-			a=this->ACC;
-			goto i_incd;
-		case 0x05:
-			a=this->instruction[1];
-			i_incd:
-			this->INCd(a);
-			break;
+		case 0x04:this->setSFRByte(this->ACC,this->INC(this->getSFRByteIn(this->ACC)));break;
+		case 0x05:this->setDirectByte(this->instruction[1],this->INC(this->getDirectByteOut(this->instruction[1])));break;
 		case 0x06:
 			a=this->getRAMByte(this->getR(0));
-			goto i_inc;
+			this->setRAMByte(a,this->INC(this->getRAMByte(a)));
+			break;
 		case 0x07:
 			a=this->getRAMByte(this->getR(1));
-			goto i_inc;
-		case 0x08:
-		case 0x09:
-		case 0x0A:
-		case 0x0B:
-		case 0x0C:
-		case 0x0D:
-		case 0x0E:
-		case 0x0F://inc
-			a=this->getR(this->instruction[0]&0x07);
-			i_inc:
-			this->INC(a);
+			this->setRAMByte(a,this->INC(this->getRAMByte(a)));
 			break;
+		case 0x08:this->setRAMByte(this->getR(0),this->INC(this->getRAMByte(this->getR(0))));break;
+		case 0x09:this->setRAMByte(this->getR(1),this->INC(this->getRAMByte(this->getR(1))));break;
+		case 0x0A:this->setRAMByte(this->getR(2),this->INC(this->getRAMByte(this->getR(2))));break;
+		case 0x0B:this->setRAMByte(this->getR(3),this->INC(this->getRAMByte(this->getR(3))));break;
+		case 0x0C:this->setRAMByte(this->getR(4),this->INC(this->getRAMByte(this->getR(4))));break;
+		case 0x0D:this->setRAMByte(this->getR(5),this->INC(this->getRAMByte(this->getR(5))));break;
+		case 0x0E:this->setRAMByte(this->getR(6),this->INC(this->getRAMByte(this->getR(6))));break;
+		case 0x0F:this->setRAMByte(this->getR(7),this->INC(this->getRAMByte(this->getR(7))));break;
 		
-		case 0xA3://inc dptr
-			this->INCdptr();
-			break;
+		case 0xA3:this->INC_DPTR();break;
 			
-		case 0x20://jb
-			this->JB();
-			break;
+		case 0x20:this->JB(this->getDirectByteIn(this->getBitDirectAddress(this->instruction[1])),this->getBitMask(this->instruction[1]),(signed char)this->instruction[2]);break;
 			
 		case 0x10://jbc
-			this->JBC();
+			a=this->getBitDirectAddress(this->instruction[1]);
+			d=this->JBC(this->getDirectByteOut(a),this->getBitMask(this->instruction[1]),(signed char)this->instruction[2]);break;
+			if (d!=0xFF) this->setDirectByte(a,d);
 			break;
 			
-		case 0x40://jc
-			this->JC();
-			break;
+		case 0x40:this->JC((signed char)this->instruction[1]);break;
 			
-		case 0x73://jmp
-			this->JMP();
-			break;
+		case 0x73:this->JMP();break;
 		
-		case 0x30://jnb
-			this->JNB();
-			break;
+		case 0x30:this->JNB(this->getDirectByteIn(this->getBitDirectAddress(this->instruction[1])),this->getBitMask(this->instruction[1]),(signed char)this->instruction[2]);break;
 			
-		case 0x50://jnc
-			this->JNC();
-			break;
+		case 0x50:this->JNC((signed char)this->instruction[1]);break;
 			
-		case 0x70://jnz
-			this->JNZ();
-			break;
+		case 0x70:this->JNZ((signed char)this->instruction[1]);break;
 			
-		case 0x60://jz
-			this->JZ();
-			break;
+		case 0x60:this->JZ((signed char)this->instruction[1]);break;
 			
-		case 0x12://lcall
-			this->LCALL();
-			break;
+		case 0x12:this->LCALL((((unsigned short)this->instruction[1])<<8)|((unsigned short)this->instruction[2]));break;
 			
-		case 0x02://ljmp
-			this->LJMP();
-			break;
+		case 0x02:this->LJMP((((unsigned short)this->instruction[1])<<8)|((unsigned short)this->instruction[2]));break;
 			
-		case 0x74:
-			a=this->ACC;
-			d=this->instruction[1];
-			goto i_movd;
-		case 0x75:
-			a=this->instruction[1];
-			d=this->instruction[2];
-			goto i_movd;
-		case 0x76:
-			a=this->getRAMByte(this->getR(0));
-			d=this->instruction[1];
-			goto i_mov;
-		case 0x77:
-			a=this->getRAMByte(this->getR(1));
-			d=this->instruction[1];
-			goto i_mov;
-		case 0x78:
-		case 0x79:
-		case 0x7A:
-		case 0x7B:
-		case 0x7C:
-		case 0x7D:
-		case 0x7E:
-		case 0x7F:
-			a=this->getR(this->instruction[0]&0x07);
-			d=this->instruction[1];
-			goto i_mov;
-		case 0x85:
-			a=this->instruction[2];//!!!!!!!!!!!!!!!!
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_movd;
-		case 0x86:
-			a=this->instruction[1];
-			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
-			goto i_movd;
-		case 0x87:
-			a=this->instruction[1];
-			d=this->getRAMByte(this->getRAMByte(this->getR(1)));
-			goto i_movd;
-		case 0x88:
-		case 0x89:
-		case 0x8A:
-		case 0x8B:
-		case 0x8C:
-		case 0x8D:
-		case 0x8E:
-		case 0x8F:
-			a=this->instruction[1];
-			d=this->getRAMByte(this->getR(this->instruction[0]&0x07));
-			goto i_movd;
-		case 0xA6:
-			a=this->getRAMByte(this->getR(0));
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_mov;
-		case 0xA7:
-			a=this->getRAMByte(this->getR(1));
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_mov;
-		case 0xA8:
-		case 0xA9:
-		case 0xAA:
-		case 0xAB:
-		case 0xAC:
-		case 0xAD:
-		case 0xAE:
-		case 0xAF:
-			a=this->getR(this->instruction[0]&0x07);
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_mov;
-		case 0xE5:
-			a=this->ACC;
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_movd;
-		case 0xE6:
-			a=this->ACC;
-			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
-			goto i_movd;
-		case 0xE7:
-			a=this->ACC;
-			d=this->getRAMByte(this->getRAMByte(this->getR(1)));
-			goto i_movd;
-		case 0xE8:
-		case 0xE9:
-		case 0xEA:
-		case 0xEB:
-		case 0xEC:
-		case 0xED:
-		case 0xEE:
-		case 0xEF:
-			a=this->ACC;
-			d=this->getRAMByte(this->getR(this->instruction[0]&0x07));
-			goto i_movd;
-		case 0xF5:
-			a=this->instruction[1];
-			d=this->getSFRByteIn(this->ACC);
-			i_movd:
-			this->MOVd(a,d);
-			break;
-		case 0xF6:
-			a=this->getRAMByte(this->getR(0));
-			d=this->getSFRByteIn(this->ACC);
-			goto i_mov;
-		case 0xF7:
-			a=this->getRAMByte(this->getR(1));
-			d=this->getSFRByteIn(this->ACC);
-			goto i_mov;
-		case 0xF8:
-		case 0xF9:
-		case 0xFA:
-		case 0xFB:
-		case 0xFC:
-		case 0xFD:
-		case 0xFE:
-		case 0xFF://mov
-			a=this->getR(this->instruction[0]&0x07);
-			d=this->getSFRByteIn(this->ACC);
-			i_mov:
-			this->MOV(a,d);
-			break;
+		case 0x74:this->setSFRByte(this->ACC,this->instruction[1]);break;
+		case 0x75:this->setDirectByte(this->instruction[1],this->instruction[2]);break;
+		case 0x76:this->setRAMByte(this->getRAMByte(this->getR(0)),this->instruction[1]);break;
+		case 0x77:this->setRAMByte(this->getRAMByte(this->getR(1)),this->instruction[1]);break;
+		case 0x78:this->setRAMByte(this->getR(0),this->instruction[1]);break;
+		case 0x79:this->setRAMByte(this->getR(1),this->instruction[1]);break;
+		case 0x7A:this->setRAMByte(this->getR(2),this->instruction[1]);break;
+		case 0x7B:this->setRAMByte(this->getR(3),this->instruction[1]);break;
+		case 0x7C:this->setRAMByte(this->getR(4),this->instruction[1]);break;
+		case 0x7D:this->setRAMByte(this->getR(5),this->instruction[1]);break;
+		case 0x7E:this->setRAMByte(this->getR(6),this->instruction[1]);break;
+		case 0x7F:this->setRAMByte(this->getR(7),this->instruction[1]);break;
+		case 0x85:this->setDirectByte(this->instruction[2],this->getDirectByteIn(this->instruction[1]));break;//!!!!!!!!!!!
+		case 0x86:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getRAMByte(this->getR(0))));break;
+		case 0x87:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getRAMByte(this->getR(1))));break;
+		case 0x88:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getR(0)));break;
+		case 0x89:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getR(1)));break;
+		case 0x8A:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getR(2)));break;
+		case 0x8B:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getR(3)));break;
+		case 0x8C:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getR(4)));break;
+		case 0x8D:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getR(5)));break;
+		case 0x8E:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getR(6)));break;
+		case 0x8F:this->setDirectByte(this->instruction[1],this->getRAMByte(this->getR(7)));break;
+		case 0xA6:this->setRAMByte(this->getRAMByte(this->getR(0)),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xA7:this->setRAMByte(this->getRAMByte(this->getR(1)),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xA8:this->setRAMByte(this->getR(0),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xA9:this->setRAMByte(this->getR(1),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xAA:this->setRAMByte(this->getR(2),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xAB:this->setRAMByte(this->getR(3),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xAC:this->setRAMByte(this->getR(4),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xAD:this->setRAMByte(this->getR(5),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xAE:this->setRAMByte(this->getR(6),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xAF:this->setRAMByte(this->getR(7),this->getDirectByteIn(this->instruction[1]));break;
+		case 0xE5:this->setSFRByte(this->ACC,this->getDirectByteIn(this->instruction[1]));break;
+		case 0xE6:this->setSFRByte(this->ACC,this->getRAMByte(this->getRAMByte(this->getR(0))));break;
+		case 0xE7:this->setSFRByte(this->ACC,this->getRAMByte(this->getRAMByte(this->getR(1))));break;
+		case 0xE8:this->setSFRByte(this->ACC,this->getRAMByte(this->getR(0)));break;
+		case 0xE9:this->setSFRByte(this->ACC,this->getRAMByte(this->getR(1)));break;
+		case 0xEA:this->setSFRByte(this->ACC,this->getRAMByte(this->getR(2)));break;
+		case 0xEB:this->setSFRByte(this->ACC,this->getRAMByte(this->getR(3)));break;
+		case 0xEC:this->setSFRByte(this->ACC,this->getRAMByte(this->getR(4)));break;
+		case 0xED:this->setSFRByte(this->ACC,this->getRAMByte(this->getR(5)));break;
+		case 0xEE:this->setSFRByte(this->ACC,this->getRAMByte(this->getR(6)));break;
+		case 0xEF:this->setSFRByte(this->ACC,this->getRAMByte(this->getR(7)));break;
+		case 0xF5:this->setDirectByte(this->instruction[1],this->getSFRByteIn(this->ACC));break;
+		case 0xF6:this->setRAMByte(this->getRAMByte(this->getR(0)),this->getSFRByteIn(this->ACC));break;
+		case 0xF7:this->setRAMByte(this->getRAMByte(this->getR(1)),this->getSFRByteIn(this->ACC));break;
+		case 0xF8:this->setRAMByte(this->getR(0),this->getSFRByteIn(this->ACC));break;
+		case 0xF9:this->setRAMByte(this->getR(1),this->getSFRByteIn(this->ACC));break;
+		case 0xFA:this->setRAMByte(this->getR(2),this->getSFRByteIn(this->ACC));break;
+		case 0xFB:this->setRAMByte(this->getR(3),this->getSFRByteIn(this->ACC));break;
+		case 0xFC:this->setRAMByte(this->getR(4),this->getSFRByteIn(this->ACC));break;
+		case 0xFD:this->setRAMByte(this->getR(5),this->getSFRByteIn(this->ACC));break;
+		case 0xFE:this->setRAMByte(this->getR(6),this->getSFRByteIn(this->ACC));break;
+		case 0xFF:this->setRAMByte(this->getR(7),this->getSFRByteIn(this->ACC));break;
 		
-		case 0x90://mov dptr
-			this->MOVdptr();
-			break;
+		case 0x92:this->setBitOut(this->instruction[1],this->getBitIn(this->CY));break;
+		case 0xA2:this->setBitIn(this->CY,this->getBitIn(this->instruction[1]));break;
 		
-		case 0x92:
-			this->MOVb(this->instruction[1],this->CY);
-			break;
-		case 0xA2://mov bit
-			this->MOVb(this->CY,this->instruction[1]);
+		case 0x90:
+			this->setSFRByte(this->DPH,this->instruction[1]);
+			this->setSFRByte(this->DPL,this->instruction[2]);
 			break;
 			
-		case 0x83:
-			this->MOVC(this->PC);
-			break;
-		case 0x93://movc
-			ptrs=(((unsigned short)this->getSFRByteIn(this->DPH))<<8)|((unsigned short)this->getSFRByteIn(this->DPL));
-			this->MOVC(ptrs);
-			break;
+		case 0x83:this->MOVC(this->PC);break;
+		case 0x93:this->MOVC((((unsigned short)this->getSFRByteIn(this->DPH))<<8)|((unsigned short)this->getSFRByteIn(this->DPL)));break;
 			
-		case 0xE0:
-			ptrs=(((unsigned short)this->getSFRByteIn(this->DPH))<<8)|((unsigned short)this->getSFRByteIn(this->DPL));
-			this->MOVXin(ptrs);
-			break;
-		case 0xE2:
-			ptrc=this->getRAMByte(this->getR(0));
-			this->MOVXin(ptrc);
-			break;
-		case 0xE3:
-			ptrc=this->getRAMByte(this->getR(1));
-			this->MOVXin(ptrc);
-			break;
-		case 0xF0:
-			ptrs=(((unsigned short)this->getSFRByteIn(this->DPH))<<8)|((unsigned short)this->getSFRByteIn(this->DPL));
-			this->MOVXout(ptrs);
-			break;
-		case 0xF2:
-			ptrc=this->getRAMByte(this->getR(0));
-			this->MOVXout(ptrc);
-			break;
-		case 0xF3://movx
-			ptrc=this->getRAMByte(this->getR(1));
-			this->MOVXout(ptrc);
-			break;
+		case 0xE0:this->MOVX_I((unsigned short)((((unsigned short)this->getSFRByteIn(this->DPH))<<8)|((unsigned short)this->getSFRByteIn(this->DPL))));break;
+		case 0xE2:this->MOVX_I(this->getRAMByte(this->getR(0)));break;
+		case 0xE3:this->MOVX_I(this->getRAMByte(this->getR(1)));break;
+		case 0xF0:this->MOVX_O((unsigned short)((((unsigned short)this->getSFRByteIn(this->DPH))<<8)|((unsigned short)this->getSFRByteIn(this->DPL))));break;
+		case 0xF2:this->MOVX_O(this->getRAMByte(this->getR(0)));break;
+		case 0xF3:this->MOVX_O(this->getRAMByte(this->getR(1)));break;
 			
-		case 0xA4:
-			this->MUL();
-			break;
-			
-		case 0x42:
-			a=this->instruction[1];
-			d=this->getSFRByteIn(this->ACC);
-			goto i_orl;
-		case 0x43:
-			a=this->instruction[1];
-			d=this->instruction[2];
-			goto i_orl;
-		case 0x44:
-			a=this->ACC;
-			d=this->instruction[1];
-			goto i_orl;
-		case 0x45:
-			a=this->ACC;
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_orl;
-		case 0x46:
-			a=this->ACC;
-			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
-			goto i_orl;
-		case 0x47:
-			a=this->ACC;
-			d=this->getRAMByte(this->getRAMByte(this->getR(1)));
-			goto i_orl;
-		case 0x48:
-		case 0x49:
-		case 0x4A:
-		case 0x4B:
-		case 0x4C:
-		case 0x4D:
-		case 0x4E:
-		case 0x4F://orl
-			a=this->ACC;
-			d=this->getRAMByte(this->getR(this->instruction[0]&0x07));
-			i_orl:
-			this->ORL(a,d);
-			break;
-			
-		case 0x72:
-			this->ORLcy(this->getBitIn(this->instruction[1]));
-			break;
-		case 0xA0://orl cy
-			this->ORLcy(!this->getBitIn(this->instruction[1]));
-			break;
-			
-		case 0xD0://pop
-			this->POP();
-			break;
-			
-		case 0xC0://push
-			this->PUSH();
-			break;
+		case 0xA4:this->MUL();break;
 		
-		case 0x22://ret
-			this->RET();
-			break;
+		case 0:break;//NOP
 			
-		case 0x32://reti
-			this->RETI();
-			break;
+		case 0x42:this->setDirectByte(this->instruction[1],this->ORL(this->getDirectByteOut(this->instruction[1]),this->getSFRByteIn(this->ACC)));break;
+		case 0x43:this->setDirectByte(this->instruction[1],this->ORL(this->getDirectByteOut(this->instruction[1]),this->instruction[2]));break;
+		case 0x44:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->instruction[1]));break;
+		case 0x45:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getDirectByteIn(this->instruction[1])));break;
+		case 0x46:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getRAMByte(this->getR(0)))));break;
+		case 0x47:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getRAMByte(this->getR(1)))));break;
+		case 0x48:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(0))));break;
+		case 0x49:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(1))));break;
+		case 0x4A:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(2))));break;
+		case 0x4B:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(3))));break;
+		case 0x4C:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(4))));break;
+		case 0x4D:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(5))));break;
+		case 0x4E:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(6))));break;
+		case 0x4F:this->setSFRByte(this->ACC,this->ORL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(7))));break;
 			
-		case 0x23://rl
-			this->RL();
-			break;
+		case 0x72:this->ORL_C(this->getBitIn(this->instruction[1]));break;
+		case 0xA0:this->ORL_C(!this->getBitIn(this->instruction[1]));break;
 			
-		case 0x33://rlc
-			this->RLC();
-			break;
+		case 0xD0:this->setDirectByte(this->instruction[1],this->POP());break;
 			
-		case 0x03://rr
-			this->RR();
-			break;
+		case 0xC0:this->PUSH(this->getDirectByteIn(this->instruction[1]));break;
+		
+		case 0x22:this->RET();break;
 			
-		case 0x13://rrc
-			this->RRC();
-			break;
+		case 0x32:this->RETI();break;
 			
-		case 0xD2:
-			this->SETB(this->instruction[1]);
-			break;
-		case 0xD3://setb
-			this->SETB(this->CY);
-			break;
+		case 0x23:this->RL();break;
 			
-		case 0x80://sjmp
-			this->SJMP();
-			break;
+		case 0x33:this->RLC();break;
 			
-		case 0x94:
-			d=this->instruction[1];
-			goto i_subb;
-		case 0x95:
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_subb;
-		case 0x96:
-			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
-			goto i_subb;
-		case 0x97:
-			d=this->getRAMByte(this->getRAMByte(this->getR(1)));
-			goto i_subb;
-		case 0x98:
-		case 0x99:
-		case 0x9A:
-		case 0x9B:
-		case 0x9C:
-		case 0x9D:
-		case 0x9E:
-		case 0x9F://subb
-			d=this->getRAMByte(this->getR(this->instruction[0]&0x07));
-			i_subb:
-			this->SUBB(d);
-			break;
+		case 0x03:this->RR();break;
 			
-		case 0xC4://swap
-			this->SWAP();
-			break;
+		case 0x13:this->RRC();break;
 			
-		case 0xC5:
-			a=this->instruction[1];
-			this->XCHd(a);
-			break;
+		case 0xD2:this->setBitOut(this->instruction[1],true);break;
+		case 0xD3:this->setBitIn(this->CY,true);break;
+			
+		case 0x80:this->SJMP((signed char)this->instruction[1]);break;
+			
+		case 0x94:this->SUBB(this->instruction[1]);break;
+		case 0x95:this->SUBB(this->getDirectByteIn(this->instruction[1]));break;
+		case 0x96:this->SUBB(this->getRAMByte(this->getRAMByte(this->getR(0))));break;
+		case 0x97:this->SUBB(this->getRAMByte(this->getRAMByte(this->getR(1))));break;
+		case 0x98:this->SUBB(this->getRAMByte(this->getR(0)));break;
+		case 0x99:this->SUBB(this->getRAMByte(this->getR(1)));break;
+		case 0x9A:this->SUBB(this->getRAMByte(this->getR(2)));break;
+		case 0x9B:this->SUBB(this->getRAMByte(this->getR(3)));break;
+		case 0x9C:this->SUBB(this->getRAMByte(this->getR(4)));break;
+		case 0x9D:this->SUBB(this->getRAMByte(this->getR(5)));break;
+		case 0x9E:this->SUBB(this->getRAMByte(this->getR(6)));break;
+		case 0x9F:this->SUBB(this->getRAMByte(this->getR(7)));break;
+			
+		case 0xC4:this->SWAP();break;
+			
+		case 0xC5:this->setDirectByte(this->instruction[1],this->XCH(this->getDirectByteIn(this->instruction[1])));break;
 		case 0xC6:
 			a=this->getRAMByte(this->getR(0));
-			goto i_xch;
+			this->setRAMByte(a,this->XCH(this->getRAMByte(a)));
+			break;
 		case 0xC7:
 			a=this->getRAMByte(this->getR(1));
-			goto i_xch;
-		case 0xC8:
-		case 0xC9:
-		case 0xCA:
-		case 0xCB:
-		case 0xCC:
-		case 0xCD:
-		case 0xCE:
-		case 0xCF://xch
-			a=this->getR(this->instruction[0]&0x07);
-			i_xch:
-			this->XCH(a);
+			this->setRAMByte(a,this->XCH(this->getRAMByte(a)));
 			break;
+		case 0xC8:this->setRAMByte(this->getR(0),this->XCH(this->getRAMByte(this->getR(0))));break;
+		case 0xC9:this->setRAMByte(this->getR(1),this->XCH(this->getRAMByte(this->getR(1))));break;
+		case 0xCA:this->setRAMByte(this->getR(2),this->XCH(this->getRAMByte(this->getR(2))));break;
+		case 0xCB:this->setRAMByte(this->getR(3),this->XCH(this->getRAMByte(this->getR(3))));break;
+		case 0xCC:this->setRAMByte(this->getR(4),this->XCH(this->getRAMByte(this->getR(4))));break;
+		case 0xCD:this->setRAMByte(this->getR(5),this->XCH(this->getRAMByte(this->getR(5))));break;
+		case 0xCE:this->setRAMByte(this->getR(6),this->XCH(this->getRAMByte(this->getR(6))));break;
+		case 0xCF:this->setRAMByte(this->getR(7),this->XCH(this->getRAMByte(this->getR(7))));break;
 			
 		case 0xD6:
-			this->XCHD(this->getRAMByte(this->getR(0)));
+			a=this->getRAMByte(this->getR(0));
+			this->setRAMByte(a,this->XCHD(this->getRAMByte(a)));
 			break;
-		case 0xD7://xchd
-			this->XCHD(this->getRAMByte(this->getR(1)));
+		case 0xD7:
+			a=this->getRAMByte(this->getR(1));
+			this->setRAMByte(a,this->XCHD(this->getRAMByte(a)));
 			break;
 			
-		case 0x62:
-			a=this->instruction[1];
-			d=this->getSFRByteIn(this->ACC);
-			goto i_xrl;
-		case 0x63:
-			a=this->instruction[1];
-			d=this->instruction[2];
-			goto i_xrl;
-		case 0x64:
-			a=this->ACC;
-			d=this->instruction[1];
-			goto i_xrl;
-		case 0x65:
-			a=this->ACC;
-			d=this->getDirectByteIn(this->instruction[1]);
-			goto i_xrl;
-		case 0x66:
-			a=this->ACC;
-			d=this->getRAMByte(this->getRAMByte(this->getR(0)));
-			goto i_xrl;
-		case 0x67:
-			a=this->ACC;
-			d=this->getRAMByte(this->getRAMByte(this->getR(1)));
-			goto i_xrl;
-		case 0x68:
-		case 0x69:
-		case 0x6A:
-		case 0x6B:
-		case 0x6C:
-		case 0x6D:
-		case 0x6E:
-		case 0x6F://xrl
-			a=this->ACC;
-			d=this->getRAMByte(this->getR(this->instruction[0]&0x07));
-			i_xrl:
-			this->XRL(a,d);
-			break;
+		case 0x62:this->setDirectByte(this->instruction[1],this->XRL(this->getDirectByteOut(this->instruction[1]),this->getSFRByteIn(this->ACC)));break;
+		case 0x63:this->setDirectByte(this->instruction[1],this->XRL(this->getDirectByteOut(this->instruction[1]),this->instruction[2]));break;
+		case 0x64:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->instruction[1]));break;
+		case 0x65:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getDirectByteIn(this->instruction[1])));break;
+		case 0x66:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getRAMByte(this->getR(0)))));break;
+		case 0x67:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getRAMByte(this->getR(1)))));break;
+		case 0x68:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(0))));break;
+		case 0x69:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(1))));break;
+		case 0x6A:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(2))));break;
+		case 0x6B:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(3))));break;
+		case 0x6C:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(4))));break;
+		case 0x6D:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(5))));break;
+		case 0x6E:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(6))));break;
+		case 0x6F:this->setSFRByte(this->ACC,this->XRL(this->getSFRByteIn(this->ACC),this->getRAMByte(this->getR(7))));break;
 	}
 }
-void m80C32::ACALL(){
+void m80C32::ACALL(unsigned short addr11){
 	//printf("ACALL\n");
 	unsigned char sp=this->getSFRByteIn(this->SP)+1;
 	this->setRAMByte(sp,(unsigned char)(this->PC&0xFF));
 	sp++;
 	this->setRAMByte(sp,(unsigned char)(this->PC>>8));
 	this->setSFRByte(this->SP,sp);
-	this->AJMP();
+	this->PC&=0xF800;
+	this->PC|=addr11;
 }
-void m80C32::AJMP(){
-	//printf("AJMP\n");
-	this->PC=(this->PC&0xF800)|(((unsigned short)(this->instruction[0]>>5))<<8)|((unsigned short)this->instruction[1]);
-}
-void m80C32::ADD(unsigned char d){
+void m80C32::ADD_A(unsigned char d){
 	//printf("ADD\n");
-	unsigned char a=this->getSFRByteIn(this->ACC);
-	this->setBitIn(this->CY,(a>UCHAR_MAX-d));
-	this->setBitIn(this->AC,((a&0x0F)>(NIBBLE_MAX-(d&0x0F))));
-	if (((signed char)d)>0){
-		this->setBitIn(this->OV,(((signed char)a)>SCHAR_MAX-((signed char)d)));
-	}
-	else{
-		this->setBitIn(this->OV,(((signed char)a)<SCHAR_MIN-((signed char)d)));
-	}
-	this->setSFRByte(this->ACC,a+d);
+	unsigned short a=(unsigned short)this->getSFRByteIn(this->ACC);
+	unsigned short v=(unsigned short)d;
+	unsigned short r=(a&0x0F)+(v&0x0F);
+	this->setBitIn(this->AC,r>0x0F);
+	r+=(a&0x70)+(v&0x70);
+	bool o=r>0x7F;
+	r+=(a&0x80)+(v&0x80);
+	bool c=r>0xFF;
+	this->setBitIn(this->CY,c);
+	this->setBitIn(this->OV,c!=o);
+	this->setSFRByte(this->ACC,(unsigned char)r);
 }
-void m80C32::ADDC(unsigned char d){
+void m80C32::ADDC_A(unsigned char d){
 	//printf("ADDC\n");
-	if (this->getBitIn(this->CY)) d++;
-	this->ADD(d);
+	unsigned short a=(unsigned short)this->getSFRByteIn(this->ACC);
+	unsigned short v=(unsigned short)d;
+	unsigned short r=(a&0x0F)+(v&0x0F);
+	if (this->getBitIn(this->CY)) r++;
+	this->setBitIn(this->AC,r>0x0F);
+	r+=(a&0x70)+(v&0x70);
+	bool o=r>0x7F;
+	r+=(a&0x80)+(v&0x80);
+	bool c=r>0xFF;
+	this->setBitIn(this->CY,c);
+	this->setBitIn(this->OV,c!=o);
+	this->setSFRByte(this->ACC,(unsigned char)r);
 }
-void m80C32::ANL(unsigned char a,unsigned char d){
+void m80C32::AJMP(unsigned short addr11){
+	//printf("AJMP\n");
+	this->PC&=0xF800;
+	this->PC|=addr11;
+}
+unsigned char m80C32::ANL(unsigned char d1,unsigned char d2){
 	//printf("ANL\n");
-	if ((bool)(a&0x80)) this->setSFRByte(a,this->getSFRByteOut(a)&d);
-	else this->setRAMByte(a,this->getRAMByte(a)&d);
+	return d1&d2;
 }
-void m80C32::ANLcy(bool b){
-	//printf("ANLcy\n");
+void m80C32::ANL_C(bool b){
+	//printf("ANL C\n");
 	if (!b) this->setBitIn(this->CY,false);
 }
-void m80C32::CJNE(unsigned char d1,unsigned char d2){
+void m80C32::CJNE(unsigned char d1,unsigned char d2,signed char rel){
 	//printf("CJNE\n");
 	this->setBitIn(this->CY,d1<d2);
 	if (d1!=d2){
-		this->PC+=(unsigned short)(signed char)this->instruction[2];
+		this->PC+=rel;
 	}
 }
-void m80C32::CLRa(){
+void m80C32::CLR_A(){
 	//printf("CLRa\n");
 	this->setSFRByte(this->ACC,0);
 }
-void m80C32::CLRb(unsigned char a){
+unsigned char m80C32::CLR_bit(unsigned char d,unsigned char m){
 	//printf("CLRb\n");
-	if ((bool)(a&0x80)){
-		unsigned char bit;
-		this->bitaddress2address(&a,&bit);
-		unsigned char v=this->getSFRByteOut(a);//!!!
-		v&=~(1<<bit);
-		this->setSFRByte(a,v);
-	}
-	else{
-		this->setBitIn(a,0);
-	}
+	return d&(~m);
 }
-void m80C32::CPLa(){
+void m80C32::CPL_A(){
 	//printf("CPLa\n");
-	this->setSFRByte(this->ACC,this->getSFRByteIn(this->ACC)^0xFF);
+	this->setSFRByte(this->ACC,~(this->getSFRByteIn(this->ACC)));
 }
-void m80C32::CPLb(unsigned char a){
+unsigned char m80C32::CPL_bit(unsigned char d,unsigned char m){
 	//printf("CPLb\n");
-	if ((bool)(a&0x80)){
-		unsigned char bit;
-		this->bitaddress2address(&a,&bit);
-		unsigned char v=this->getSFRByteOut(a);//!!!
-		v^=(1<<bit);
-		this->setSFRByte(a,v);
-	}
-	else{
-		this->setBitIn(a,!this->getBitIn(a));
-	}
+	return d^m;
 }
 void m80C32::DA(){
 	//printf("DA\n");
-	unsigned char a=this->getSFRByteIn(this->ACC);
+	unsigned short a=(unsigned short)this->getSFRByteIn(this->ACC);
 	if (this->getBitIn(this->AC)||(a&0x0F)>9){
-		this->setBitIn(this->CY,(a>UCHAR_MAX-0x06)||this->getBitIn(this->CY));
 		a+=0x06;
 	}
-	if (this->getBitIn(this->CY)||a>0x9F){
-		this->setBitIn(this->CY,(a>UCHAR_MAX-0x60)||this->getBitIn(this->CY));
+	if (this->getBitIn(this->CY)||(a>0x99)){
+		this->setBitIn(this->CY,true);
 		a+=0x60;
 	}
-	this->setSFRByte(this->ACC,a);
+	this->setSFRByte(this->ACC,(unsigned char)a);
 }
-void m80C32::DEC(unsigned char a){
+unsigned char m80C32::DEC(unsigned char d){
 	//printf("DEC\n");
-	unsigned char v=this->getRAMByte(a)-1;
-	this->setRAMByte(a,v);
-}
-void m80C32::DECd(unsigned char a){
-	//printf("DECd\n");
-	if ((bool)(a&0x80)){
-		unsigned char v=this->getSFRByteOut(a)-1;
-		this->setSFRByte(a,v);
-	}
-	else this->DEC(a);
+	return d-1;
 }
 void m80C32::DIV(){
 	//printf("DIV\n");
@@ -1649,73 +1355,42 @@ void m80C32::DIV(){
 		this->setSFRByte(this->B,a%b);
 	}
 }
-void m80C32::DJNZ(unsigned char a){
+unsigned char m80C32::DJNZ(unsigned char d,signed char rel){
 	//printf("DJNZ\n");
-	unsigned char v=this->getRAMByte(a)-1;
-	if (v!=0){
-		this->PC+=(unsigned short)(signed char)this->instruction[1];
+	d--;
+	if (d!=0){
+		this->PC+=rel;
 	}
-	this->setRAMByte(a,v);
+	return d;
 }
-void m80C32::DJNZd(unsigned char a){
-	//printf("DJNZd\n");
-	if ((bool)(a&0x80)){
-		unsigned char v=this->getSFRByteOut(a)-1;
-		if (v!=0){
-			this->PC+=(unsigned short)(signed char)this->instruction[2];
-		}
-		this->setSFRByte(a,v);
-	}
-	else {
-		unsigned char v=this->getRAMByte(a)-1;
-		if (v!=0){
-			this->PC+=(unsigned short)(signed char)this->instruction[2];
-		}
-		this->setRAMByte(a,v);
-	}
-}
-void m80C32::INC(unsigned char a){
+unsigned char m80C32::INC(unsigned char d){
 	//printf("INC\n");
-	this->setRAMByte(a,this->getRAMByte(a)+1);
+	return d+1;
 }
-void m80C32::INCd(unsigned char a){
-	//printf("INCd\n");
-	if ((bool)(a&0x80)) this->setSFRByte(a,this->getSFRByteOut(a)+1);
-	else INC(a);
-}
-void m80C32::INCdptr(){
+void m80C32::INC_DPTR(){
 	//printf("INCdptr\n");
 	unsigned short dptr=((unsigned short)this->getSFRByteIn(this->DPL))|(((unsigned short)this->getSFRByteIn(this->DPH))<<8);
 	dptr++;
 	this->setSFRByte(this->DPL,(unsigned char)(dptr&0xFF));
 	this->setSFRByte(this->DPH,(unsigned char)(dptr>>8));
 }
-void m80C32::JB(){
+void m80C32::JB(unsigned char d,unsigned char m,signed char rel){
 	//printf("JB\n");
-	if (getBitIn(this->instruction[1]))this->PC+=(unsigned short)(signed char)this->instruction[2];
+	if ((bool)(d&m)) this->PC+=rel;
 }
-void m80C32::JBC(){
+unsigned char m80C32::JBC(unsigned char d,unsigned char m,signed char rel){
 	//printf("JBC\n");
-	unsigned char bit;
-	unsigned char address=this->instruction[1];
-	this->bitaddress2address(&address,&bit);
-	unsigned char mask=1<<bit;
-	unsigned char d;
-	if ((bool)(address&0x80)){
-		d=this->getSFRByteOut(address);
-		this->setSFRByte(address,d&(~mask));
+	if ((bool)(d&m)){
+		this->PC+=rel;
+		return d&(~m);
 	}
 	else{
-		d=this->getRAMByte(address);
-		this->setRAMByte(address,d&(~mask));
-	}
-	if ((d&mask)!=0){
-		this->PC+=(unsigned short)(signed char)this->instruction[2];
+		return 0xFF;
 	}
 }
-void m80C32::JC(){
+void m80C32::JC(signed char rel){
 	//printf("JC\n");
-	if (getBitIn(this->CY))this->PC+=(unsigned short)(signed char)this->instruction[1];
+	if (getBitIn(this->CY))this->PC+=rel;
 }
 void m80C32::JMP(){
 	//printf("JMP\n");
@@ -1723,68 +1398,38 @@ void m80C32::JMP(){
 	dptr+=(unsigned short)this->getSFRByteIn(this->ACC);
 	this->PC=dptr;
 }
-void m80C32::JNB(){
+void m80C32::JNB(unsigned char d,unsigned char m,signed char rel){
 	//printf("JNB\n");
-	if (!getBitIn(this->instruction[1]))this->PC+=(unsigned short)(signed char)this->instruction[2];
+	if (!(bool)(d&m)) this->PC+=rel;
 }
-void m80C32::JNC(){
+void m80C32::JNC(signed char rel){
 	//printf("JNC\n");
-	if (!getBitIn(this->CY))this->PC+=(unsigned short)(signed char)this->instruction[1];
+	if (!getBitIn(this->CY))this->PC+=rel;
 }
-void m80C32::JNZ(){
+void m80C32::JNZ(signed char rel){
 	//printf("JNZ\n");
-	if (getSFRByteIn(this->ACC)!=0)this->PC+=(unsigned short)(signed char)this->instruction[1];
+	if (getSFRByteIn(this->ACC)!=0)this->PC+=rel;
 }
-void m80C32::JZ(){
+void m80C32::JZ(signed char rel){
 	//printf("JZ\n");
-	if (getSFRByteIn(this->ACC)==0)this->PC+=(unsigned short)(signed char)this->instruction[1];
+	if (getSFRByteIn(this->ACC)==0)this->PC+=rel;
 }
-void m80C32::LCALL(){
+void m80C32::LCALL(unsigned short addr16){
 	//printf("LCALL\n");
 	unsigned char sp=this->getSFRByteIn(this->SP)+1;
 	this->setRAMByte(sp,(unsigned char)(this->PC&0xFF));
 	sp++;
 	this->setRAMByte(sp,(unsigned char)(this->PC>>8));
 	this->setSFRByte(this->SP,sp);
-	this->LJMP();
+	this->PC=addr16;
 }
-void m80C32::LJMP(){
+void m80C32::LJMP(unsigned short addr16){
 	//printf("LJMP\n");
-	this->PC=(((unsigned short)this->instruction[1])<<8)|((unsigned short)this->instruction[2]);
+	this->PC=addr16;
 }
-void m80C32::MOV(unsigned char a,unsigned char d){
-	//printf("MOV\n");
-	this->setRAMByte(a,d);
-}
-void m80C32::MOVd(unsigned char a,unsigned char d){
-	//printf("MOVd\n");
-	if ((bool)(a&0x80)) this->setSFRByte(a,d);
-	else MOV(a,d);
-}
-void m80C32::MOVdptr(){
-	//printf("MOVdptr\n");
-	this->setSFRByte(this->DPH,this->instruction[1]);
-	this->setSFRByte(this->DPL,this->instruction[2]);
-}
-void m80C32::MOVb(unsigned char ba1,unsigned char ba2){
-	//printf("MOVb\n");
-	unsigned char bit;
-	this->bitaddress2address(&ba1,&bit);
-	if ((bool)(ba1&0x80)){
-		unsigned char d=this->getSFRByteOut(ba1);
-		unsigned char mask=1<<bit;
-		d&=~mask;
-		d|=this->getBitIn(ba2)?mask:0x00;
-		this->setSFRByte(ba1,d);
-	}
-	else{
-		unsigned char d=this->getRAMByte(ba1);
-		unsigned char mask=1<<bit;
-		d&=~mask;
-		d|=this->getBitIn(ba2)?mask:0x00;
-		this->setRAMByte(ba1,d);
-	}
-}
+//MOV
+//MOV bit
+//MOV DPTR
 void m80C32::MOVC(unsigned short ptr){
 	//printf("MOVC\n");
 	ptr+=this->getSFRByteIn(this->ACC);
@@ -1798,58 +1443,50 @@ void m80C32::MOVC(unsigned short ptr){
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
 }
-void m80C32::MOVXin(unsigned char a){//8 bit address
+void m80C32::MOVX_I(unsigned char a){//8 bit address
 	//printf("MOVXin 8bit\n");
-	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
-	//printf("in ic %02X\n",a);
 	this->sendP0(a);
 	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP3((this->PX_out[3]&0x3F)|0x40);
 	this->setSFRByte(this->ACC,this->getSFRByteIn(this->P0));
-	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP3(this->PX_out[3]);
 	this->sendP0(this->PX_out[0]);
-	//printf("in ic - %02X %02X\n",a,this->getSFRByteIn(this->ACC));
+	//printf("in ic 8bits %02X %02X\n",a,this->getSFRByteIn(this->ACC));
 }
-void m80C32::MOVXin(unsigned short a){//16 bit address
+void m80C32::MOVX_I(unsigned short a){//16 bit address
 	//printf("MOVXin 16bit\n");
-	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP0((unsigned char)(a&0xFF));
 	this->sendP2((unsigned char)(a>>8));
 	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP3((this->PX_out[3]&0x3F)|0x40);
 	this->setSFRByte(this->ACC,this->getSFRByteIn(this->P0));
-	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP3(this->PX_out[3]);
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
+	//printf("in ic 16bits %02X %02X\n",a,this->getSFRByteIn(this->ACC));
 }
-void m80C32::MOVXout(unsigned char a){//8 bit address
+void m80C32::MOVX_O(unsigned char a){//8 bit address
 	//printf("MOVXout 8bit\n");
-	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
-	//printf("out ic %02X %02X\n",a,this->getSFRByteIn(this->ACC));
+	//printf("out ic 8bits %02X %02X\n",a,this->getSFRByteIn(this->ACC));
 	this->sendP0(a);
 	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP0(this->getSFRByteIn(this->ACC));
 	this->sendP3((this->PX_out[3]&0x3F)|0x80);
-	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP3(this->PX_out[3]);
 	this->sendP0(this->PX_out[0]);
-	//printf("out ic - %02X\n",a);
 }
-void m80C32::MOVXout(unsigned short a){//16 bit address
+void m80C32::MOVX_O(unsigned short a){//16 bit address
 	//printf("MOVXout 16bit\n");
-	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
+	//printf("out ic 16bits %04X %02X\n",a,this->getSFRByteIn(this->ACC));
 	this->sendP0((unsigned char)(a&0xFF));
+	this->sendP2((unsigned char)(a>>8));
 	this->sendALE(true);
 	this->sendALE(false);
-	this->sendP2((unsigned char)(a>>8));
 	this->sendP0(this->getSFRByteIn(this->ACC));
 	this->sendP3((this->PX_out[3]&0x3F)|0x80);
-	//this->sendP3((this->PX_out[3]&0x3F)|0xC0);
 	this->sendP3(this->PX_out[3]);
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
@@ -1862,28 +1499,27 @@ void m80C32::MUL(){
 	this->setBitIn(this->CY,false);
 	this->setBitIn(this->OV,ab>0xFF);
 }
-void m80C32::ORL(unsigned char a,unsigned char d){
+unsigned char m80C32::ORL(unsigned char d1,unsigned char d2){
 	//printf("ORL\n");
-	if ((bool)(a&0x80)) this->setSFRByte(a,this->getSFRByteOut(a)|d);
-	else this->setRAMByte(a,this->getRAMByte(a)|d);
+	return d1|d2;
 }
-void m80C32::ORLcy(bool b){
+void m80C32::ORL_C(bool b){
 	//printf("ORLcy\n");
 	if (b) this->setBitIn(this->CY,true);
 }
-void m80C32::POP(){
+unsigned char m80C32::POP(){
 	//printf("POP\n");
 	unsigned char sp=this->getSFRByteIn(this->SP);
-	if ((bool)(this->instruction[1]&0x80)) this->setSFRByte(this->instruction[1],this->getRAMByte(sp));
-	else this->setRAMByte(this->instruction[1],this->getRAMByte(sp));
+	unsigned char d=this->getRAMByte(sp);
 	sp--;
 	this->setSFRByte(this->SP,sp);
+	return d;
 }
-void m80C32::PUSH(){
+void m80C32::PUSH(unsigned char d){
 	//printf("PUSH\n");
 	unsigned char sp=this->getSFRByteIn(this->SP);
 	sp++;
-	this->setRAMByte(sp,((bool)(this->instruction[1]&0x80))?this->getSFRByteIn(this->instruction[1]):this->getRAMByte(this->instruction[1]));
+	this->setRAMByte(sp,d);
 	this->setSFRByte(this->SP,sp);
 }
 void m80C32::RET(){
@@ -1900,7 +1536,13 @@ void m80C32::RETI(){
 	//printf("RETI\n");
 	//////////////////////////////////////////////////////////////////////////////////////
 	this->decreaseInterruptLevel();
-	this->RET();
+	unsigned char sp=this->getSFRByteIn(this->SP);
+	unsigned short ptr=(unsigned short)this->getRAMByte(sp);
+	sp--;
+	ptr=(ptr<<8)|(unsigned short)this->getRAMByte(sp);
+	sp--;
+	this->setSFRByte(this->SP,sp);
+	this->PC=ptr;
 }
 void m80C32::RL(){
 	//printf("RL\n");
@@ -1930,34 +1572,25 @@ void m80C32::RRC(){
 	a=(a>>1)|(b?0x80:0x00);
 	this->setSFRByte(this->ACC,a);
 }
-void m80C32::SETB(unsigned char ba){
-	//printf("SETB\n");
-	if ((bool)(ba&0x80)){
-		unsigned char bit;
-		this->bitaddress2address(&ba,&bit);
-		unsigned char d=this->getSFRByteOut(ba);
-		d|=1<<bit;
-		this->setSFRByte(ba,d);
-	}
-	else this->setBitIn(ba,true);
-}
-void m80C32::SJMP(){
+//SETB
+void m80C32::SJMP(signed char rel){
 	//printf("SJMP\n");
-	this->PC+=(unsigned short)(signed char)this->instruction[1];
+	this->PC+=rel;
 }
-void m80C32::SUBB(unsigned char d){
+void m80C32::SUBB(unsigned char d){////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//printf("SUBB\n");
-	if (this->getBitIn(this->CY)) d++;
-	unsigned char a=this->getBitIn(this->ACC);
-	this->setBitIn(this->CY,(a>UCHAR_MAX+d));
-	this->setBitIn(this->AC,((a&0x0F)>(NIBBLE_MAX+(d&0x0F))));
-	if (((signed char)d)<0){
-		this->setBitIn(this->OV,(((signed char)a)>SCHAR_MAX+((signed char)d)));
-	}
-	else{
-		this->setBitIn(this->OV,(((signed char)a)<SCHAR_MIN+((signed char)d)));
-	}
-	this->setSFRByte(this->ACC,a-d);
+	unsigned short a=(unsigned short)this->getBitIn(this->ACC);
+	unsigned short v=(unsigned short)d;
+	bool c=this->getBitIn(this->CY);
+	unsigned short r=(a&0x0F)-(v&0x0F)-(c?1:0);
+	this->setBitIn(this->AC,r>0x0F);
+	r+=(a&0x70)-(v&0x70);
+	bool o=r>0x7F;
+	r+=(a&0x80)-(v&0x80);
+	c=r>0xFF;
+	this->setBitIn(this->CY,c);
+	this->setBitIn(this->OV,c!=o);
+	this->setSFRByte(this->ACC,(unsigned char)r);
 }
 void m80C32::SWAP(){
 	//printf("SWAP\n");
@@ -1965,30 +1598,19 @@ void m80C32::SWAP(){
 	a=(a>>4)|(a<<4);
 	this->setSFRByte(this->ACC,a);
 }
-void m80C32::XCH(unsigned char a){
+unsigned char m80C32::XCH(unsigned char d){
 	//printf("XCH\n");
-	unsigned char d=this->getSFRByteIn(this->ACC);
-	this->setSFRByte(this->ACC,this->getRAMByte(a));//getCharIn???
-	this->setRAMByte(a,d);
+	unsigned char d2=this->getSFRByteIn(this->ACC);
+	this->setSFRByte(this->ACC,d);
+	return d2;
 }
-void m80C32::XCHd(unsigned char a){
-	//printf("XCHd\n");
-	if ((bool)(a&0x80)){
-		unsigned char d=this->getSFRByteIn(this->ACC);
-		this->setSFRByte(this->ACC,this->getSFRByteIn(a));//getCharIn???
-		this->setSFRByte(a,d);
-	}
-	else XCH(a);
-}
-void m80C32::XCHD(unsigned char a){
+unsigned char m80C32::XCHD(unsigned char d){
 	//printf("XCHD\n");
-	unsigned char d1=this->getSFRByteIn(this->ACC);
-	unsigned char d2=this->getRAMByte(a);
-	this->setSFRByte(this->ACC,(d1&0xF0)|(d2&0x0F));//getCharIn???
-	this->setRAMByte(a,(d2&0xF0)|(d1&0x0F));
+	unsigned char d2=this->getSFRByteIn(this->ACC);
+	this->setSFRByte(this->ACC,(d2&0xF0)|(d&0x0F));//getCharIn???
+	return (d&0xF0)|(d2&0x0F);
 }
-void m80C32::XRL(unsigned char a,unsigned char d){
+unsigned char m80C32::XRL(unsigned char d1,unsigned char d2){
 	//printf("XRL\n");
-	if ((bool)(a&0x80)) this->setSFRByte(a,d^this->getSFRByteOut(a));
-	else this->setRAMByte(a,d^this->getRAMByte(a));
+	return d1^d2;
 }

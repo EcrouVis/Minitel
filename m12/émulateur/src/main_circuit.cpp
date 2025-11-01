@@ -4,6 +4,8 @@
 #include "circuit/ROM_256k.h"
 #include "circuit/IOLogger.h"
 #include "circuit/Latch.h"
+#include "circuit/TS7514.h"
+#include "circuit/TS9347.h"
 
 #include <chrono>
 
@@ -24,22 +26,25 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	ROM_256k erom;
 	IOLogger iol;//debug
 	m80C32 uc;
+	TS7514 modem;
+	TS9347wVRAM video;
 	EdgeTriggeredLatchBus ALLatch;
 	EdgeTriggeredLatchWire A16Latch;
 	EdgeTriggeredLatchWire A17Latch;
 	
 	//construct circuit
-	auto Dbus=[&ALLatch,&eram,&uc,&iol](unsigned char d){//in ic
+	auto Dbus=[&ALLatch,&eram,&video,&uc,&iol](unsigned char d){//in ic
 		//printf("Dbus %#02X\n",d);
 		ALLatch.INChangeIn(d);
 		eram.DChangeIn(d);
+		video.DChangeIn(d);
 		uc.PXChangeIn(0,d);
 		iol.DChangeIn(d);
 	};
 	uc.subscribeP0(Dbus);//out ic
 	eram.subscribeD(Dbus);
 	erom.subscribeD(Dbus);
-	iol.subscribeD(Dbus);
+	video.subscribeD(Dbus);
 	
 	auto ALbus=[&eram,&erom](unsigned char d){
 		//printf("ALbus %#02X\n",d);
@@ -64,7 +69,7 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	};
 	uc.subscribenPSEN(nPSENwire);
 	
-	auto ALEwire=[&ALLatch,&A16Latch,&A17Latch,&iol](bool b){
+	auto ALEwire=[&ALLatch,&A16Latch,&A17Latch,&video,&iol](bool b){
 		/*printf("ALEwire ");
 		printf(b?"true":"false");
 		printf("\n");*/
@@ -72,6 +77,7 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 		A16Latch.CChangeIn(b);
 		A17Latch.CChangeIn(b);
 		iol.ALEChangeIn(b);
+		video.ASChangeIn(b);
 	};
 	uc.subscribeALE(ALEwire);
 	
@@ -91,56 +97,68 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	};
 	A17Latch.subscribeOUT(A17wire);
 	
-	auto P1bus=[&A16Latch,&A17Latch,&eram,&iol,&uc](unsigned char d){
+	auto P1bus=[&A16Latch,&A17Latch,&eram,&iol,&modem,&video,&uc](unsigned char d){
 		//printf("P1bus %#02X\n",d);
 		A16Latch.INChangeIn((bool)(d&1));
 		A17Latch.INChangeIn((bool)(d&2));
+		modem.ATxIChangeIn((bool)(d&(1<<2)));
+		modem.TxDChangeIn((bool)(d&(1<<3)));
+		modem.nRTSChangeIn((bool)(d&(1<<4)));
 		bool nCSVideo=(bool)(d&(1<<5));
-		//printf((!nCSVideo)?"nCS ram 1\n":"nCS ram 0\n");
+		video.nCSChangeIn(nCSVideo);
 		eram.nCSChangeIn(!nCSVideo);
 		iol.nCSChangeIn(nCSVideo);
 		uc.PXChangeIn(1,d);
 	};
 	uc.subscribeP1(P1bus);
 	
-	auto P3bus=[&eram,&iol,&uc](unsigned char d){
+	auto P3bus=[&eram,&video,&uc,&iol](unsigned char d){
 		bool nRD=(bool)(d&0x80);
 		bool nWR=(bool)(d&0x40);
 		eram.nWEChangeIn(nWR);
+		video.RnWChangeIn(nWR);
 		iol.nWEChangeIn(nWR);
 		eram.nOEChangeIn(nRD);
+		video.DSChangeIn(nRD);
 		iol.nOEChangeIn(nRD);
 		uc.PXChangeIn(3,d);
 	};
 	uc.subscribeP3(P3bus);
 	
+	auto nDCDwire=[&uc](bool b){
+		uc.PXYChangeIn(1,6,b);
+	};
+	modem.subscribenDCD(nDCDwire);
+	
+	auto mRxDwire=[&uc](bool b){
+		uc.PXYChangeIn(3,3,b);
+	};
+	modem.subscribeRxD(mRxDwire);
+	
 	//debug
-	auto dbgIOIN=[p_gState](unsigned char a,unsigned char d){
-		printf("To ");
+	auto dbgIOIN=[p_gState,&modem](unsigned char a,unsigned char d){
 		if ((a&0xF0)==0x20){
-			printf("TS9347 ");
+			printf("To TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
 		}
 		else{
-			printf("IO ");
-			p_gState->stepByStep.store(true,std::memory_order_relaxed);
+			printf("To IO A: 0x%02X / D: 0x%02X\n",a,d);
+			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
-		printf("A: 0x%02X / D: 0x%02X\n",a,d);
-		
+		if(a==0x70){
+			modem.MCnBCChangeIn((bool)(d&1));
+			modem.MODEMnDTMFChangeIn((bool)(d&2));
+		}
 	};
 	iol.subscribeIN(dbgIOIN);
-	auto dbgIOOUT=[p_gState](unsigned char a){
-		unsigned char r=0;
-		printf("From ");
+	auto dbgIOOUT=[p_gState](unsigned char a,unsigned char d){
 		if ((a&0xF0)==0x20){
-			printf("TS9347 ");
+			printf("From TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
 		}
 		else{
-			printf("IO ");
-			p_gState->stepByStep.store(true,std::memory_order_relaxed);
+			printf("From IO A: 0x%02X / D: 0x%02X\n",a,d);
+			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
-		printf("A: 0x%02X / D: 0x%02X\n",a,r);
-		if(a!=0x20) r=0xff;
-		return r;
+		//if(a!=0x20) r=0xff;
 	};
 	iol.subscribeOUT(dbgIOOUT);
 	
@@ -155,6 +173,11 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	ms_p_rom.p=(void*)&erom;
 	ms_p_rom.cmd=EROM;
 	thread_send_message(p_mb_video,&ms_p_rom);
+	
+	thread_message ms_p_vc;
+	ms_p_vc.p=(void*)&video;
+	ms_p_vc.cmd=VC;
+	thread_send_message(p_mb_video,&ms_p_vc);
 	
 	thread_message ms_p_uc;
 	ms_p_uc.p=(void*)&uc;
@@ -217,6 +240,7 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 					break;
 				case EMU_ON:
 					uc.Reset();
+					modem.Reset();
 					p_gState->minitelOn.store(true,std::memory_order_relaxed);
 					printf("power on\n");
 					break;
@@ -238,10 +262,10 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 			}
 			uc.exec_instruction=false;
 			next_step=false;
-			static int div_=0;
+			/*static int div_=0;
 			if (div_==0) std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			div_++;
-			div_%=50;
+			div_%=50;*/
 		}
 		//eram.last_memory_operation.store((eram.last_memory_operation.load(std::memory_order_acquire)+1)%65536,std::memory_order_relaxed);
 	}
