@@ -50,6 +50,33 @@ class m80C32{
 		
 		m80C32();
 		
+		static void bitaddress2address(unsigned char*,unsigned char*);
+		
+		static unsigned char getBitMask(unsigned char);
+		static unsigned char getBitDirectAddress(unsigned char);
+		
+		bool getBitIn(unsigned char);
+		bool getBitOut(unsigned char);
+		//change state + callback for PX port change
+		void setBitIn(unsigned char,bool);
+		void setBitOut(unsigned char,bool);
+		
+		//unsigned char getCharIn(unsigned char);
+		unsigned char getRAMByte(unsigned char);
+		unsigned char getSFRByteIn(unsigned char);
+		unsigned char getDirectByteIn(unsigned char);
+		//for read-modify-write instruction
+		//unsigned char getCharOut(unsigned char);
+		unsigned char getSFRByteOut(unsigned char);
+		unsigned char getDirectByteOut(unsigned char);
+		//change state + callback for PX port change
+		//void setChar(unsigned char,unsigned char);
+		void setRAMByte(unsigned char,unsigned char);
+		void setSFRByte(unsigned char,unsigned char);
+		void setDirectByte(unsigned char,unsigned char);
+		
+		unsigned char getR(unsigned char);
+		
 		void CLKTickIn();
 		void ResetChangeIn(bool);
 		void Reset();
@@ -74,37 +101,10 @@ class m80C32{
 		void subscribeALE(std::function<void(bool)> f){this->sendALE=f;}
 		void subscribenPSEN(std::function<void(bool)> f){this->sendnPSEN=f;}
 		
-		
-	private:
+		std::function<void(void)> debug_signal_alu_before_exec=[](){};
+		std::function<void(void)> debug_signal_alu_after_exec=[](){};
 	
 		const unsigned char periodPerCycle=12;
-		
-		/*const unsigned char ACC=0xE0;
-		const unsigned char B=0xF0;
-		const unsigned char DPH=0x83;
-		const unsigned char DPL=0x82;
-		const unsigned char IE=0xA8;
-		const unsigned char IP=0xB8;
-		const unsigned char P0=0x80;
-		const unsigned char P1=0x90;
-		const unsigned char P2=0xA0;
-		const unsigned char P3=0xB0;
-		const unsigned char PCON=0x87;
-		const unsigned char PSW=0xD0;
-		const unsigned char RCAP2H=0xCB;
-		const unsigned char RCAP2L=0xCA;
-		const unsigned char SBUF=0x99;
-		const unsigned char SCON=0x98;
-		const unsigned char SP=0x81;
-		const unsigned char TCON=0x88;
-		const unsigned char T2CON=0xC8;
-		const unsigned char TH0=0x8C;
-		const unsigned char TH1=0x8D;
-		const unsigned char TH2=0xCD;
-		const unsigned char TL0=0x8A;
-		const unsigned char TL1=0x8B;
-		const unsigned char TL2=0xCC;
-		const unsigned char TMOD=0x89;*/
 		
 		//bit address
 		const unsigned char EA=0xAF;
@@ -216,34 +216,6 @@ class m80C32{
 			2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1
 			};
 		
-		static void bitaddress2address(unsigned char*,unsigned char*);
-		
-		static unsigned char getBitMask(unsigned char);
-		static unsigned char getBitDirectAddress(unsigned char);
-		
-		bool getBitIn(unsigned char);
-		bool getBitOut(unsigned char);
-		//change state + callback for PX port change
-		void setBitIn(unsigned char,bool);
-		void setBitOut(unsigned char,bool);
-		
-		//unsigned char getCharIn(unsigned char);
-		unsigned char getRAMByte(unsigned char);
-		unsigned char getSFRByteIn(unsigned char);
-		unsigned char getDirectByteIn(unsigned char);
-		//for read-modify-write instruction
-		//unsigned char getCharOut(unsigned char);
-		unsigned char getSFRByteOut(unsigned char);
-		unsigned char getDirectByteOut(unsigned char);
-		//change state + callback for PX port change
-		//void setChar(unsigned char,unsigned char);
-		void setRAMByte(unsigned char,unsigned char);
-		void setSFRByte(unsigned char,unsigned char);
-		void setDirectByte(unsigned char,unsigned char);
-		
-		unsigned char getR(unsigned char);
-		
-		void PXChange(unsigned char,unsigned char);
 		
 		unsigned char period=0;
 			
@@ -252,6 +224,24 @@ class m80C32{
 		unsigned char instruction[3]={0,0,0};
 		unsigned char i_cycle_n=0xFF;
 		unsigned char i_part_n;
+		
+		
+		bool reset_level=true;
+		unsigned char reset_count=0;
+		
+		
+		unsigned char TX_bit=0;
+		unsigned char RX_bit=0;
+		bool RX_state=true;
+		
+		unsigned char tx_prescaler=0;
+		unsigned char rx_prescaler=0;
+		unsigned char tx_subtick=0;
+		unsigned char rx_subtick=0;
+		
+	private:
+		
+		void PXChange(unsigned char,unsigned char);
 		
 		void ACALL(unsigned short);
 		void ADD_A(unsigned char);
@@ -319,19 +309,6 @@ class m80C32{
 		void PowerDown();
 		void PCONChange();
 		
-		bool reset_level=true;
-		unsigned char reset_count=0;
-		
-		/*void (*sendP0)(unsigned char)=[](unsigned char d){};
-		void (*sendP1)(unsigned char)=[](unsigned char d){};
-		void (*sendP2)(unsigned char)=[](unsigned char d){};
-		void (*sendP3)(unsigned char)=[](unsigned char d){};
-		void (*sendnRD)(bool)=[](bool b){};
-		void (*sendnWR)(bool)=[](bool b){};
-		void (*sendTxD)(bool)=[](bool b){};
-		void (*sendRxD)(bool)=[](bool b){};
-		void (*sendALE)(bool)=[](bool b){};
-		void (*sendnPSEN)(bool)=[](bool b){};*/
 		std::function<void(unsigned char)> sendP0=[](unsigned char d){};
 		std::function<void(unsigned char)> sendP1=[](unsigned char d){};
 		std::function<void(unsigned char)> sendP2=[](unsigned char d){};
@@ -358,13 +335,8 @@ class m80C32{
 		void updateRX();
 		void updateTX();
 		
-		unsigned char TX_bit=0;
-		unsigned char RX_bit=0;
-		bool RX_state=true;
-		
-		unsigned char tx_prescaler=0;
-		unsigned char rx_prescaler=0;
-		unsigned char tx_subtick=0;
-		unsigned char rx_subtick=0;
 };
+
+void print_m12_alu_instruction(m80C32* uc);
+
 #endif

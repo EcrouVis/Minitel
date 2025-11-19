@@ -42,6 +42,7 @@ struct imgui80C32SFRView{
 };
 struct P_ImGui{
 	bool show_menu=true;
+	bool idle=true;
 	ImFont* font=NULL;
 };
 struct P_Emulation{
@@ -74,12 +75,16 @@ struct P_CRT{
 	const float width=480;
 	const float height=250;
 };
+struct P_Other{
+	std::atomic_bool* os_rtc=NULL;
+};
 struct P_IO{
 	P_Keyboard keyboard;
 	P_Peri peri;
 	P_Modem modem;
 	P_Buzzer buzzer;
 	P_CRT crt;
+	P_Other other;
 };
 struct P_Debug{
 	imguiMemoryView eram;

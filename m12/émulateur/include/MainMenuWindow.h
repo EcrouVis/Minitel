@@ -155,6 +155,7 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 		if(ImGui::Button("-##dpi")) ImGui::GetStyle().FontScaleDpi-=0.1;
 		ImGui::SameLine();
 		if(ImGui::Button("+##dpi")) ImGui::GetStyle().FontScaleDpi+=0.1;
+		ImGui::Checkbox("Rafraichissement d'image dynamique",&(p_params->imgui.idle));
 	}
 	if (ImGui::CollapsingHeader("Contrôle de l'émulateur")){
 		if(p_params->p_gState->minitelOn.load(std::memory_order_relaxed)){
@@ -416,6 +417,16 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 		ImGui::TextDisabled("(hack)");
 		static bool crt_filter=false;
 		ImGui::Checkbox("Filtre vidéo CRT",&crt_filter);
+		
+		ImGui::SeparatorText("Divers");
+		if (p_params->io.other.os_rtc!=NULL){
+			static bool os_rtc=p_params->io.other.os_rtc->load(std::memory_order_relaxed);
+			ImGui::Checkbox("Utiliser la date de l'ordinateur pour le RTC",&(os_rtc));
+			p_params->io.other.os_rtc->store(os_rtc,std::memory_order_relaxed);
+			ImGui::SameLine();
+			ImGui::TextDisabled("(hack)");
+			
+		}
 	}
 	if (ImGui::CollapsingHeader("Débuggage")){
 		//static bool sbs=false;

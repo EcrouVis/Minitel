@@ -1,7 +1,7 @@
 Dump de la mémoire d'un minitel M12 Philips.
 Le dump est en 4 parties car pour accéder à toute la mémoire de la ROM, le minitel n'a pas un bus de données assez large (processeur 80C32) et utilise donc 2 GPIOs (P1.0 et P1.1) pour changer de 'banque de données' et ainsi pouvoir lire toute la mémoire.
 
-Notez que ce système a partiellement endomagé ma puce mémoire.
+Notez que ce système a partiellement endommagé ma puce mémoire.
 Les 2 entrées d'adresse gérées de manière externe par le circuit électronique et censées accepter un signal TTL se sont dégradées au point où 3.3V n'était plus considéré comme un 1 mais comme à un niveau indéfini!
 
 Chaque banque semble formée de la même manière:
@@ -156,6 +156,9 @@ F_JMP:
   MOVC A, @A+DPTR
   PUSH A
   RET
+Les fonctions qui utilisent ce type de saut sont:
+-p1: 0x9A5A, 0xB04B, 0xB0B6
+-p2: 0x675D, 0x6792
 
 Une implémentation qui pourrai complexifier le code comme ci-dessous n'as pas encore été trouvée:
 POP X
@@ -299,3 +302,31 @@ IT0
       clear P1.3
 
 Changement de vitesse:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+---------- mémoire externe ----------
+0x06AA-0x06B1 - copie des registres du modem
+
+---------- mémoire interne ----------
+0x28 - copie de l'état des IO du CPLD (sans le bit 6) ?
+0xAD - copie de l'entrée clavier

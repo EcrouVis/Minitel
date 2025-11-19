@@ -32,6 +32,7 @@ const int NOTIFICATION_PURPLE=11;
 const int EROM=2;
 const int UC=12;
 const int VC=13;
+const int CPLD=14;
 
 const int DUMP_ERAM=1;
 const int LOAD_ERAM=1<<1;

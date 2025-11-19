@@ -15,17 +15,21 @@ class TS7514{
 		}
 		
 		void MODEMnDTMFChangeIn(bool b){
-			if (b&&(!this->MCnBC)&&(!this->MODEMnDTMF)) this->writeRegister();
+			if (b&&(!this->MODEMnDTMF)&&(!this->MCnBC)) this->writeRegister();
+			if (b!=(this->MODEMnDTMF)) printf("MODEMnDTMF %i \n",(int)b);
 			this->MODEMnDTMF=b;
 		}
 		void MCnBCChangeIn(bool b){
 			if (b&&(!this->MCnBC)&&(!this->MODEMnDTMF)) this->writeRegister();
+			if (b!=(this->MCnBC)) printf("MCnBC %i \n",(int)b);
 			this->MCnBC=b;
 		}
 		void TxDChangeIn(bool b){
+			if (b!=this->TxD) printf("TxD %i \n",(int)b);
 			this->TxD=b;
 		}
 		void nRTSChangeIn(bool b){
+			if (b!=this->nRTS) printf("nRTS %i \n",(int)b);
 			if ((!b)&&this->nRTS){
 				this->input_register=(this->input_register>>1)|(this->TxD?0x80:0);
 			}
@@ -79,6 +83,7 @@ class TS7514{
 			if (n_reg==this->RPROG||cmd_ok){
 				this->REG[n_reg]=this->input_register&0x0F;
 				printf("OK\n");
+				if(n_reg==0) printf("same channel %i\n",(this->input_register>>2)&1);
 			}
 			else{
 				printf("NOK\n");

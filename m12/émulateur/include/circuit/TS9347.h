@@ -5,6 +5,14 @@
 #include <cstdio>
 const int VRAM_SIZE=32768;
 
+struct AddressDecomposition{
+	unsigned char X;
+	unsigned char Y;
+	unsigned char Block;
+	unsigned char District;
+};
+int address2PAddress(AddressDecomposition* address);
+
 //not accurate implementation (timming/behavior)
 class TS9347wVRAM{
 	public:
@@ -14,6 +22,14 @@ class TS9347wVRAM{
 		void nCSChangeIn(bool b);
 		void RnWChangeIn(bool b);
 		void subscribeD(std::function<void(unsigned char)>);
+		
+		std::atomic_uchar STATUS=0;
+		std::atomic_uchar Rx[8]={0,0,0,0,0,0,0,0};//COMMAND,R1,R2,..,R7
+		std::atomic_uchar DOR=0;
+		std::atomic_uchar PAT=0;
+		std::atomic_uchar MAT=0;
+		std::atomic_uchar TGS=0;
+		std::atomic_uchar ROR=0;
 		
 		std::atomic_uchar VRAM[VRAM_SIZE];
 		void set(unsigned char* array);
@@ -37,14 +53,6 @@ class TS9347wVRAM{
 		const unsigned char INC_MASK=0b00000001;
 		
 		bool VS_MASK_FLAG=false;
-		
-		std::atomic_uchar STATUS=0;
-		std::atomic_uchar Rx[8]={0,0,0,0,0,0,0,0};//COMMAND,R1,R2,..,R7
-		std::atomic_uchar DOR=0;
-		std::atomic_uchar PAT=0;
-		std::atomic_uchar MAT=0;
-		std::atomic_uchar TGS=0;
-		std::atomic_uchar ROR=0;
 		
 		std::atomic_uchar outside;
 		

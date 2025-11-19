@@ -1,11 +1,10 @@
 #include "circuit/TS9347.h"
 
-struct AddressDecomposition{
-	unsigned char X;
-	unsigned char Y;
-	unsigned char Block;
-	unsigned char District;
-};
+#define GLAD_GL_IMPLEMENTATION
+#include "glad/glad.h"
+#define GLFW_INCLUDE_NONE
+#include "GLFW/glfw3.h"
+
 void decomposePointer(unsigned char Reven,unsigned char Rodd,AddressDecomposition* address){
 	address->Y=Reven&0b00011111;
 	address->District=Reven>>5;
@@ -81,6 +80,7 @@ void TS9347wVRAM::RnWChangeIn(bool b){
 					this->Rx[0].store(this->D,std::memory_order_relaxed);
 					this->STATUS.fetch_or(this->BUSY_MASK,std::memory_order_relaxed);
 					this->executeCommand();
+					glfwPostEmptyEvent();
 				}
 			}
 			else if (!this->isBusy()) this->Rx[addr&0x07].store(this->D,std::memory_order_relaxed);
@@ -143,7 +143,7 @@ bool TS9347wVRAM::isCMDCorrect(unsigned char cmd){
 
 void TS9347wVRAM::executeCommand(){
 	unsigned char x=this->Rx[0].load(std::memory_order_relaxed);
-	printf("CMD %02X\n",x);
+	//printf("CMD %02X\n",x);
 	switch(x&0xF0){
 		case 0b10000000://IND
 			this->IND(x&0x07,(bool)(x&this->RnW_MASK));
@@ -151,6 +151,7 @@ void TS9347wVRAM::executeCommand(){
 			break;
 		case 0b00000000://TLM/CLL
 			if ((bool)(x&0x04)){
+				//printf("CLL\n");
 				bool incy=false;
 				do{/////////////////////////////////////////////////////////////////////////////////////////////////
 					this->TLSMA(true,false,true,true);
@@ -159,16 +160,19 @@ void TS9347wVRAM::executeCommand(){
 				}while(!((this->Rx[6].load(std::memory_order_relaxed)&0x1F)==0&&incy));
 			}
 			else{
+				//printf("TLM\n");
 				this->TLSMA(true,(bool)(x&0x08),(bool)(x&0x01),true);
 			}
 			this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 		case 0b00100000://TLA
+			//printf("TLA\n");
 			this->TLSMA(false,(bool)(x&0x08),(bool)(x&0x01),true);
 			this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 		case 0b01100000://TSM/CLS
 			if ((bool)(x&0x04)){
+				//printf("CLS\n");
 				bool incy=false;
 				do{
 					this->TLSMA(true,false,true,false);
@@ -177,35 +181,43 @@ void TS9347wVRAM::executeCommand(){
 				}while(!((this->Rx[6].load(std::memory_order_relaxed)&0x1F)==0&&incy));
 			}
 			else{
+				//printf("TSM\n");
 				this->TLSMA(true,(bool)(x&0x08),(bool)(x&0x01),false);
 			}
 			this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 		case 0b01110000://TSA
+			//printf("TSA\n");
 			this->TLSMA(false,(bool)(x&0x08),(bool)(x&0x01),false);
 			this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 		case 0b01000000://KRS
+			//printf("KRS\n");
 			this->KRLS((bool)(x&0x08),(bool)(x&0x01),false);
 			this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 		case 0b01010000://KRL
+			//printf("KRL\n");
 			this->KRLS((bool)(x&0x08),(bool)(x&0x01),true);
 			this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 		case 0b00110000://TBM/TBA
+			//printf("TBM/TBA\n");
 			this->TBMA(!(bool)(x&0x04),(bool)(x&0x08),(bool)(x&0x01));
 			this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 		case 0b11010000://MVB
+			//printf("MVB\n");
 			this->MV(1,(bool)(x&0x04),(bool)(x&0x01));
 			if ((bool)(x&0x01)) this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 		case 0b11100000://MVD
+			//printf("MVD\n");
 			this->MV(2,(bool)(x&0x04),(bool)(x&0x01));
 			if ((bool)(x&0x01)) this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 		case 0b11110000://MVT
+			//printf("MVT\n");
 			this->MV(3,(bool)(x&0x04),(bool)(x&0x01));
 			if ((bool)(x&0x01)) this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
