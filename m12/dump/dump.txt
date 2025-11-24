@@ -327,6 +327,134 @@ Changement de vitesse:
 ---------- mémoire externe ----------
 0x06AA-0x06B1 - copie des registres du modem
 
+0x06D5 - état du clavier ?
+0x06D6 - mémoire temporaire vers le clavier ?
+0x06D7 - mémoire temporaire depuis le clavier (premier octet du message reçu) ?
+
 ---------- mémoire interne ----------
 0x28 - copie de l'état des IO du CPLD (sans le bit 6) ?
 0xAD - copie de l'entrée clavier
+0xAC - message pour le clavier
+
+0x56, 0x57, 0x58, 0x2E, 0x2F - gestion des données / commandes / variables temporaires (0x2E, 0x2F: modifiable bits par bits) ?
+
+---------- communication avec le clavier ----------
+Fonction de vérification du message à l'adresse 0x1CC16 (code partie 2, adresse 0xCC16) 
+
+Communication série avec des messages de 2 octets (o1 et o2 / .h: partie haute de l'octet, .l: partie basse de l'octet)
+Liaison série 8 bits + 1 bit start (0) + 2 bits stop (1) / pas de bit de parité / bit de poids faible en premier
+Au niveau du câble: Vcc=0 (par défaut), GND=1
+Liaison clavier->Microcontrôleur 600 Baud
+Microcontrôleur->Liaison clavier 300 Baud
+
+y: bit non utilisé / inconnu
+xxxx (o1.h): bits de détection d'erreur 
+o1.h=(o1.l+o2.h+o2.l)&0x0F
+
+Transfert d'état des touches :
+	o1: xxxxa0y0
+	o2: bcdefgh1
+
+	a: 0=pressé 0=relâché
+
+	donnée transférée: bcdefgh(!a)
+
+	Liste des touches et o2:
+
+		6 0x11
+	 volume - 0x13
+	      Bis 0x15
+		2 0x17
+		4 0x19
+		8 0x1B
+		# 0x1D
+		* 0x1F
+		3 0x21
+	 volume + 0x23
+	      …/… 0x25
+		1 0x27
+		5 0x29
+		7 0x2B
+		9 0x2D
+		0 0x2F
+	      Mem 0x31
+	annuaire? 0x33
+     haut parleur 0x35
+		) 0x37
+	   entrée 0x39
+		M 0x3B
+		: 0x3D
+    flèche droite 0x3F
+
+       impression 0x45
+
+		ç 0x51
+
+	   on/off 0x55
+		P 0x57
+		L 0x59
+      flèche haut 0x5B
+    flèche gauche 0x5D
+       flèche bas 0x5F
+		! 0x61
+	    Envoi 0x63
+       Répétition 0x65
+		I 0x67
+		O 0x69
+		K 0x6B
+		; 0x6D
+		, 0x6F
+		è 0x71
+	    Suite 0x73
+	   Retour 0x75
+		U 0x77
+		J 0x79
+		N 0x7B
+		B 0x7D
+	   espace 0x7F
+		- 0x81
+       Correction 0x83
+       Annulation 0x85
+		Y 0x87
+		H 0x89
+		G 0x8B
+		C 0x8D
+		V 0x8F
+		( 0x91
+	    Guide 0x93
+	 Sommaire 0x95
+		T 0x97
+		F 0x99
+		X 0x9B
+	     Ctrl 0x9D
+	  Min/Maj 0x9F
+		' 0xA1
+	     Fnct 0xA3
+	      Esc 0xA5
+		" 0xA7
+		R 0xA9
+		D 0xAB
+		W 0xAD
+	    shift 0xAF
+		é 0xB1
+		& 0xB3
+       Connex/Fin 0xB5
+		Z 0xB7
+		E 0xB9
+		A 0xBB
+		S 0xBD
+		Q 0xBF
+
+		à 0xD3
+		
+
+Commande système - changement d'état? :
+	o1: xxxxy1y0
+	o2: abcdefg1
+
+	Exemples:
+		Réponse au bouton off: uc: 0x94 0x23 / (attente) / uc: 0x14 0x2B
+		Réponse au bouton on: uc: 0x14 0x2B 0x94 0x23
+		Décrochage du téléphone - pas de ligne: clavier: 0x5C 0x63 / uc: 0xF4 0x29
+		Raccrochage du téléphone - pas de ligne: clavier: 0x3C 0x61 / uc: 0x74 0x03 0x74 0x03 0x74 0x21
+		Chaque minute?: uc: 0xC4 0x17 / clavier: 0x3C 0x61
