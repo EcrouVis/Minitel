@@ -40,6 +40,7 @@ const int LOAD_EROM=1<<2;
 const int EMU_ON=1<<3;
 const int EMU_OFF=1<<4;
 const int EMU_NEXT_STEP=1<<5;
+const int KEYBOARD_STATE_UPDATE=1<<6;
 /*const int LOAD_VRAM;//->custom first screen?
 const int SET_DUMP_DIRECTORY;
 const int START;

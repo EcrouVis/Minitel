@@ -85,6 +85,77 @@ void MBSL_4000FH5_5::subscribeRST(std::function<void(bool)> f){
 	this->sendRST=f;
 }
 
+void MBSL_4000FH5_5::subscribeSerial(std::function<void(bool)> f){
+	this->sendSerial=f;
+}
+
+void MBSL_4000FH5_5::serialChangeIn(bool b){
+	if (b&&(!this->S_in)&&this->S_in_step==0) this->S_in_step=1;
+	this->S_in=b;
+}
+
+void MBSL_4000FH5_5::CLKTickIn(){
+	if (this->S_in_step>0){
+		switch (this->S_in_step){
+			case 1:this->S_in_step++;break;
+			
+			case 2:
+			case 3:
+			case 4:
+			case 5:
+			case 6:
+			case 7:
+			case 8:
+			case 9:this->SBUF_in_tmp=(this->SBUF_in_tmp>>1)|(this->S_in?0:0x80);this->S_in_step++;break;
+			
+			case 10:
+				this->SBUF_in=this->SBUF_in_tmp;
+				if ((bool)(this->STATUS&(1<<5))) this->STATUS|=0x03;
+				else this->STATUS&=0xFC;
+				this->STATUS|=1<<5;
+				this->S_in_step=0;
+				break;
+				
+		}
+	}
+	if (this->S_out_step>0){
+		switch (this->S_out_step){
+			case 1:this->sendSerial(true);this->S_out_step++;break;
+			
+			case 2:
+			case 4:
+			case 6:
+			case 8:
+			case 10:
+			case 12:
+			case 14:
+			case 16:
+			case 18:
+			case 20:
+			case 21:
+			case 22:
+			case 23:this->S_out_step++;break;
+			
+			case 3:
+			case 5:
+			case 7:
+			case 9:
+			case 11:
+			case 13:
+			case 15:
+			case 17:
+				this->sendSerial(!(bool)(this->SBUF_out&1));
+				this->SBUF_out=this->SBUF_out>>1;
+				this->S_out_step++;
+				break;
+			
+			case 19:this->sendSerial(false);this->S_out_step++;break;
+			
+			case 24:this->S_out_step=0;this->STATUS|=0x0C;break;
+		}
+	}
+}
+
 
 unsigned char MBSL_4000FH5_5::D2BCD(unsigned char D){
 	D=D%100;
@@ -100,8 +171,17 @@ void MBSL_4000FH5_5::UC2CPLD(){
 	switch(this->address){
 		case 0x50://serial buffer out
 			//printf("to keyboard %02X\n",this->data);
+			this->STATUS&=0xF3;
+			this->STATUS|=(1<<4);
+			this->SBUF_out=this->data;
+			this->S_out_step=1;
 			break;
-		case 0x70://speculations: 0: MC/nBC / 1: modem/nDMTF / 2: close modem line? / 3: watchdog timer in / 4: disable comunication to keyboard? / 5: enable CRT / 6: M/V / 7: ???
+		case 0x51:
+			//printf("to CPLD status %02X\n",this->data);
+			this->STATUS=this->data;
+			if ((bool)(this->STATUS&(1<<4))) this->STATUS|=0x0C;
+			break;
+		case 0x70://speculations: 0: MC/nBC / 1: modem/nDMTF / 2: disable comunication to and reset keyboard? / 3: watchdog timer in / 4: close modem line? / 5: enable CRT / 6: M/V / 7: ???
 			//printf("to CPLD IO %02X\n",this->data);
 			this->IO=this->data;
 			this->sendPIO(this->data);
@@ -148,10 +228,6 @@ void MBSL_4000FH5_5::UC2CPLD(){
 			date.tm_year=(date.tm_year%100)+this->BCD2D(this->data)*100-1900;
 			this->diff_time+=std::difftime(timegm(&date),ts);
 			break;
-		case 0x51:
-			//printf("to CPLD status %02X\n",this->data);
-			this->STATUS=this->data;
-			break;
 		default:
 			break;
 	}
@@ -163,19 +239,15 @@ void MBSL_4000FH5_5::CPLD2UC(){
 	switch(this->address){
 		case 0x50://serial buffer in
 		{
-			static unsigned char d='A';
-			//printf("from keyboard %02X\n",d);
-			this->sendD(d);
+			this->sendD(this->SBUF_in);
 			this->STATUS&=~(1<<5);
 			break;
 		}
-		case 0x51://0x51: 5: data in SBUFin / 0&1: set i25.6 after reading SBUFin / 2&3&i22.6: accept data to SBUFout / 4: data in SBUF out? / 6: reset/pause RTC /7: command?
-		{
+		case 0x51://0x51: 5: data in SBUFin / !0&&!1: set i25.6 after reading SBUFin / 2&&3&&i22.6: accept data to SBUFout / 4: data in SBUF out? - start serial? / 6: reset/pause RTC? - used only when changing date /7: reset?
+		{//end init->0b01010001
 			unsigned char d=this->STATUS;
 			//printf("from CPLD status %02X\n",d);
 			this->sendD(d);
-			//this->STATUS|=0x80;
-			this->STATUS|=0x0F;
 			break;
 		}
 		case 0x40://Minutes BCD format

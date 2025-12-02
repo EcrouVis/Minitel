@@ -8,6 +8,8 @@
 #include "circuit/TS9347.h"
 #include "circuit/CPLD.h"
 #include "circuit/WatchdogTimer.h"
+#include "circuit/Keyboard.h"
+#include "circuit/clocks.h"
 
 #include <chrono>
 
@@ -299,6 +301,8 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	EdgeTriggeredLatchWire A17Latch;
 	MBSL_4000FH5_5 cpld;
 	WatchdogTimer wt;
+	Keyboard kb;
+	Clocks CLKs;
 	
 	//construct circuit
 	auto Dbus=[&cpld,&eram,&video,&uc,&iol](unsigned char d){//in ic
@@ -399,6 +403,11 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 		cpld.nOEChangeIn(nRD);
 		iol.nOEChangeIn(nRD);
 		uc.PXChangeIn(3,d);
+		static bool txd=false;
+		if (txd!=((bool)(d&0x02))){
+			txd=!txd;
+			printf("------------ TxD %i\n",(int)txd);
+		}
 	};
 	uc.subscribeP3(P3bus);
 	
@@ -412,16 +421,15 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	};
 	modem.subscribeRxD(mRxDwire);
 	
-	auto CPLDIObus=[&modem,&wt](unsigned char d){
+	bool kb_s1=false;
+	bool kb_s2=false;
+	
+	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2](unsigned char d){
 		modem.MCnBCChangeIn((bool)(d&1));
 		modem.MODEMnDTMFChangeIn((bool)(d&2));
 		wt.KICKChangeIn((bool)(d&8));
-		static bool b_line=false;
-		if (b_line!=(bool)(d&4)){
-			b_line=(bool)(d&4);
-			if (b_line) printf("modem line closed\n");
-			else printf("modem line opened\n");
-		}
+		kb_s1=!(bool)(d&4);
+		kb.serialChangeIn(kb_s1||kb_s2);
 	};
 	cpld.subscribePIO(CPLDIObus);
 	
@@ -434,6 +442,17 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 		cpld.WATCHDOGChangeIn(b);
 	};
 	wt.subscribeRST(WTwire);
+	
+	auto KeyboardSerialOut=[&cpld](bool b){
+		cpld.serialChangeIn(b);
+	};
+	kb.subscribeSerial(KeyboardSerialOut);
+	auto KeyboardSerialIn=[&kb,&kb_s1,&kb_s2](bool b){
+		kb_s2=b;
+		kb.serialChangeIn(kb_s1||kb_s2);
+		//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	};
+	cpld.subscribeSerial(KeyboardSerialIn);
 	
 	//debug
 	stackMonitor sm=stackMonitor(&uc);
@@ -461,7 +480,8 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 				printf("Return to ");
 				if (old) printf("old ");
 				if (ind) printf("indirect ");
-				printf("address c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])));
+				unsigned char sp=uc.getSFRByteIn(uc.SP);
+				printf("address c:%05lX -> c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])),(((unsigned long)uc.PX_out[1]&3)<<16)|(((unsigned short)uc.getRAMByte(sp))<<8)|((unsigned short)uc.getRAMByte(sp-1)));
 			}
 		}
 	};*/
@@ -477,10 +497,14 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 			printf("To Keyboard A: 0x%02X / D: 0x%02X\n",a,d);
 		}
 		else if (a==0x51){
-			//printf("To CPLD Status A: 0x%02X / D: 0x%02X\n",a,d);
+			printf("To CPLD Status A: 0x%02X / D: 0x%02X\n",a,d);
 		}
 		else if ((a&0xF0)==0x70){
-			//printf("To CPLD Pin A: 0x%02X / D: 0x%02X\n",a,d);
+			static unsigned char io=0;
+			if ((bool)((d^io)&(~(1<<3)))){//dont print when watchdog timer kicked
+				io=d;
+				printf("To CPLD Pin A: 0x%02X / D: 0x%02X\n",a,d);
+			}
 			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		else{
@@ -498,10 +522,15 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 		}
 		else if (a==0x50){
 			printf("From Keyboard A: 0x%02X / D: 0x%02X\n",a,d);
+			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		else if (a==0x51){
-			printf("From CPLD Status A: 0x%02X / D: 0x%02X\n",a,d);
-			p_gState->stepByStep.store(true,std::memory_order_relaxed);
+			static unsigned char stat=0;
+			if (stat!=d){
+				stat=d;
+				printf("From CPLD Status A: 0x%02X / D: 0x%02X\n",a,d);
+			}
+			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		else if ((a&0xF0)==0x70){
 			//printf("From CPLD Pin A: 0x%02X / D: 0x%02X\n",a,d);
@@ -516,10 +545,20 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	iol.subscribeOUT(dbgIOOUT);
 	uc.debug_signal_alu_before_exec=[p_gState,&uc,&sm](){
 		sm.updateState();
+		unsigned long addr=((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16);
+		/*if (addr==0x1CC68){
+			p_gState->stepByStep.store(true,std::memory_order_relaxed);
+		}*/
+		/*if (((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16)==0x10074){
+			p_gState->stepByStep.store(true,std::memory_order_relaxed);
+		}*/
+		/*if (uc.instruction[0]==0xD2&&uc.instruction[1]==0x99){//SETB TI
+			p_gState->stepByStep.store(true,std::memory_order_relaxed);
+		}*/
 		if ((uc.instruction[0]==0xE0||uc.instruction[0]==0xF0)&&(!(bool)(uc.PX_out[1]&(1<<5)))){
 			p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
-		print_m12_alu_instruction(&uc);
+		//print_m12_alu_instruction(&uc);
 	};
 	
 	thread_message ms_p_ram;
@@ -550,9 +589,23 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	/*thread_message ms_p_notif;
 	ms_p_notif.cmd=NOTIFICATION_BUZZER;
 	for (int i=0;i<16;i++) thread_send_message(p_mb_video,&ms_p_notif);*/
+	
 	bool next_step=false;
-	while (!p_gState->shutdown.load(std::memory_order_relaxed)){
-		
+	
+	auto stopC=[p_gState](){
+		return p_gState->shutdown.load(std::memory_order_relaxed);
+	};
+	CLKs.setStopCondition(stopC);
+	auto pauseC=[p_gState,&next_step,&uc](){
+		bool p=(!p_gState->minitelOn.load(std::memory_order_relaxed))||(p_gState->stepByStep.load(std::memory_order_relaxed)&&(uc.exec_instruction||!next_step));
+		if (uc.exec_instruction){
+			uc.exec_instruction=false;
+			next_step=false;
+		}
+		return p;
+	};
+	CLKs.setPauseCondition(pauseC);
+	auto Loop=[p_mb_circuit,&eram,&erom,&uc,&modem,&next_step,&kb,p_gState](){
 		thread_message ms;
 		std::ifstream eram_file;
 		std::ifstream erom_file;
@@ -613,23 +666,36 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 				case EMU_NEXT_STEP:
 					next_step=true;
 					break;
+				case KEYBOARD_STATE_UPDATE:
+				{
+					keyboard_message* kbm=(keyboard_message*)ms.p;
+					kb.KeyboardChangeIn(kbm);
+					delete kbm;
+					break;
+				}
 				default:
 					fprintf(stdout,"unknown cmd %i\n",ms.cmd);
 					break;
 			}
 		}
-		if (p_gState->minitelOn.load(std::memory_order_relaxed)&&(!p_gState->stepByStep.load(std::memory_order_relaxed)||next_step)){
-			while (!uc.exec_instruction){
-				uc.CLKTickIn();
-				wt.incrementTimer();
-			}
-			uc.exec_instruction=false;
-			next_step=false;
-			/*static int div_=0;
-			if (div_==0) std::this_thread::sleep_for(std::chrono::milliseconds(1));
-			div_++;
-			div_%=50;*/
-		}
-		//eram.last_memory_operation.store((eram.last_memory_operation.load(std::memory_order_acquire)+1)%65536,std::memory_order_relaxed);
-	}
+	};
+	CLKs.subscribeLoop(Loop);
+	auto CLKTick14745600=[&uc,&wt](){
+		uc.CLKTickIn();
+		wt.incrementTimer();
+	};
+	CLKs.subscribe14745600Hz(CLKTick14745600);
+	auto CLKTick600=[&kb,&cpld](){
+		cpld.CLKTickIn();
+		kb.CLKTickIn();
+	};
+	CLKs.subscribe600Hz(CLKTick600);
+	
+	
+	
+	
+	CLKs.start();
+	
+	
+	
 }

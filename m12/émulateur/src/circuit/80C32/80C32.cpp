@@ -895,14 +895,14 @@ void m80C32::execInstruction(){
 		default:printf("erreur instruction %02X\n",this->instruction[0]);break;
 		case 0xA5:printf("erreur instruction propriétaire\n");break;//reserved
 		
-		case 0x11:this->ACALL(this->instruction[1]);break;
-		case 0x31:this->ACALL(0x0100|this->instruction[1]);break;
-		case 0x51:this->ACALL(0x0200|this->instruction[1]);break;
-		case 0x71:this->ACALL(0x0300|this->instruction[1]);break;
-		case 0x91:this->ACALL(0x0400|this->instruction[1]);break;
-		case 0xB1:this->ACALL(0x0500|this->instruction[1]);break;
-		case 0xD1:this->ACALL(0x0600|this->instruction[1]);break;
-		case 0xF1:this->ACALL(0x0700|this->instruction[1]);break;
+		case 0x11:this->ACALL((unsigned short)this->instruction[1]);break;
+		case 0x31:this->ACALL(0x0100|(unsigned short)this->instruction[1]);break;
+		case 0x51:this->ACALL(0x0200|(unsigned short)this->instruction[1]);break;
+		case 0x71:this->ACALL(0x0300|(unsigned short)this->instruction[1]);break;
+		case 0x91:this->ACALL(0x0400|(unsigned short)this->instruction[1]);break;
+		case 0xB1:this->ACALL(0x0500|(unsigned short)this->instruction[1]);break;
+		case 0xD1:this->ACALL(0x0600|(unsigned short)this->instruction[1]);break;
+		case 0xF1:this->ACALL(0x0700|(unsigned short)this->instruction[1]);break;
 		
 		case 0x24:this->ADD_A(this->instruction[1]);break;
 		case 0x25:this->ADD_A(this->getDirectByteIn(this->instruction[1]));break;
@@ -930,14 +930,14 @@ void m80C32::execInstruction(){
 		case 0x3E:this->ADDC_A(this->getRAMByte(this->getR(6)));break;
 		case 0x3F:this->ADDC_A(this->getRAMByte(this->getR(7)));break;
 			
-		case 0x01:this->AJMP(this->instruction[1]);break;
-		case 0x21:this->AJMP(0x0100|this->instruction[1]);break;
-		case 0x41:this->AJMP(0x0200|this->instruction[1]);break;
-		case 0x61:this->AJMP(0x0300|this->instruction[1]);break;
-		case 0x81:this->AJMP(0x0400|this->instruction[1]);break;
-		case 0xA1:this->AJMP(0x0500|this->instruction[1]);break;
-		case 0xC1:this->AJMP(0x0600|this->instruction[1]);break;
-		case 0xE1:this->AJMP(0x0700|this->instruction[1]);break;
+		case 0x01:this->AJMP((unsigned short)this->instruction[1]);break;
+		case 0x21:this->AJMP(0x0100|(unsigned short)this->instruction[1]);break;
+		case 0x41:this->AJMP(0x0200|(unsigned short)this->instruction[1]);break;
+		case 0x61:this->AJMP(0x0300|(unsigned short)this->instruction[1]);break;
+		case 0x81:this->AJMP(0x0400|(unsigned short)this->instruction[1]);break;
+		case 0xA1:this->AJMP(0x0500|(unsigned short)this->instruction[1]);break;
+		case 0xC1:this->AJMP(0x0600|(unsigned short)this->instruction[1]);break;
+		case 0xE1:this->AJMP(0x0700|(unsigned short)this->instruction[1]);break;
 			
 		case 0x52:this->setDirectByte(this->instruction[1],this->ANL(this->getDirectByteOut(this->instruction[1]),this->getSFRByteIn(this->ACC)));break;
 		case 0x53:this->setDirectByte(this->instruction[1],this->ANL(this->getDirectByteOut(this->instruction[1]),this->instruction[2]));break;
@@ -1261,11 +1261,11 @@ void m80C32::ADD_A(unsigned char d){
 	unsigned short a=(unsigned short)this->getSFRByteIn(this->ACC);
 	unsigned short v=(unsigned short)d;
 	unsigned short r=(a&0x0F)+(v&0x0F);
-	this->setBitIn(this->AC,r>0x0F);
+	this->setBitIn(this->AC,r&0x10);
 	r+=(a&0x70)+(v&0x70);
-	bool o=r>0x7F;
+	bool o=r&0x80;
 	r+=(a&0x80)+(v&0x80);
-	bool c=r>0xFF;
+	bool c=r&0x100;
 	this->setBitIn(this->CY,c);
 	this->setBitIn(this->OV,c!=o);
 	this->setSFRByte(this->ACC,(unsigned char)r);
@@ -1276,11 +1276,11 @@ void m80C32::ADDC_A(unsigned char d){
 	unsigned short v=(unsigned short)d;
 	unsigned short r=(a&0x0F)+(v&0x0F);
 	if (this->getBitIn(this->CY)) r++;
-	this->setBitIn(this->AC,r>0x0F);
+	this->setBitIn(this->AC,r&0x10);
 	r+=(a&0x70)+(v&0x70);
-	bool o=r>0x7F;
+	bool o=r&0x80;
 	r+=(a&0x80)+(v&0x80);
-	bool c=r>0xFF;
+	bool c=r&0x100;
 	this->setBitIn(this->CY,c);
 	this->setBitIn(this->OV,c!=o);
 	this->setSFRByte(this->ACC,(unsigned char)r);
@@ -1495,6 +1495,7 @@ void m80C32::MUL(){
 	this->setBitIn(this->CY,false);
 	this->setBitIn(this->OV,ab>0xFF);
 }
+//NOP
 unsigned char m80C32::ORL(unsigned char d1,unsigned char d2){
 	//printf("ORL\n");
 	return d1|d2;
@@ -1575,15 +1576,14 @@ void m80C32::SJMP(signed char rel){
 }
 void m80C32::SUBB(unsigned char d){////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//printf("SUBB\n");
-	unsigned short a=(unsigned short)this->getBitIn(this->ACC);
-	unsigned short v=(unsigned short)d;
+	unsigned char a=this->getSFRByteIn(this->ACC);
 	bool c=this->getBitIn(this->CY);
-	unsigned short r=(a&0x0F)-(v&0x0F)-(c?1:0);
-	this->setBitIn(this->AC,r>0x0F);
-	r+=(a&0x70)-(v&0x70);
-	bool o=r>0x7F;
-	r+=(a&0x80)-(v&0x80);
-	c=r>0xFF;
+	unsigned short r=(a&0x0F)-(d&0x0F)-(c?1:0);
+	this->setBitIn(this->AC,(bool)(r&0x10));
+	r+=(a&0x70)-(d&0x70);
+	bool o=(bool)(r&0x80);
+	r+=(a&0x80)-(d&0x80);
+	c=(bool)(r&0x100);
 	this->setBitIn(this->CY,c);
 	this->setBitIn(this->OV,c!=o);
 	this->setSFRByte(this->ACC,(unsigned char)r);

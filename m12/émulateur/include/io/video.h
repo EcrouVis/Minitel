@@ -59,6 +59,7 @@ class TS9347Renderer{
 		}
 		void setIC(TS9347wVRAM* p_ic){ this->p_ic=p_ic;}
 		void render(){
+			unsigned char bgr2rgb_3bit[8]={0,4,2,6,1,5,3,7};
 			int width, height;
 			glfwGetFramebufferSize(this->window, &width, &height);
 			GLfloat mvp[4][4]={{0,0,0,0},
@@ -119,149 +120,36 @@ class TS9347Renderer{
 				AddressDecomposition addr_blk=addr_srow;
 				addr_blk.Y=ror&0x1F;
 				
+				//display_mode=3;///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+				
 				unsigned int double_base=((bool)(display_mode&2)?0:S_40CPL);
 				unsigned int color_base=this->p_PARAMETERS->io.crt.rgb?C_RGB:0;
 				
-				srow_enable=true;/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-				blk_enable=true;/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+				//srow_enable=true;/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+				//blk_enable=true;/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 				
 				if (srow_enable){
 					GLint char_pos[2]={0,srow_low?24:0};
 					GLint char_index[2]={0,0};
-					unsigned char C=0;
-					unsigned char B=0;
-					unsigned char A=0;
-					for (int i=0;i<40;i++){
-						addr_srow.X=i;
-						if (display_mode==0){//40 char long
-							C=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
-							addr_srow.Block=(addr_srow.Block+1)&3;
-							B=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
-							addr_srow.Block=(addr_srow.Block+1)&3;
-							A=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
-							addr_srow.Block=(addr_srow.Block+2)&3;
-						}
-						else if (display_mode==1){//40 char short
-							unsigned char tmp=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
-							addr_srow.Block=(addr_srow.Block+1)&3;
-							C=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
-							addr_srow.Block=(addr_srow.Block+3)&3;
-							B&=0x55;
-							B|=(C&0x80);
-							B|=(tmp&0x80)>>2;
-							
-							A&=0x07;
-							A|=(tmp&7)<<4;//C1
-							A|=(tmp&0x08);//F
-							if ((bool)(tmp&0x80)){
-								A&=0xF8;
-								A|=(tmp&0x70)>>4;//C0
-							}
-							else{
-								A|=(tmp&0x40)<<1;//N
-								B|=(tmp&0x20)>>2;//L
-								B|=(tmp&0x10)>>3;//H
-							}
-							
-							if ((C&0xE0)==0x80){//DEL
-								B&=0x20;
-								B|=(C&2)>>1;//I1
-								B|=(C&1)>>2;//m
-								B|=(C&4)<<2;//U
-								B|=(C&8)<<3;//I2
-								A&=0xF7;//F
-								A|=0x80;//N
-								C=0;
-							}
-							else if ((bool)(tmp&0x80)){
-								B&=0xEF;//U
-							}
-						}
-						
-						unsigned char fg_color=(A&0x70)>>4;
-						unsigned char bg_color=A&0x07;
-						bool dbl_h=(bool)(B&2);
-						bool dbl_w=false;
-						bool conceal=(bool)(B&4);
-						bool underline=false;
-						bool flash=(bool)(A&8);
-						bool on_cursor=(addr_srow.X==cursor_pos[1])&&(addr_srow.Y==cursor_pos[0]);
-						bool neg=(bool)(A&0x80);
-						
-						if (neg){//color inverted
-							fg_color^=0x07;
-							bg_color^=0x07;
-						}
-						
-						
-						if (cursor_enable&&((bool)(cursor_mode&1))&&on_cursor) underline=true;
-						if (cursor_enable&&(!(bool)(cursor_mode&1))&&on_cursor){//complement
-							unsigned char tmp=fg_color;
-							fg_color=bg_color;
-							bg_color=tmp;
-						}
-						if (flash_enable&&(flash||(cursor_enable&&((bool)(cursor_mode&2))&&on_cursor))){//flash
-							double t_r;
-							if (modf(glfwGetTime(),&t_r)>0.5){
-								unsigned char tmp=fg_color;
-								fg_color=bg_color;
-								bg_color=tmp;
-							}
-						}
-						
-						char_pos[0]=i*(((bool)(display_mode&2))?1:2);
-						if(!(bool)(B&0x80)){//rom char
-							
-							if((bool)(B&0x20)){
-								if((bool)(B&0x10)){//GOE
-									char_index[1]=2;
-								}
-								else{//G10
-									char_index[1]=1;
-								}
-							}
-							else{//G0
-								char_index[1]=0;
-								underline=(bool)(B&0x10);
-							}
-							char_index[0]=C&0x7F;
-							
-							dbl_w=(bool)(B&8);
-						}
-						
-						if(!(bool)(B&0x80)){///wip
-							glUniform1ui(this->double_location,double_base|(dbl_w?S_DOUBLE_CHAR_WIDTH:0)|(dbl_h?S_DOUBLE_CHAR_HEIGHT:0));
-							glUniform1ui(this->color_location,color_base|(fg_color)|(bg_color<<3)|((conceal_enable&&conceal)?C_CONCEAL:0)|(underline?C_UNDERLINE:0));
-							glUniform2iv(this->vp_location,1,(const GLint*)&char_pos);
-							glUniform2iv(this->vcharp_location,1,(const GLint*)&char_index);
-							glDrawArrays(GL_TRIANGLES, 0, 6);
-							
-						}
-					}
-				}
-				double_base|=(double_height?S_DOUBLE_HEIGHT:0);
-				if (blk_enable){
-					for(int j=0;j<24;j++){//j++////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-						GLint char_pos[2]={0,j+(srow_low?0:1)};
-						GLint char_index[2]={0,0};
+					if (display_mode<2){
 						unsigned char C=0;
 						unsigned char B=0;
 						unsigned char A=0;
 						for (int i=0;i<40;i++){
-							addr_blk.X=i;
+							addr_srow.X=i;
 							if (display_mode==0){//40 char long
-								C=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
-								addr_blk.Block=(addr_blk.Block+1)&3;
-								B=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
-								addr_blk.Block=(addr_blk.Block+1)&3;
-								A=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
-								addr_blk.Block=(addr_blk.Block+2)&3;
+								C=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
+								addr_srow.Block=(addr_srow.Block+1)&3;
+								B=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
+								addr_srow.Block=(addr_srow.Block+1)&3;
+								A=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
+								addr_srow.Block=(addr_srow.Block+2)&3;
 							}
 							else if (display_mode==1){//40 char short
-								unsigned char tmp=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
-								addr_blk.Block=(addr_blk.Block+1)&3;
-								C=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
-								addr_blk.Block=(addr_blk.Block+3)&3;
+								unsigned char tmp=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
+								addr_srow.Block=(addr_srow.Block+1)&3;
+								C=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
+								addr_srow.Block=(addr_srow.Block+3)&3;
 								B&=0x55;
 								B|=(C&0x80);
 								B|=(tmp&0x80)>>2;
@@ -294,38 +182,37 @@ class TS9347Renderer{
 								}
 							}
 							
-							unsigned char fg_color=(A&0x70)>>4;
-							unsigned char bg_color=A&0x07;
+							unsigned char fg_color=bgr2rgb_3bit[(A&0x70)>>4];
+							unsigned char bg_color=bgr2rgb_3bit[A&0x07];
 							bool dbl_h=(bool)(B&2);
 							bool dbl_w=false;
 							bool conceal=(bool)(B&4);
 							bool underline=false;
 							bool flash=(bool)(A&8);
-							bool on_cursor=(addr_blk.X==cursor_pos[1])&&(addr_blk.Y==cursor_pos[0]);
+							bool on_cursor=(addr_srow.X==cursor_pos[1])&&(addr_srow.Y==cursor_pos[0]);
 							bool neg=(bool)(A&0x80);
 							
 							if (neg){//color inverted
-								fg_color^=0x07;
-								bg_color^=0x07;
+								unsigned char tmp=fg_color;
+								fg_color=bg_color;
+								bg_color=tmp;
 							}
 							
 							
 							if (cursor_enable&&((bool)(cursor_mode&1))&&on_cursor) underline=true;
 							if (cursor_enable&&(!(bool)(cursor_mode&1))&&on_cursor){//complement
-								unsigned char tmp=fg_color;
-								fg_color=bg_color;
-								bg_color=tmp;
+								fg_color^=0x07;
+								bg_color^=0x07;
 							}
 							if (flash_enable&&(flash||(cursor_enable&&((bool)(cursor_mode&2))&&on_cursor))){//flash
 								double t_r;
 								if (modf(glfwGetTime(),&t_r)>0.5){
-									unsigned char tmp=fg_color;
-									fg_color=bg_color;
-									bg_color=tmp;
+								fg_color^=0x07;
+								bg_color^=0x07;
 								}
 							}
 							
-							char_pos[0]=i*(((bool)(display_mode&2))?1:2);
+							char_pos[0]=i*2;
 							if(!(bool)(B&0x80)){//rom char
 								
 								if((bool)(B&0x20)){
@@ -354,8 +241,223 @@ class TS9347Renderer{
 								
 							}
 						}
-						
-						addr_blk.Y++;
+					}
+					else{
+						for(int i=0;i<80;i++){
+							addr_srow.Block=(addr_srow.Block&2)+(i&1);
+							addr_srow.X=i>>1;
+							
+							unsigned char A=0;
+							unsigned char C=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed);
+							if(display_mode!=2){//80 char long
+								addr_srow.Block=(addr_srow.Block&2)^2;
+								if((bool)(i&1)) A=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed)&0x0F;
+								else A=this->p_ic->VRAM[address2PAddress(&addr_srow)].load(std::memory_order_relaxed)>>4;
+								addr_srow.Block^=2;
+							}
+							
+							char_index[0]=C&0x7F;
+							if ((bool)(C&0x80)){
+								char_index[1]=2;
+							}
+							else{
+								char_index[1]=0;
+							}
+							
+							char_pos[0]=i;
+							
+							unsigned char fg_color=bgr2rgb_3bit[(dor>>((A&1)<<2))&0x07];//D
+							unsigned char bg_color=bgr2rgb_3bit[mat&0x07];
+							if ((bool)(A&0x08)){//N
+								unsigned char tmp=fg_color;
+								fg_color=bg_color;
+								bg_color=tmp;
+							}
+							if ((bool)(A&0x04)){//F
+								fg_color=bg_color;
+							}
+							bool underline=(bool)(A&0x02);//U
+							
+							glUniform1ui(this->double_location,double_base);
+							glUniform1ui(this->color_location,color_base|(fg_color)|(bg_color<<3)|(underline?C_UNDERLINE:0));
+							glUniform2iv(this->vp_location,1,(const GLint*)&char_pos);
+							glUniform2iv(this->vcharp_location,1,(const GLint*)&char_index);
+							glDrawArrays(GL_TRIANGLES, 0, 6);
+							
+						}
+					}
+				}
+				double_base|=(double_height?S_DOUBLE_HEIGHT:0);
+				if (blk_enable){
+					if (display_mode<2){
+						for(int j=0;j<24;j++){//j++////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+							GLint char_pos[2]={0,j+(srow_low?0:1)};
+							GLint char_index[2]={0,0};
+							unsigned char C=0;
+							unsigned char B=0;
+							unsigned char A=0;
+							for (int i=0;i<40;i++){
+								addr_blk.X=i;
+								if (display_mode==0){//40 char long
+									C=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
+									addr_blk.Block=(addr_blk.Block+1)&3;
+									B=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
+									addr_blk.Block=(addr_blk.Block+1)&3;
+									A=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
+									addr_blk.Block=(addr_blk.Block+2)&3;
+								}
+								else if (display_mode==1){//40 char short
+									unsigned char tmp=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
+									addr_blk.Block=(addr_blk.Block+1)&3;
+									C=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
+									addr_blk.Block=(addr_blk.Block+3)&3;
+									B&=0x55;
+									B|=(C&0x80);
+									B|=(tmp&0x80)>>2;
+									
+									A&=0x07;
+									A|=(tmp&7)<<4;//C1
+									A|=(tmp&0x08);//F
+									if ((bool)(tmp&0x80)){
+										A&=0xF8;
+										A|=(tmp&0x70)>>4;//C0
+									}
+									else{
+										A|=(tmp&0x40)<<1;//N
+										B|=(tmp&0x20)>>2;//L
+										B|=(tmp&0x10)>>3;//H
+									}
+									
+									if ((C&0xE0)==0x80){//DEL
+										B&=0x20;
+										B|=(C&2)>>1;//I1
+										B|=(C&1)>>2;//m
+										B|=(C&4)<<2;//U
+										B|=(C&8)<<3;//I2
+										A&=0xF7;//F
+										A|=0x80;//N
+										C=0;
+									}
+									else if ((bool)(tmp&0x80)){
+										B&=0xEF;//U
+									}
+								}
+								
+								unsigned char fg_color=bgr2rgb_3bit[(A&0x70)>>4];
+								unsigned char bg_color=bgr2rgb_3bit[A&0x07];
+								bool dbl_h=(bool)(B&2);
+								bool dbl_w=false;
+								bool conceal=(bool)(B&4);
+								bool underline=false;
+								bool flash=(bool)(A&8);
+								bool on_cursor=(addr_blk.X==cursor_pos[1])&&(addr_blk.Y==cursor_pos[0]);
+								bool neg=(bool)(A&0x80);
+								
+								if (neg){//color inverted
+									unsigned char tmp=fg_color;
+									fg_color=bg_color;
+									bg_color=tmp;
+								}
+								
+								
+								if (cursor_enable&&((bool)(cursor_mode&1))&&on_cursor) underline=true;
+								if (cursor_enable&&(!(bool)(cursor_mode&1))&&on_cursor){//complement
+									fg_color^=0x07;
+									bg_color^=0x07;
+								}
+								if (flash_enable&&(flash||(cursor_enable&&((bool)(cursor_mode&2))&&on_cursor))){//flash
+									double t_r;
+									if (modf(glfwGetTime(),&t_r)>0.5){
+									fg_color^=0x07;
+									bg_color^=0x07;
+									}
+								}
+								
+								char_pos[0]=i*(((bool)(display_mode&2))?1:2);
+								if(!(bool)(B&0x80)){//rom char
+									
+									if((bool)(B&0x20)){
+										if((bool)(B&0x10)){//GOE
+											char_index[1]=2;
+										}
+										else{//G10
+											char_index[1]=1;
+										}
+									}
+									else{//G0
+										char_index[1]=0;
+										underline=(bool)(B&0x10);
+									}
+									char_index[0]=C&0x7F;
+									
+									dbl_w=(bool)(B&8);
+								}
+								
+								if(!(bool)(B&0x80)){///wip
+									glUniform1ui(this->double_location,double_base|(dbl_w?S_DOUBLE_CHAR_WIDTH:0)|(dbl_h?S_DOUBLE_CHAR_HEIGHT:0));
+									glUniform1ui(this->color_location,color_base|(fg_color)|(bg_color<<3)|((conceal_enable&&conceal)?C_CONCEAL:0)|(underline?C_UNDERLINE:0));
+									glUniform2iv(this->vp_location,1,(const GLint*)&char_pos);
+									glUniform2iv(this->vcharp_location,1,(const GLint*)&char_index);
+									glDrawArrays(GL_TRIANGLES, 0, 6);
+									
+								}
+							}
+							
+							addr_blk.Y++;
+							if (addr_blk.Y>=32) addr_blk.Y=8;
+						}
+					}
+					else{
+						GLint char_index[2]={0,0};
+						for(int j=0;j<24;j++){//j++////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+							GLint char_pos[2]={0,j+(srow_low?0:1)};
+							
+							for(int i=0;i<80;i++){
+								addr_blk.Block=(addr_blk.Block&2)+(i&1);
+								addr_blk.X=i>>1;
+								
+								unsigned char A=0;
+								unsigned char C=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed);
+								if(display_mode!=2){//80 char long
+									addr_blk.Block=(addr_blk.Block&2)^2;
+									if((bool)(i&1)) A=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed)&0x0F;
+									else A=this->p_ic->VRAM[address2PAddress(&addr_blk)].load(std::memory_order_relaxed)>>4;
+									addr_blk.Block^=2;
+								}
+								
+								char_index[0]=C&0x7F;
+								if ((bool)(C&0x80)){
+									char_index[1]=2;
+								}
+								else{
+									char_index[1]=0;
+								}
+								
+								char_pos[0]=i;
+								
+								unsigned char fg_color=bgr2rgb_3bit[(dor>>((A&1)<<2))&0x07];//D
+								unsigned char bg_color=bgr2rgb_3bit[mat&0x07];
+								if ((bool)(A&0x08)){//N
+									unsigned char tmp=fg_color;
+									fg_color=bg_color;
+									bg_color=tmp;
+								}
+								if ((bool)(A&0x04)){//F
+									fg_color=bg_color;
+								}
+								bool underline=(bool)(A&0x02);//U
+								
+								glUniform1ui(this->double_location,double_base);
+								glUniform1ui(this->color_location,color_base|(fg_color)|(bg_color<<3)|(underline?C_UNDERLINE:0));
+								glUniform2iv(this->vp_location,1,(const GLint*)&char_pos);
+								glUniform2iv(this->vcharp_location,1,(const GLint*)&char_index);
+								glDrawArrays(GL_TRIANGLES, 0, 6);
+								
+							}
+							addr_blk.Y++;
+							if (addr_blk.Y>=32) addr_blk.Y=8;
+							
+						}
 					}
 				}
 			}

@@ -20,20 +20,20 @@ void recomposePointer(unsigned char* p_Reven,unsigned char* p_Rodd,AddressDecomp
 int address2PAddress(AddressDecomposition* address){
 	int A=((int)address->District)<<12;
 	A|=((int)address->Block)<<10;
+	A|=((int)address->X&0x07);
 	if(address->Y>=8){
-		if ((bool)(address->X&1)){
-			A|=((int)address->Y&7)<<5;
-			A|=((int)address->Y&24);
+		if ((bool)(address->X&(1<<5))){
+			A|=((int)address->Y&0x18);
+			A|=((int)address->Y&0x07)<<5;
 		}
 		else{
-			A|=((int)address->X);
+			A|=((int)address->X&0x18);
 			A|=((int)address->Y)<<5;
 		}
 	}
 	else{
 		if ((bool)(address->Y&1)) return -1;
-		A|=((int)address->X&7);
-		A|=((int)address->X&56)<<2;
+		A|=((int)address->X&0x38)<<2;
 	}
 	return A;
 }
@@ -272,7 +272,7 @@ void TS9347wVRAM::INY(){
 		this->Rx[6].store((R6&0xE0)|0x08,std::memory_order_relaxed);
 	}
 	else{
-		this->Rx[6].store((R6&0xE0)|((R6&0x1F)+1),std::memory_order_relaxed);
+		this->Rx[6].store(R6+1,std::memory_order_relaxed);
 	}
 	unsigned char m=this->Al_MASK|this->LXm_MASK|this->LXa_MASK;
 	this->STATUS.fetch_and(~m,std::memory_order_relaxed);
@@ -296,8 +296,8 @@ void TS9347wVRAM::TBMA(bool MnA,bool RnW,bool inc){
 			Rx[MnA?7:5].store(P1&0xC0,std::memory_order_relaxed);
 			this->STATUS.fetch_or(this->Al_MASK,std::memory_order_relaxed);
 			if (MnA){
-				if ((P0&0x1F)==0x1F) Rx[0].store((P0&0xE0)|0x08,std::memory_order_relaxed);
-				else Rx[0].store((P0&0xE0)|((P0&0x1F)+1),std::memory_order_relaxed);
+				if ((P0&0x1F)==0x1F) Rx[MnA?6:4].store((P0&0xE0)|0x08,std::memory_order_relaxed);
+				else Rx[MnA?6:4].store(P0+1,std::memory_order_relaxed);
 			}
 		}
 		else{
@@ -309,13 +309,17 @@ void TS9347wVRAM::TBMA(bool MnA,bool RnW,bool inc){
 void TS9347wVRAM::KRLS(bool RnW,bool inc,bool long_code){
 	unsigned char P0=Rx[6].load(std::memory_order_relaxed);
 	unsigned char P1=Rx[7].load(std::memory_order_relaxed);
-	bool odd_p=(bool)(P1&1);
-	P1=(P1>>1)|(odd_p?0x80:0);
+	/*bool odd_p=(bool)(P1&1);
+	AddressDecomposition AD;
+	decomposePointer(P0,(P1>>1)|(odd_p?0x80:0),&AD);
+	int PA_C=address2PAddress(&AD);
+	
+	unsigned char A_MASK=(odd_p?0x0F:0xF0);*/
 	AddressDecomposition AD;
 	decomposePointer(P0,P1,&AD);
 	int PA_C=address2PAddress(&AD);
-	
-	unsigned char A_MASK=(odd_p?0x0F:0xF0);
+	unsigned char A_MASK=(((bool)(P1&0x80))?0x0F:0xF0);
+	//
 	AD.Block=((AD.Block&0x02)+2)%4;
 	int PA_A=address2PAddress(&AD);
 	
@@ -324,7 +328,8 @@ void TS9347wVRAM::KRLS(bool RnW,bool inc,bool long_code){
 			this->Rx[1].store(this->VRAM[PA_C].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			if(long_code){
 				unsigned char A=this->VRAM[PA_A].load(std::memory_order_relaxed)&A_MASK;
-				A|=this->Rx[3].load(std::memory_order_relaxed)&(~A_MASK);
+				A|=(A<<4)|(A>>4);
+				//A|=this->Rx[3].load(std::memory_order_relaxed)&(~A_MASK);
 				this->Rx[3].store(A,std::memory_order_relaxed);
 			}
 		}
@@ -340,7 +345,7 @@ void TS9347wVRAM::KRLS(bool RnW,bool inc,bool long_code){
 	
 	unsigned char m=this->Al_MASK|this->LXm_MASK|this->LXa_MASK;
 	this->STATUS.fetch_and(~m,std::memory_order_relaxed);
-	if ((P1&0x7F)==89) this->STATUS.fetch_or(this->LXm_MASK,std::memory_order_relaxed);
+	/*if ((P1&0x7F)==79) this->STATUS.fetch_or(this->LXm_MASK,std::memory_order_relaxed);
 	if (inc){
 		if ((P1&0x7F)==79){
 			Rx[7].store(P1&0x80,std::memory_order_relaxed);
@@ -349,7 +354,26 @@ void TS9347wVRAM::KRLS(bool RnW,bool inc,bool long_code){
 		else{
 			Rx[7].store((P1&0x80)|((P1&0x7F)+1),std::memory_order_relaxed);
 		}
+	}*/
+	if ((P1&0x3F)==39){
+		this->STATUS.fetch_or(this->LXm_MASK,std::memory_order_relaxed);
+		if (inc) this->STATUS.fetch_or(this->Al_MASK,std::memory_order_relaxed);
 	}
+	if (inc){
+		if ((bool)(P1&0x80)){
+			P1=P1^0x80;
+			if ((P1&0x3F)==39){
+				Rx[7].store(P1&0xC0,std::memory_order_relaxed);
+			}
+			else{
+				Rx[7].store(P1+1,std::memory_order_relaxed);
+			}
+		}
+		else{
+			Rx[7].store(P1^0x80,std::memory_order_relaxed);
+		}
+	}
+	//
 }
 
 void TS9347wVRAM::TLSMA(bool MnA,bool RnW,bool inc, bool long_code){
@@ -357,7 +381,7 @@ void TS9347wVRAM::TLSMA(bool MnA,bool RnW,bool inc, bool long_code){
 	unsigned char P1=Rx[MnA?7:5].load(std::memory_order_relaxed);
 	AddressDecomposition AD;
 	decomposePointer(P0,P1&0x7F,&AD);
-	AD.Block&=0x02;
+	//AD.Block&=0x02;
 	int PA_C=address2PAddress(&AD);
 	AD.Block=(AD.Block+1)%4;
 	int PA_B=address2PAddress(&AD);
@@ -399,10 +423,10 @@ void TS9347wVRAM::MV(unsigned char n_buf,bool M2A,bool stop){
 	unsigned char P1_A=Rx[5].load(std::memory_order_relaxed);
 	AddressDecomposition AD_M;
 	decomposePointer(P0_M,P1_M&0x7F,&AD_M);
-	AD_M.Block&=0x02;
+	//AD_M.Block&=0x02;
 	AddressDecomposition AD_A;
 	decomposePointer(P0_A,P1_A&0x7F,&AD_A);
-	AD_A.Block&=0x02;
+	//AD_A.Block&=0x02;
 	AddressDecomposition AD_from=M2A?AD_M:AD_A;
 	AddressDecomposition AD_to=M2A?AD_A:AD_M;
 	
@@ -452,9 +476,17 @@ void TS9347wVRAM::MV(unsigned char n_buf,bool M2A,bool stop){
 					AD_to.Block=tB;
 				}
 			}
-			if(AD_from.X==39) AD_from.X=0;
+			if(AD_from.X==39){
+				AD_from.X=0;
+				AD_from.Y++;
+				if (AD_from.Y==32) AD_from.Y=8;
+			}
 			else AD_from.X++;
-			if(AD_to.X==39) AD_to.X=0;
+			if(AD_to.X==39){
+				AD_to.X=0;
+				AD_to.Y++;
+				if (AD_to.Y==32) AD_to.Y=8;
+			}
 			else AD_to.X++;
 		}
 	}

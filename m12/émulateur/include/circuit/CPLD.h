@@ -15,12 +15,16 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		void nWEChangeIn(bool b);
 		void nCSChangeIn(bool b);
 		void WATCHDOGChangeIn(bool b);
+		void serialChangeIn(bool b);
+		
+		void CLKTickIn();
 		
 		void subscribenCSRAM(std::function<void(bool)> f);
 		void subscribeAL(std::function<void(unsigned char)> f);
 		void subscribeD(std::function<void(unsigned char)> f);
 		void subscribePIO(std::function<void(unsigned char)> f);
 		void subscribeRST(std::function<void(bool)> f);
+		void subscribeSerial(std::function<void(bool)> f);
 		
 	private:
 		bool nCS=true;
@@ -29,6 +33,10 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		bool ALE=true;
 		bool WATCHDOG=true;
 		
+		unsigned char S_in_step=0;
+		unsigned char S_out_step=0;
+		bool S_in=false;
+		
 		unsigned char address=0;
 		unsigned char data=0;
 		std::function<void(bool)> sendnCSRAM=[](bool b){};
@@ -36,9 +44,13 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		std::function<void(unsigned char)> sendD=[](unsigned char d){};
 		std::function<void(unsigned char)> sendPIO=[](unsigned char d){};
 		std::function<void(bool)> sendRST=[](bool b){};
+		std::function<void(bool)> sendSerial=[](bool b){};
 		
-		unsigned char STATUS=0x0F;
+		unsigned char STATUS=0;
 		unsigned char IO=0xFF;//0x70
+		unsigned char SBUF_in;
+		unsigned char SBUF_in_tmp;
+		unsigned char SBUF_out;
 		int diff_time=0;
 		
 		static unsigned char D2BCD(unsigned char D);

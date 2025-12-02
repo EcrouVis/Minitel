@@ -43,7 +43,7 @@ out vec4 fragment;\n\
 uniform ivec2 vCharP;\n\
 uniform uint chr_clr;\n\
 uniform sampler2D charset;\n\
-const float grey[8]=float[](0.,2/7.,4/7.,6/7.,1/7.,3/7.,5/7.,1.);\n\
+const float grey[8]=float[](0.,0.4,0.7,0.8,0.5,0.6,0.9,1.);\n\
 void main(){\n\
     vec2 ct=(coord_texture+vec2(vCharP))*vec2(8,10);\n\
 	bool underline=bool((chr_clr<<25)>>31);\n\

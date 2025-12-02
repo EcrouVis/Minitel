@@ -378,7 +378,7 @@ Transfert d'état des touches :
 		9 0x2D
 		0 0x2F
 	      Mem 0x31
-	annuaire? 0x33
+ appel répertoire 0x33
      haut parleur 0x35
 		) 0x37
 	   entrée 0x39
@@ -386,7 +386,7 @@ Transfert d'état des touches :
 		: 0x3D
     flèche droite 0x3F
 
-       impression 0x45
+   appel annuaire 0x45
 
 		ç 0x51
 
@@ -457,4 +457,4 @@ Commande système - changement d'état? :
 		Réponse au bouton on: uc: 0x14 0x2B 0x94 0x23
 		Décrochage du téléphone - pas de ligne: clavier: 0x5C 0x63 / uc: 0xF4 0x29
 		Raccrochage du téléphone - pas de ligne: clavier: 0x3C 0x61 / uc: 0x74 0x03 0x74 0x03 0x74 0x21
-		Chaque minute?: uc: 0xC4 0x17 / clavier: 0x3C 0x61
+		Chaque minute - demande d'état du téléphone?: uc: 0xC4 0x17 / clavier: 0x3C 0x61 (racroché) ou 0x5C 0x63 (décroché) ou 0xFC 0x21 (racroché haut parleur)

@@ -36,7 +36,8 @@ class TS7514{
 			this->nRTS=b;
 		}
 		void ATxIChangeIn(bool b){
-			
+			if (b!=this->ATxI) printf("ATxI %i \n",(int)b);
+			this->ATxI=b;
 		}
 		
 		void subscribeRxD(std::function<void(bool)> f){
@@ -66,6 +67,7 @@ class TS7514{
 		bool MCnBC=true;
 		bool nRTS=false;
 		bool TxD=false;
+		bool ATxI=false;
 		
 		std::function<void(bool)> sendRxD=[](bool b){};
 		std::function<void(bool)> sendWLO=[](bool b){};
@@ -83,7 +85,6 @@ class TS7514{
 			if (n_reg==this->RPROG||cmd_ok){
 				this->REG[n_reg]=this->input_register&0x0F;
 				printf("OK\n");
-				if(n_reg==0) printf("same channel %i\n",(this->input_register>>2)&1);
 			}
 			else{
 				printf("NOK\n");
