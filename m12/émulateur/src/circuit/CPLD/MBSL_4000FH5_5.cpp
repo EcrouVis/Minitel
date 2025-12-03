@@ -181,7 +181,7 @@ void MBSL_4000FH5_5::UC2CPLD(){
 			this->STATUS=this->data;
 			if ((bool)(this->STATUS&(1<<4))) this->STATUS|=0x0C;
 			break;
-		case 0x70://speculations: 0: MC/nBC / 1: modem/nDMTF / 2: disable comunication to and reset keyboard? / 3: watchdog timer in / 4: close modem line? / 5: enable CRT / 6: M/V / 7: ???
+		case 0x70://speculations: 0: MC/nBC / 1: modem/nDMTF / 2: disable comunication to and reset keyboard? / 3: watchdog timer in / 4: close modem line? / 5: enable CRT / 6: M/V / 7: ??? - true when in settings
 			//printf("to CPLD IO %02X\n",this->data);
 			this->IO=this->data;
 			this->sendPIO(this->data);
@@ -308,7 +308,6 @@ void MBSL_4000FH5_5::CPLD2UC(){
 			break;
 		case 0x70:
 			this->sendD(this->IO);
-			printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 			break;
 		case 0x96:
 			printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");

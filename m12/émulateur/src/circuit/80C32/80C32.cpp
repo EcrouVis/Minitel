@@ -15,8 +15,6 @@ m80C32::m80C32(){
 	this->sendP1=vc;
 	this->sendP2=vc;
 	this->sendP3=vc;
-	this->sendTxD=vb;
-	this->sendRxD=vb;
 	this->sendALE=vb;
 	this->sendnPSEN=vb;
 }
@@ -216,6 +214,7 @@ void m80C32::setSFRByte(unsigned char address, unsigned char d){
 			this->PCONChange();
 			break;
 		case this->SBUF:
+			printf("SBUF %02X\n",d);
 			this->SBUF_out=d;
 			this->TEN=true;
 			break;
@@ -705,45 +704,54 @@ void m80C32::updateTX(){
 	if ((!this->TEN)) return;
 	unsigned char n_bit;
 	if (this->getBitIn(this->SM0)){//mode 2 3
-		if ((this->TX_bit&0x03)!=0) return;
 		n_bit=11;
-		if (this->TX_bit>=n_bit*4) this->TX_bit=0;
-		switch (this->TX_bit>>2){
-			case 0:
-				//(*this->sendTxD)(false);
-				this->sendTxD(false);
-				break;
-			case 10:
-				//(*this->sendTxD)((bool)(this->PX_out[3]&0x02));
-				this->sendTxD((bool)(this->PX_out[3]&0x02));
-				break;
-			case 9:
-				//(*this->sendTxD)(this->getBitIn(this->TB8)&&((bool)(this->PX_out[3]&0x02)));
-				this->sendTxD(this->getBitIn(this->TB8)&&((bool)(this->PX_out[3]&0x02)));
-				break;
-			default:
-				//(*this->sendTxD)(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
-				this->sendTxD(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
-				this->SBUF_out=this->SBUF_out>>1;
+		if ((this->TX_bit&0x03)==0){
+			if (this->TX_bit>=n_bit*4) this->TX_bit=0;
+			switch (this->TX_bit>>2){
+				case 0:
+					//(*this->sendTxD)(false);
+					//this->sendTxD(false);
+					this->sendP3(this->PX_out[3]&0xFD);
+					break;
+				case 10:
+					//(*this->sendTxD)((bool)(this->PX_out[3]&0x02));
+					//this->sendTxD((bool)(this->PX_out[3]&0x02));
+					this->sendP3(this->PX_out[3]);
+					break;
+				case 9:
+					//(*this->sendTxD)(this->getBitIn(this->TB8)&&((bool)(this->PX_out[3]&0x02)));
+					//this->sendTxD(this->getBitIn(this->TB8)&&((bool)(this->PX_out[3]&0x02)));
+					this->sendP3(this->PX_out[3]&(this->getBitIn(this->TB8)?0xFF:0xFD));
+					break;
+				default:
+					//(*this->sendTxD)(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
+					//this->sendTxD(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
+					this->sendP3(this->PX_out[3]&(((bool)(this->SBUF_out&0x01))?0xFF:0xFD));
+					this->SBUF_out=this->SBUF_out>>1;
+			}
 		}
 	}
 	else if (this->getBitIn(this->SM1)){//mode 1
-		if ((this->TX_bit&0x03)!=0) return;
 		n_bit=10;
-		if (this->TX_bit>=n_bit*4) this->TX_bit=0;
-		switch (this->TX_bit>>2){
-			case 0:
-				//(*this->sendTxD)(false);
-				this->sendTxD(false);
-				break;
-			case 9:
-				//(*this->sendTxD)((bool)(this->PX_out[3]&0x02));
-				this->sendTxD((bool)(this->PX_out[3]&0x02));
-				break;
-			default:
-				//(*this->sendTxD)(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
-				this->sendTxD(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
-				this->SBUF_out=this->SBUF_out>>1;
+		if ((this->TX_bit&0x03)==0){
+			if (this->TX_bit>=n_bit*4) this->TX_bit=0;
+			switch (this->TX_bit>>2){
+				case 0:
+					//(*this->sendTxD)(false);
+					//this->sendTxD(false);
+					this->sendP3(this->PX_out[3]&0xFD);
+					break;
+				case 9:
+					//(*this->sendTxD)((bool)(this->PX_out[3]&0x02));
+					//this->sendTxD((bool)(this->PX_out[3]&0x02));
+					this->sendP3(this->PX_out[3]);
+					break;
+				default:
+					//(*this->sendTxD)(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
+					//this->sendTxD(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
+					this->sendP3(this->PX_out[3]&(((bool)(this->SBUF_out&0x01))?0xFF:0xFD));
+					this->SBUF_out=this->SBUF_out>>1;
+			}
 		}
 	}
 	else{//mode 0
@@ -751,15 +759,17 @@ void m80C32::updateTX(){
 		if (this->TX_bit>=n_bit*4) this->TX_bit=0;
 		if ((this->TX_bit&0x03)==0){
 			//(*this->sendRxD)(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x01)));
-			this->sendRxD(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x01)));
-			this->setBitIn(this->RxD,(bool)(this->SBUF_out&0x01));
-			this->SBUF_out=this->SBUF_out>>1;
+			//this->sendRxD(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x01)));
+			//this->setBitIn(this->RxD,(bool)(this->SBUF_out&0x01));
 			//(*this->sendTxD)((bool)(this->PX_out[3]&0x02));
-			this->sendTxD((bool)(this->PX_out[3]&0x02));
+			//this->sendTxD((bool)(this->PX_out[3]&0x02));
+			this->sendP3(this->PX_out[3]&(((bool)(this->SBUF_out&0x01))?0xFF:0xFE));
+			this->SBUF_out=this->SBUF_out>>1;
 		}
 		else if ((this->TX_bit&0x03)==2){
 			//(*this->sendTxD)(false);
-			this->sendTxD(false);
+			//this->sendTxD(false);
+			this->sendP3(this->getSFRByteIn(this->P3)&0xFD);
 		}
 	}
 	this->TX_bit++;
@@ -769,8 +779,9 @@ void m80C32::updateTX(){
 	this->setBitIn(this->TI,true);
 	/*(*this->sendTxD)((bool)(this->PX_out[3]&0x02));
 	(*this->sendRxD)((bool)(this->PX_out[3]&0x01));*/
-	this->sendTxD((bool)(this->PX_out[3]&0x02));
-	this->sendRxD((bool)(this->PX_out[3]&0x01));
+	//this->sendTxD((bool)(this->PX_out[3]&0x02));
+	//this->sendRxD((bool)(this->PX_out[3]&0x01));
+	this->sendP3(this->PX_out[3]);
 }
 
 /*

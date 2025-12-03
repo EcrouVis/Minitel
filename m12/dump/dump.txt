@@ -331,6 +331,10 @@ Changement de vitesse:
 0x06D6 - mémoire temporaire vers le clavier ?
 0x06D7 - mémoire temporaire depuis le clavier (premier octet du message reçu) ?
 
+0x0080-0x0100 - tampon mémoire circulaire 1 ?
+0x0100-0x0180 - tampon mémoire circulaire 2 ?
+0x0400-0x0500 - tampon mémoire circulaire 3 ?
+
 ---------- mémoire interne ----------
 0x28 - copie de l'état des IO du CPLD (sans le bit 6) ?
 0xAD - copie de l'entrée clavier
