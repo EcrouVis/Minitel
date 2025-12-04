@@ -10,7 +10,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 	
 }
 
-void thread_audio_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_audio,GlobalState* p_gState){
+void thread_audio_main(Mailbox* p_mb_circuit,Mailbox* p_mb_audio,GlobalState* p_gState){
 	
 	ma_result result;
     ma_context context;

@@ -40,7 +40,7 @@ void imguiInit(GLFWwindow* window){
 	ImGui::PushFont(font);*/
 }
 
-void imguiStartFrame(Parameters* p_params,NotificationServer* p_notif,thread_mailbox* p_mb_circuit){
+void imguiStartFrame(Parameters* p_params,NotificationServer* p_notif,Mailbox* p_mb_circuit){
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
@@ -74,7 +74,7 @@ void imguiShutdown(){
 
 class M12Window{
 	public:
-		M12Window(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video,GlobalState* p_GlobalState){
+		M12Window(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* p_GlobalState){
 			this->PARAMETERS.p_gState=p_GlobalState;
 			this->p_mb_circuit=p_mb_circuit;
 			this->p_mb_video=p_mb_video;
@@ -122,7 +122,7 @@ class M12Window{
 			while (!glfwWindowShouldClose(this->window))
 			{
 				thread_message ms;
-				while (thread_receive_message(this->p_mb_video,&ms)>=0){
+				while (this->p_mb_video->receive(&ms)){
 					switch(ms.cmd){
 						case ERAM:
 							this->PARAMETERS.debug.eram.mem=((SRAM_64k*)ms.p)->RAM;
@@ -220,8 +220,8 @@ class M12Window{
 		Parameters PARAMETERS;
 		NotificationServer Notification;
 		TS9347Renderer* p_TS9347out;
-		thread_mailbox* p_mb_circuit;
-		thread_mailbox* p_mb_video;
+		Mailbox* p_mb_circuit;
+		Mailbox* p_mb_video;
 		
 		static void error_callback(int error, const char* description){
 			fprintf(stderr, "Error: %s\n", description);
@@ -238,7 +238,7 @@ class M12Window{
 				kbm->focus=false;
 				ms_p_kb.p=(void*)kbm;
 				ms_p_kb.cmd=KEYBOARD_STATE_UPDATE;
-				thread_send_message(p_M12Window->p_mb_circuit,&ms_p_kb);
+				p_M12Window->p_mb_circuit->send(&ms_p_kb);
 			}
 			if ((!io.WantCaptureKeyboard)&&(action==GLFW_PRESS||action==GLFW_RELEASE)){
 				printf("key %i %i\n",scancode,mods);
@@ -250,7 +250,7 @@ class M12Window{
 				kbm->mods=mods;
 				ms_p_kb.p=(void*)kbm;
 				ms_p_kb.cmd=KEYBOARD_STATE_UPDATE;
-				thread_send_message(p_M12Window->p_mb_circuit,&ms_p_kb);
+				p_M12Window->p_mb_circuit->send(&ms_p_kb);
 			}
 		}
 		static void char_callback(GLFWwindow* window, unsigned int codepoint){
@@ -269,7 +269,7 @@ class M12Window{
 
 
 
-void thread_video_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video,GlobalState* p_gState){
+void thread_video_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* p_gState){
 	M12Window m12w=M12Window(p_mb_circuit,p_mb_video,p_gState);
 	m12w.Loop();
 }

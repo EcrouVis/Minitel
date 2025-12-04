@@ -9,10 +9,10 @@ extern "C" {
 
 int main(void){
 	GlobalState gState;
-	thread_mailbox mb_circuit;
-	thread_mailbox mb_audio;
-	thread_mailbox mb_video;
-	thread_mailbox mb_log;
+	Mailbox mb_circuit;
+	Mailbox mb_audio;
+	Mailbox mb_video;
+	Mailbox mb_log;
 	std::thread thrd_v(thread_video_main,&mb_circuit,&mb_video,&gState);
 	std::thread thrd_a(thread_audio_main,&mb_circuit,&mb_audio,&gState);
 	std::thread thrd_l(thread_log_main,&mb_log,&gState);

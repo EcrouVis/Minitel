@@ -288,7 +288,7 @@ class stackMonitor{
 		}
 };
 
-void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video,thread_mailbox* p_mb_audio,thread_mailbox* p_mb_log,GlobalState* p_gState){
+void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb_audio,Mailbox* p_mb_log,GlobalState* p_gState){
 	//create ic
 	SRAM_64k eram;
 	ROM_256k erom;
@@ -564,31 +564,31 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 	thread_message ms_p_ram;
 	ms_p_ram.p=(void*)&eram;
 	ms_p_ram.cmd=ERAM;
-	thread_send_message(p_mb_video,&ms_p_ram);
+	p_mb_video->send(&ms_p_ram);
 	
 	thread_message ms_p_rom;
 	ms_p_rom.p=(void*)&erom;
 	ms_p_rom.cmd=EROM;
-	thread_send_message(p_mb_video,&ms_p_rom);
+	p_mb_video->send(&ms_p_rom);
 	
 	thread_message ms_p_vc;
 	ms_p_vc.p=(void*)&video;
 	ms_p_vc.cmd=VC;
-	thread_send_message(p_mb_video,&ms_p_vc);
+	p_mb_video->send(&ms_p_vc);
 	
 	thread_message ms_p_uc;
 	ms_p_uc.p=(void*)&uc;
 	ms_p_uc.cmd=UC;
-	thread_send_message(p_mb_video,&ms_p_uc);
+	p_mb_video->send(&ms_p_uc);
 	
 	thread_message ms_p_cpld;
 	ms_p_cpld.p=(void*)&cpld;
 	ms_p_cpld.cmd=CPLD;
-	thread_send_message(p_mb_video,&ms_p_cpld);
+	p_mb_video->send(&ms_p_cpld);
 	
 	/*thread_message ms_p_notif;
 	ms_p_notif.cmd=NOTIFICATION_BUZZER;
-	for (int i=0;i<16;i++) thread_send_message(p_mb_video,&ms_p_notif);*/
+	for (int i=0;i<16;i++) p_mb_video->send(&ms_p_notif);*/
 	
 	bool next_step=false;
 	
@@ -605,54 +605,52 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 		return p;
 	};
 	CLKs.setPauseCondition(pauseC);
-	auto Loop=[p_mb_circuit,&eram,&erom,&uc,&modem,&next_step,&kb,p_gState](){
+	auto checkMB=[p_mb_circuit,&eram,&erom,&uc,&modem,&next_step,&kb,p_gState](){
 		thread_message ms;
-		std::ifstream eram_file;
-		std::ifstream erom_file;
-		const char* eram_fn;
-		const char* erom_fn;
-		while (thread_receive_message(p_mb_circuit,&ms)>=0){
+		while (p_mb_circuit->receive(&ms)){
 			switch(ms.cmd){
 				case LOAD_ERAM:
+				{
+					static unsigned char eram_cpy[ERAM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
 					if (ms.p==NULL){
-						unsigned char eram_cpy[ERAM_SIZE];
 						std::fill_n(eram_cpy,ERAM_SIZE,0);
-						eram.set(eram_cpy);
+						eram.set((unsigned char*)eram_cpy);
 						printf("erase eram\n");
 					}
 					else{
-						eram_fn=(const char*)ms.p;
-						unsigned char eram_cpy[ERAM_SIZE];
-						eram_file.open(eram_fn,std::ios::in|std::ios::binary);
+						std::ifstream eram_file;
+						eram_file.open((const char*)ms.p,std::ios::in|std::ios::binary);
 						eram_file.read((char*)eram_cpy,ERAM_SIZE);
 						eram_file.close();
-						eram.set(eram_cpy);
+						eram.set((unsigned char*)eram_cpy);
 						printf("load eram ");
-						printf(eram_fn);
+						printf((const char*)ms.p);
 						printf("\n");
 						free(ms.p);
 					}
 					break;
+				}
 				case LOAD_EROM:
+				{
+					static unsigned char erom_cpy[EROM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
 					if(ms.p==NULL){
-						unsigned char erom_cpy[EROM_SIZE];
 						std::fill_n(erom_cpy,EROM_SIZE,0);
-						erom.set(erom_cpy);
+						erom.set((unsigned char*)erom_cpy);
 						printf("erase erom\n");
 					}
 					else{
-						erom_fn=(const char*)ms.p;
-						unsigned char erom_cpy[EROM_SIZE];
-						erom_file.open(erom_fn,std::ios::in|std::ios::binary);
+						std::ifstream erom_file;
+						erom_file.open((const char*)ms.p,std::ios::in|std::ios::binary);
 						erom_file.read((char*)erom_cpy,EROM_SIZE);
 						erom_file.close();
-						erom.set(erom_cpy);
+						erom.set((unsigned char*)erom_cpy);
 						printf("load erom ");
-						printf(erom_fn);
+						printf((const char*)ms.p);
 						printf("\n");
 						free(ms.p);
 					}
 					break;
+				}
 				case EMU_ON:
 					uc.Reset();
 					modem.Reset();
@@ -670,6 +668,7 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 				{
 					keyboard_message* kbm=(keyboard_message*)ms.p;
 					kb.KeyboardChangeIn(kbm);
+					fprintf(stdout,"keyboard state update\n");
 					delete kbm;
 					break;
 				}
@@ -679,7 +678,7 @@ void thread_circuit_main(thread_mailbox* p_mb_circuit,thread_mailbox* p_mb_video
 			}
 		}
 	};
-	CLKs.subscribeLoop(Loop);
+	CLKs.subscribeMailbox(checkMB);
 	auto CLKTick14745600=[&uc,&wt](){
 		uc.CLKTickIn();
 		wt.incrementTimer();

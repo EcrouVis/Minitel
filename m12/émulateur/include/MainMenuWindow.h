@@ -131,7 +131,7 @@ const char* romNiceName(const char* rom){
 	return (strcmp(rom,romUnavailable)==0)?rom:std::filesystem::path(rom).filename().stem().string().c_str();
 }
 
-void sendCommandMEM(thread_mailbox* p_mb_circuit,const int cmd,const char* str=NULL){
+void sendCommandMEM(Mailbox* p_mb_circuit,const int cmd,const char* str=NULL){
 	thread_message ms;
 	ms.cmd=cmd;
 	if (str==NULL){
@@ -142,10 +142,10 @@ void sendCommandMEM(thread_mailbox* p_mb_circuit,const int cmd,const char* str=N
 		strcpy((char*)ms.p,str);
 		((char*)ms.p)[strlen(str)]=0;
 	}
-	thread_send_message(p_mb_circuit,&ms);
+	p_mb_circuit->send(&ms);
 }
 	
-void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
+void mainMenuWindow(Parameters* p_params,Mailbox* p_mb_circuit){
 	static const Parameters default_parameters;
 	ImGui::Begin("Menu",&(p_params->imgui.show_menu),ImGuiWindowFlags_AlwaysAutoResize);
 	ImGui::Text("Appuyez sur F1 pour afficher/cacher le menu");
@@ -162,14 +162,14 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 			if(ImGui::Button("Eteindre")){
 				thread_message ms;
 				ms.cmd=EMU_OFF;
-				thread_send_message(p_mb_circuit,&ms);
+				p_mb_circuit->send(&ms);
 			}
 		}
 		else{
 			if(ImGui::Button("Allumer")){
 				thread_message ms;
 				ms.cmd=EMU_ON;
-				thread_send_message(p_mb_circuit,&ms);
+				p_mb_circuit->send(&ms);
 			}
 		}
 	}
@@ -196,7 +196,7 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 					strcpy((char*)ms.p,roms[rom]);
 					((char*)ms.p)[strlen(roms[rom])]=0;
 				}
-				thread_send_message(p_mb_circuit,&ms);*/
+				p_mb_circuit->send(&ms);*/
 				
 				rom_combo_state_previous=rom_combo_state;
 			}
@@ -223,7 +223,7 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 					strcpy((char*)ms.p,items[item]);
 					((char*)ms.p)[strlen(items[item])]=0;
 				}
-				thread_send_message(p_mb_circuit,&ms);*/
+				p_mb_circuit->send(&ms);*/
 				
 				profile_combo_state_previous=profile_combo_state;
 			}
@@ -438,7 +438,7 @@ void mainMenuWindow(Parameters* p_params,thread_mailbox* p_mb_circuit){
 			if(ImGui::Button("Instruction suivante")){
 				thread_message ms;
 				ms.cmd=EMU_NEXT_STEP;
-				thread_send_message(p_mb_circuit,&ms);
+				p_mb_circuit->send(&ms);
 			}
 			ImGui::Unindent();
 		}

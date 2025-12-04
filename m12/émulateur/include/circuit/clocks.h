@@ -15,12 +15,12 @@ class Clocks{
 		void subscribe600Hz(std::function<void()> f){
 			this->CLK600=f;
 		}
-		void subscribeLoop(std::function<void()> f){
-			this->Loop=f;
+		void subscribeMailbox(std::function<void()> f){
+			this->checkMailbox=f;
 		}
 		void start(){
 			while (!this->stop()){
-				this->Loop();
+				this->checkMailbox();
 				if (!this->pause()){
 					this->div++;
 					this->CLK14745600();
@@ -36,7 +36,7 @@ class Clocks{
 		std::function<bool()> stop=[](){return false;};
 		std::function<void()> CLK14745600=[](){};
 		std::function<void()> CLK600=[](){};
-		std::function<void()> Loop=[](){};
+		std::function<void()> checkMailbox=[](){};
 		unsigned long div=0;
 		unsigned long div_max=24576;	
 };

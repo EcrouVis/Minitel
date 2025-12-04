@@ -1,23 +1,13 @@
 #ifndef THREAD_MESSAGING_H
 #define THREAD_MESSAGING_H
 #include "GlobalState.h"
-#include <mutex>
-#include <queue>
 #include <atomic>
+#include <cstring>
 
 struct thread_message{
 	int cmd;
 	void* p;
 };
-
-struct thread_mailbox{
-	std::mutex m;
-	std::queue<thread_message> mailbox;
-};
-
-void thread_send_message(thread_mailbox*,thread_message*);
-
-long thread_receive_message(thread_mailbox*,thread_message*);
 
 const int ERAM=1;
 const int NOTIFICATION=3;
@@ -48,5 +38,21 @@ const int STOP;
 const int NEXT_TICK;
 const int NEXT_INSTRUCTION;
 const int RESTART;*/
+
+class Mailbox{
+	public:
+		Mailbox();
+		void send(thread_message* ms);
+		bool receive(thread_message* ms);
+	private:
+		struct Node{
+			thread_message ms;
+			std::atomic<Node*> next=NULL;
+			Node(thread_message* ms=NULL){if (ms!=NULL) memcpy(&(this->ms),ms,sizeof(struct thread_message));}
+		};
+		std::atomic<Node*> first_ms;
+		std::atomic<Node*> last_ms;
+		
+};
 
 #endif

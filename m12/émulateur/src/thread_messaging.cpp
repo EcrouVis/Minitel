@@ -1,20 +1,27 @@
 #include "thread_messaging.h"
-#include <cstring>
 
-void thread_send_message(thread_mailbox* mb,thread_message* msg){
-	mb->m.lock();
-	mb->mailbox.push(*msg);
-	mb->m.unlock();
+Mailbox::Mailbox(){
+	Node* n=new Node;//dummy node
+	this->first_ms.store(n,std::memory_order_release);
+	this->last_ms.store(n,std::memory_order_release);
 }
-
-long thread_receive_message(thread_mailbox* mb,thread_message* msg){
-	mb->m.lock();
-	long n=(long)mb->mailbox.size();
-	if (n>0){
-		thread_message msg_r=mb->mailbox.front();
-		mb->mailbox.pop();
-		memcpy(msg,&msg_r,sizeof(thread_message));
+void Mailbox::send(thread_message* ms){
+	Node* n=new Node(ms);
+	Node* old_last_ms=this->last_ms.exchange(n);//set message as the new last message and retrieve the old last message
+	old_last_ms->next.store(n,std::memory_order_release);//add the new message to the mailbox for reception - should be executed last
+}
+bool Mailbox::receive(thread_message* ms){
+	Node* old_first_ms=this->first_ms.exchange(NULL);
+	if (old_first_ms==NULL) return false;//another thread is checking if there is a message - mailbox unavailable (work like mutex.test_lock)
+	Node* new_first_ms=old_first_ms->next.load(std::memory_order_acquire);
+	if (new_first_ms==NULL){//there is no new message
+		this->first_ms.store(old_first_ms,std::memory_order_release);//free the mailbox reception
+		return false;
 	}
-	mb->m.unlock();
-	return n-1;
+	else{//there is a new message
+		this->first_ms.store(new_first_ms,std::memory_order_release);//update queue + free the mailbox reception
+		memcpy(ms,&(new_first_ms->ms),sizeof(struct thread_message));//read message
+		delete old_first_ms;
+		return true;
+	}
 }
