@@ -10,6 +10,7 @@
 #include "circuit/WatchdogTimer.h"
 #include "circuit/Keyboard.h"
 #include "circuit/clocks.h"
+#include "circuit/L6720.h"
 
 #include <chrono>
 
@@ -303,6 +304,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	WatchdogTimer wt;
 	Keyboard kb;
 	Clocks CLKs;
+	L6720 l6720;
 	
 	//construct circuit
 	auto Dbus=[&cpld,&eram,&video,&uc,&iol](unsigned char d){//in ic
@@ -371,8 +373,12 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	};
 	A17Latch.subscribeOUT(A17wire);
 	
-	auto P1bus=[&A16Latch,&A17Latch,&cpld,&iol,&modem,&video,&uc](unsigned char d){
+	unsigned char P1_uc=0xFF;
+	unsigned char P1_ext=0xFF;
+	auto P1bus=[&A16Latch,&A17Latch,&cpld,&iol,&modem,&video,&uc,&P1_uc,&P1_ext](unsigned char d){
 		//printf("P1bus %#02X\n",d);
+		P1_uc=d;
+		d&=P1_ext;
 		A16Latch.INChangeIn((bool)(d&1));
 		A17Latch.INChangeIn((bool)(d&2));
 		modem.ATxIChangeIn((bool)(d&(1<<2)));
@@ -386,12 +392,25 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	};
 	uc.subscribeP1(P1bus);
 	
+	auto nDCDwire=[&uc,&P1_uc,&P1_ext](bool b){
+		P1_ext&=~(1<<6);
+		P1_ext|=(b?(1<<6):0);
+		uc.PXChangeIn(1,P1_ext&P1_uc);
+		//uc.PXYChangeIn(1,6,b);
+	};
+	modem.subscribenDCD(nDCDwire);
+	
 	auto nCSRAMwire=[&eram](bool b){
 		eram.nCSChangeIn(b);
 	};
 	cpld.subscribenCSRAM(nCSRAMwire);
 	
-	auto P3bus=[&cpld,&eram,&video,&uc,&iol](unsigned char d){
+	unsigned char P3_uc=0xFF;
+	unsigned char P3_ext=0xFF;
+	//P3 unfinished
+	auto P3bus=[&cpld,&eram,&video,&uc,&iol,&l6720,&P3_uc,&P3_ext](unsigned char d){
+		P3_uc=d;
+		d&=P3_ext;
 		bool nRD=(bool)(d&0x80);
 		bool nWR=(bool)(d&0x40);
 		eram.nWEChangeIn(nWR);
@@ -402,22 +421,28 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		video.DSChangeIn(nRD);
 		cpld.nOEChangeIn(nRD);
 		iol.nOEChangeIn(nRD);
+		l6720.PTSChangeIn((bool)(d&(1<<4)));
 		uc.PXChangeIn(3,d);
-		static bool txd=false;
+		/*static bool txd=false;
 		if (txd!=((bool)(d&0x02))){
 			txd=!txd;
-			printf("------------ TxD %i\n",(int)txd);
-		}
+			printf("DIN TxD %i\n",(int)txd);
+		}*/
 	};
 	uc.subscribeP3(P3bus);
 	
-	auto nDCDwire=[&uc](bool b){
-		uc.PXYChangeIn(1,6,b);
+	auto PTEwire=[&uc,&P3_uc,&P3_ext](bool b){
+		if (b) P3_ext|=1<<5;
+		else P3_ext&=~(1<<5);
+		uc.PXChangeIn(3,P3_uc&P3_ext);
 	};
-	modem.subscribenDCD(nDCDwire);
+	l6720.subscribePTE(PTEwire);
 	
-	auto mRxDwire=[&uc](bool b){
-		uc.PXYChangeIn(3,3,b);
+	auto mRxDwire=[&uc,&P3_uc,&P3_ext](bool b){
+		P3_ext&=~(1<<3);
+		P3_ext|=(b?(1<<3):0);
+		uc.PXChangeIn(3,P3_ext&P3_uc);
+		//uc.PXYChangeIn(3,3,b);
 	};
 	modem.subscribeRxD(mRxDwire);
 	
@@ -428,8 +453,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		modem.MCnBCChangeIn((bool)(d&1));
 		modem.MODEMnDTMFChangeIn((bool)(d&2));
 		wt.KICKChangeIn((bool)(d&8));
-		kb_s1=!(bool)(d&4);
-		kb.serialChangeIn(kb_s1||kb_s2);
+		kb_s1=(bool)(d&4);
+		kb.serialChangeIn(kb_s1&&kb_s2);
 	};
 	cpld.subscribePIO(CPLDIObus);
 	
@@ -449,7 +474,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	kb.subscribeSerial(KeyboardSerialOut);
 	auto KeyboardSerialIn=[&kb,&kb_s1,&kb_s2](bool b){
 		kb_s2=b;
-		kb.serialChangeIn(kb_s1||kb_s2);
+		kb.serialChangeIn(kb_s1&&kb_s2);
 		//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	};
 	cpld.subscribeSerial(KeyboardSerialIn);
@@ -488,22 +513,23 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	
 	auto dbgIOIN=[p_gState,&modem](unsigned char a,unsigned char d){
 		if ((a&0xF0)==0x20){
-			//printf("To TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
+			printf("To TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
 		}
 		else if ((a&0xF0)==0x40){
-			//printf("To RTC A: 0x%02X / D: 0x%02X\n",a,d);
+			const char* type[]={"minute","hour","day","month","year low","year high"};
+			printf("To CPLD RTC %s 0x%02X\n",type[a&0x0F],d);
 		}
 		else if (a==0x50){
-			printf("To Keyboard A: 0x%02X / D: 0x%02X\n",a,d);
+			printf("To Keyboard 0x%02X\n",d);
 		}
 		else if (a==0x51){
-			printf("To CPLD Status A: 0x%02X / D: 0x%02X\n",a,d);
+			printf("To CPLD Status 0x%02X\n",d);
 		}
 		else if ((a&0xF0)==0x70){
 			static unsigned char io=0;
 			if ((bool)((d^io)&(~(1<<3)))){//dont print when watchdog timer kicked
-				io=d;
-				printf("To CPLD Pin A: 0x%02X / D: 0x%02X\n",a,d);
+				io=d&(~(1<<3));
+				printf("To CPLD Pin 0x%02X\n",io);
 			}
 			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
@@ -515,21 +541,18 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	iol.subscribeIN(dbgIOIN);
 	auto dbgIOOUT=[p_gState](unsigned char a,unsigned char d){
 		if ((a&0xF0)==0x20){
-			//printf("From TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
+			printf("From TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
 		}
 		else if ((a&0xF0)==0x40){
-			//printf("From RTC A: 0x%02X / D: 0x%02X\n",a,d);
+			const char* type[]={"minute","hour","day","month","year low","year high"};
+			printf("From CPLD RTC %s 0x%02X\n",type[a&0x0F],d);
 		}
 		else if (a==0x50){
-			printf("From Keyboard A: 0x%02X / D: 0x%02X\n",a,d);
+			printf("From Keyboard 0x%02X\n",d);
 			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		else if (a==0x51){
-			static unsigned char stat=0;
-			if (stat!=d){
-				stat=d;
-				printf("From CPLD Status A: 0x%02X / D: 0x%02X\n",a,d);
-			}
+			//printf("From CPLD Status 0x%02X\n",d);
 			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		else if ((a&0xF0)==0x70){
@@ -544,11 +567,12 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	};
 	iol.subscribeOUT(dbgIOOUT);
 	uc.debug_signal_alu_before_exec=[p_gState,&uc,&sm](){
+		if (p_gState->stepByStep.load(std::memory_order_relaxed)) print_m12_alu_instruction(&uc);
 		sm.updateState();
 		unsigned long addr=((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16);
-		/*if (addr==0x1CC68){
+		if (addr==0x10068||addr==0x1C5CC){
 			p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}*/
+		}
 		/*if (((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16)==0x10074){
 			p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}*/

@@ -90,11 +90,19 @@ void MBSL_4000FH5_5::subscribeSerial(std::function<void(bool)> f){
 }
 
 void MBSL_4000FH5_5::serialChangeIn(bool b){
-	if (b&&(!this->S_in)&&this->S_in_step==0) this->S_in_step=1;
+	if ((!b)&&this->S_in&&this->S_in_step==0) this->S_in_step=1;
 	this->S_in=b;
 }
 
 void MBSL_4000FH5_5::CLKTickIn(){
+	
+	this->updateRx();
+	this->updateTx();
+	
+	this->checkRTCChange();
+}
+
+void MBSL_4000FH5_5::updateRx(){
 	if (this->S_in_step>0){
 		switch (this->S_in_step){
 			case 1:this->S_in_step++;break;
@@ -106,11 +114,11 @@ void MBSL_4000FH5_5::CLKTickIn(){
 			case 6:
 			case 7:
 			case 8:
-			case 9:this->SBUF_in_tmp=(this->SBUF_in_tmp>>1)|(this->S_in?0:0x80);this->S_in_step++;break;
+			case 9:this->SBUF_in_tmp=(this->SBUF_in_tmp>>1)|(this->S_in?0x80:0);this->S_in_step++;break;
 			
 			case 10:
 				this->SBUF_in=this->SBUF_in_tmp;
-				if ((bool)(this->STATUS&(1<<5))) this->STATUS|=0x03;
+				if (((bool)(this->STATUS&(1<<5)))||(!this->S_in)) this->STATUS|=0x03;
 				else this->STATUS&=0xFC;
 				this->STATUS|=1<<5;
 				this->S_in_step=0;
@@ -118,9 +126,12 @@ void MBSL_4000FH5_5::CLKTickIn(){
 				
 		}
 	}
+}
+
+void MBSL_4000FH5_5::updateTx(){
 	if (this->S_out_step>0){
 		switch (this->S_out_step){
-			case 1:this->sendSerial(true);this->S_out_step++;break;
+			case 1:this->sendSerial(false);this->S_out_step++;break;
 			
 			case 2:
 			case 4:
@@ -144,18 +155,32 @@ void MBSL_4000FH5_5::CLKTickIn(){
 			case 13:
 			case 15:
 			case 17:
-				this->sendSerial(!(bool)(this->SBUF_out&1));
+				this->sendSerial((bool)(this->SBUF_out&1));
 				this->SBUF_out=this->SBUF_out>>1;
 				this->S_out_step++;
 				break;
 			
-			case 19:this->sendSerial(false);this->S_out_step++;break;
+			case 19:this->sendSerial(true);this->S_out_step++;break;
 			
 			case 24:this->S_out_step=0;this->STATUS|=0x0C;break;
 		}
 	}
 }
 
+void MBSL_4000FH5_5::checkRTCChange(){
+	struct tm date;
+	std::time_t ts=std::time(NULL);
+	if (this->OS_RTC.load(std::memory_order_relaxed)) date=*std::localtime(&ts);
+	else{
+		ts+=this->diff_time;
+		date=*std::gmtime(&ts);
+	}
+	unsigned char mins=(unsigned char)date.tm_min;
+	if (mins!=this->old_mins){
+		this->old_mins=mins;
+		this->STATUS|=1<<6;
+	}
+}
 
 unsigned char MBSL_4000FH5_5::D2BCD(unsigned char D){
 	D=D%100;
@@ -172,21 +197,31 @@ void MBSL_4000FH5_5::UC2CPLD(){
 		case 0x50://serial buffer out
 			//printf("to keyboard %02X\n",this->data);
 			this->STATUS&=0xF3;
-			this->STATUS|=(1<<4);
+			//this->STATUS|=(1<<4);
 			this->SBUF_out=this->data;
 			this->S_out_step=1;
 			break;
 		case 0x51:
 			//printf("to CPLD status %02X\n",this->data);
 			this->STATUS=this->data;
-			if ((bool)(this->STATUS&(1<<4))) this->STATUS|=0x0C;
+			//if ((bool)(this->STATUS&(1<<4))) this->STATUS|=0x0C;
+			this->STATUS|=0x0C;
 			break;
-		case 0x70://speculations: 0: MC/nBC / 1: modem/nDMTF / 2: disable comunication to and reset keyboard? / 3: watchdog timer in / 4: close modem line? / 5: enable CRT / 6: M/V / 7: ??? - true when in settings
+		case 0x70://speculations: 
+		// 0: MC/nBC 
+		// 1: modem/nDMTF 
+		// 2: enable comunication to keyboard and reset keyboard
+		// 3: watchdog timer kick in
+		// 4: not used???
+		// 5: close modem line
+		// 6: enable CRT 
+		// 7: M/V - power to DIN plug
 			//printf("to CPLD IO %02X\n",this->data);
 			this->IO=this->data;
 			this->sendPIO(this->data);
 			break;
 		case 0x40:
+			this->STATUS&=~(1<<6);
 			ts=std::time(NULL);
 			ts+=this->diff_time;
 			date=*std::gmtime(&ts);
@@ -243,14 +278,21 @@ void MBSL_4000FH5_5::CPLD2UC(){
 			this->STATUS&=~(1<<5);
 			break;
 		}
-		case 0x51://0x51: 5: data in SBUFin / !0&&!1: set i25.6 after reading SBUFin / 2&&3&&i22.6: accept data to SBUFout / 4: data in SBUF out? - start serial? / 6: reset/pause RTC? - used only when changing date /7: reset?
-		{//end init->0b01010001
+		case 0x51://0x51: R/W
+		// 0/1: stop bit not detected? / other error? - if both bits aren't set, set i25.6 after reading SBUFin (accept data)
+		// 2/3: wait for data? / transmit succed? - accept data to SBUFout when both bits and i22.6 are set
+		// 4: ??? 
+		// 5: data in SBUFin 
+		// 6: RTC time change 
+		// 7: reset?
+		{
 			unsigned char d=this->STATUS;
 			//printf("from CPLD status %02X\n",d);
 			this->sendD(d);
 			break;
 		}
 		case 0x40://Minutes BCD format
+			this->STATUS&=~(1<<6);
 			ts=std::time(NULL);
 			if (this->OS_RTC.load(std::memory_order_relaxed)) date=*std::localtime(&ts);
 			else{

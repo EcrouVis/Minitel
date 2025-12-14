@@ -36,7 +36,7 @@ class TS7514{
 			this->nRTS=b;
 		}
 		void ATxIChangeIn(bool b){
-			if (b!=this->ATxI) printf("ATxI %i \n",(int)b);
+			//if (b!=this->ATxI) printf("ATxI %i \n",(int)b);
 			this->ATxI=b;
 		}
 		

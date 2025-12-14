@@ -17,7 +17,7 @@ class Keyboard{
 			if (this->S_out_step>0||this->SBUF_out_queue.size()!=0){
 				switch (this->S_out_step){
 					case 0://printf("kb out %02X\n",this->SBUF_out_queue.front());
-						this->sendSerial(true);
+						this->sendSerial(false);
 						this->SBUF_out=this->SBUF_out_queue.front();
 						this->SBUF_out_queue.pop();
 						this->S_out_step++;
@@ -30,16 +30,16 @@ class Keyboard{
 					case 6:
 					case 7:
 					case 8:
-						this->sendSerial(!(bool)(this->SBUF_out&1));
+						this->sendSerial((bool)(this->SBUF_out&1));
 						this->SBUF_out=this->SBUF_out>>1;
 						this->S_out_step++;
 						break;
 					case 9:
-						this->sendSerial(false);
+						this->sendSerial(true);
 						this->S_out_step++;
 						break;
 					case 10:
-						this->sendSerial(false);
+						this->sendSerial(true);
 						this->S_out_step=0;
 						break;
 				}
@@ -64,25 +64,33 @@ class Keyboard{
 					case 11:
 					case 13:
 					case 15:
-					case 17:this->SBUF_in=(this->SBUF_in>>1)|(this->S_in?0:0x80);this->S_in_step++;break;
+					case 17:this->SBUF_in=(this->SBUF_in>>1)|(this->S_in?0x80:0);this->S_in_step++;break;
 					
 					case 19:
 						this->S_in_step=0;
-						if (!this->S_in){
+						if (this->S_in){
 							this->commandReceived();
 						}
 						break;
 				}
 			}
-			if (this->S_in&&this->S_in_high<22){
-				this->S_in_high++;
+			if ((!this->S_in)&&this->S_in_low<22){
+				this->S_in_low++;
 			}
 		}
 		void KeyboardChangeIn(keyboard_message* kb_m){
 			if (kb_m->focus){
 				if (kb_m->scancode==74&&kb_m->action==GLFW_PRESS){//-=take phone
-					this->SBUF_out_queue.push(0x5C);
-					this->SBUF_out_queue.push(0x63);
+					if (this->line_closed){
+						this->SBUF_out_queue.push(0x3C);
+						this->SBUF_out_queue.push(0x61);
+						this->line_closed=false;
+					}
+					else{
+						this->SBUF_out_queue.push(0x5C);
+						this->SBUF_out_queue.push(0x63);
+						this->line_closed=true;
+					}
 					return;
 				}
 				unsigned char c=0;
@@ -131,6 +139,13 @@ class Keyboard{
 					case 78:c=0x31;break;//+=mem
 					case 55:c=0x95;break;//*=Sommaire
 					case 309:c=0x63;break;///=Envoi
+					case 328:c=0x5B;break;//flèche haut
+					case 331:c=0x5D;break;//flèche gauche
+					case 336:c=0x5F;break;//flèche bas
+					case 333:c=0x3F;break;//flèche droite
+					case 57:c=0x7F;break;//espace
+					case 28:c=0x39;break;//entrée
+					case 67:c=0xB5;break;//+/-=Connex/Fin
 					
 				}
 				if ((bool)(c&1)&&(kb_m->action==GLFW_PRESS||kb_m->action==GLFW_RELEASE)){
@@ -146,22 +161,24 @@ class Keyboard{
 		}
 		
 		void serialChangeIn(bool b){
-			if (b&&(!this->S_in)&&this->S_in_step==0) this->S_in_step=1;
-			if ((!b)&&this->S_in){
-				if(this->S_in_high>=22){
-					printf("kb reset !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+			if ((!b)&&this->S_in&&this->S_in_step==0) this->S_in_step=1;
+			if (b&&(!this->S_in)){
+				if(this->S_in_low>=22){
+					printf("Keyboard reset !!!!!!!!!!!!!!!!!!!!!!!!!\n");
 					/////////////////////////////////////////////////reset?
 					this->SBUF_out_queue.push(0xBC);
 					this->SBUF_out_queue.push(0xE1);
 				}
-				this->S_in_high=0;
+				this->S_in_low=0;
 			}
 			this->S_in=b;
 		}
 	private:
+		bool line_closed=false;
+	
 		bool S_in=false;
 		unsigned char S_in_step=0;
-		unsigned char S_in_high=0;
+		unsigned char S_in_low=0;
 		unsigned char S_out_step=0;
 		unsigned char SBUF_in=0;
 		unsigned char SBUF_out=0;
@@ -191,9 +208,14 @@ class Keyboard{
 		}
 		void executeCommand(){
 			if (this->cmd_p1==0xC4&&this->cmd_p2==0x17){
-				this->SBUF_out_queue.push(0x3C);
-				this->SBUF_out_queue.push(0x61);
-				
+				if (this->line_closed){
+					this->SBUF_out_queue.push(0x5C);
+					this->SBUF_out_queue.push(0x63);
+				}
+				else{
+					this->SBUF_out_queue.push(0x3C);
+					this->SBUF_out_queue.push(0x61);
+				}
 			}
 		}
 };

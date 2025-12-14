@@ -296,7 +296,7 @@ void m80C32::PXChangeIn(unsigned char x,unsigned char d){
 	this->checkPortChangeConsequences(x,v^d);
 	
 }
-void m80C32::PXYChangeIn(unsigned char x,unsigned char y,bool b){
+/*void m80C32::PXYChangeIn(unsigned char x,unsigned char y,bool b){
 	const unsigned char ax[4]={this->P0,this->P1,this->P2,this->P3};
 	x=ax[x];
 	y=y&0x07;
@@ -306,7 +306,7 @@ void m80C32::PXYChangeIn(unsigned char x,unsigned char y,bool b){
 	this->SFR[x&0x7F].store(d,std::memory_order_relaxed);//don't trigger infinite loop + don't write to TX_out
 	this->checkPortChangeConsequences(x,v^d);
 	
-}
+}*/
 void m80C32::checkPortChangeConsequences(unsigned char a,unsigned char mask){
 	if (a==this->P3){
 		mask=mask&(~this->getSFRByteIn(a));//port fall mask
@@ -533,14 +533,15 @@ void m80C32::T0Tick(){
 }
 void m80C32::T1Tick(){
 	unsigned char tmod=this->getSFRByteIn(this->TMOD);
-	bool split=((bool)(tmod&(1<<this->M0_1)))&&((bool)(tmod&(1<<this->M1_1)));
-	bool inc=this->getBitIn(this->TR1)&&((!(bool)(tmod&(1<<this->GATE_1)))||this->getBitIn(this->nINT1));
+	bool split=((bool)(tmod&(1<<this->M0_0)))&&((bool)(tmod&(1<<this->M1_0)));
+	bool inc=this->getBitIn(this->TR1);
 	if (split&&inc){//8 bit TH0
 		unsigned char th0=this->getSFRByteIn(this->TH0);
 		th0++;
 		if (th0==0) this->setBitIn(this->TF1,true);
 		this->setSFRByte(this->TH0,th0);
 	}
+	inc=inc&&((!(bool)(tmod&(1<<this->GATE_1)))||this->getBitIn(this->nINT1));
 	if (split||inc){
 		bool m0=(bool)(tmod&(1<<this->M0_1));
 		bool m1=(bool)(tmod&(1<<this->M1_1));
@@ -1269,13 +1270,12 @@ void m80C32::ACALL(unsigned short addr11){
 }
 void m80C32::ADD_A(unsigned char d){
 	//printf("ADD\n");
-	unsigned short a=(unsigned short)this->getSFRByteIn(this->ACC);
-	unsigned short v=(unsigned short)d;
-	unsigned short r=(a&0x0F)+(v&0x0F);
+	unsigned char a=this->getSFRByteIn(this->ACC);
+	unsigned short r=(a&0x0F)+(d&0x0F);
 	this->setBitIn(this->AC,r&0x10);
-	r+=(a&0x70)+(v&0x70);
+	r+=(a&0x70)+(d&0x70);
 	bool o=r&0x80;
-	r+=(a&0x80)+(v&0x80);
+	r+=(a&0x80)+(d&0x80);
 	bool c=r&0x100;
 	this->setBitIn(this->CY,c);
 	this->setBitIn(this->OV,c!=o);
@@ -1283,14 +1283,13 @@ void m80C32::ADD_A(unsigned char d){
 }
 void m80C32::ADDC_A(unsigned char d){
 	//printf("ADDC\n");
-	unsigned short a=(unsigned short)this->getSFRByteIn(this->ACC);
-	unsigned short v=(unsigned short)d;
-	unsigned short r=(a&0x0F)+(v&0x0F);
+	unsigned char a=this->getSFRByteIn(this->ACC);
+	unsigned short r=(a&0x0F)+(d&0x0F);
 	if (this->getBitIn(this->CY)) r++;
 	this->setBitIn(this->AC,r&0x10);
-	r+=(a&0x70)+(v&0x70);
+	r+=(a&0x70)+(d&0x70);
 	bool o=r&0x80;
-	r+=(a&0x80)+(v&0x80);
+	r+=(a&0x80)+(d&0x80);
 	bool c=r&0x100;
 	this->setBitIn(this->CY,c);
 	this->setBitIn(this->OV,c!=o);
@@ -1397,7 +1396,7 @@ unsigned char m80C32::JBC(unsigned char d,unsigned char m,signed char rel){
 }
 void m80C32::JC(signed char rel){
 	//printf("JC\n");
-	if (getBitIn(this->CY))this->PC+=rel;
+	if (this->getBitIn(this->CY))this->PC+=rel;
 }
 void m80C32::JMP(){
 	//printf("JMP\n");
@@ -1411,15 +1410,15 @@ void m80C32::JNB(unsigned char d,unsigned char m,signed char rel){
 }
 void m80C32::JNC(signed char rel){
 	//printf("JNC\n");
-	if (!getBitIn(this->CY))this->PC+=rel;
+	if (!this->getBitIn(this->CY))this->PC+=rel;
 }
 void m80C32::JNZ(signed char rel){
 	//printf("JNZ\n");
-	if (getSFRByteIn(this->ACC)!=0)this->PC+=rel;
+	if (this->getSFRByteIn(this->ACC)!=0)this->PC+=rel;
 }
 void m80C32::JZ(signed char rel){
 	//printf("JZ\n");
-	if (getSFRByteIn(this->ACC)==0)this->PC+=rel;
+	if (this->getSFRByteIn(this->ACC)==0)this->PC+=rel;
 }
 void m80C32::LCALL(unsigned short addr16){
 	//printf("LCALL\n");
@@ -1590,11 +1589,11 @@ void m80C32::SUBB(unsigned char d){/////////////////////////////////////////////
 	unsigned char a=this->getSFRByteIn(this->ACC);
 	bool c=this->getBitIn(this->CY);
 	unsigned short r=(a&0x0F)-(d&0x0F)-(c?1:0);
-	this->setBitIn(this->AC,(bool)(r&0x10));
+	this->setBitIn(this->AC,(bool)(r&0x8000));
 	r+=(a&0x70)-(d&0x70);
-	bool o=(bool)(r&0x80);
+	bool o=(bool)(r&0x8000);
 	r+=(a&0x80)-(d&0x80);
-	c=(bool)(r&0x100);
+	c=(bool)(r&0x8000);
 	this->setBitIn(this->CY,c);
 	this->setBitIn(this->OV,c!=o);
 	this->setSFRByte(this->ACC,(unsigned char)r);

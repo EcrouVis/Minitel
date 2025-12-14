@@ -26,6 +26,10 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		void subscribeRST(std::function<void(bool)> f);
 		void subscribeSerial(std::function<void(bool)> f);
 		
+		void updateRx();
+		void updateTx();
+		void checkRTCChange();
+		
 	private:
 		bool nCS=true;
 		bool nOE=true;
@@ -52,6 +56,7 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		unsigned char SBUF_in_tmp;
 		unsigned char SBUF_out;
 		int diff_time=0;
+		unsigned char old_mins=0;
 		
 		static unsigned char D2BCD(unsigned char D);
 		static unsigned char BCD2D(unsigned char BCD);

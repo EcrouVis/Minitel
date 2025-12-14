@@ -347,7 +347,7 @@ Fonction de vérification du message à l'adresse 0x1CC16 (code partie 2, adress
 
 Communication série avec des messages de 2 octets (o1 et o2 / .h: partie haute de l'octet, .l: partie basse de l'octet)
 Liaison série 8 bits + 1 bit start (0) + 2 bits stop (1) / pas de bit de parité / bit de poids faible en premier
-Au niveau du câble: Vcc=0 (par défaut), GND=1
+Au niveau du câble: Vcc=0 (par défaut), GND=1 (niveaux logiques inversés)
 Liaison clavier->Microcontrôleur 600 Baud
 Microcontrôleur->Liaison clavier 300 Baud
 

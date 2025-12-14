@@ -81,7 +81,7 @@ class m80C32{
 		void ResetChangeIn(bool);
 		void Reset();
 		void PXChangeIn(unsigned char,unsigned char);
-		void PXYChangeIn(unsigned char,unsigned char,bool);
+		//void PXYChangeIn(unsigned char,unsigned char,bool);
 		/*void subscribeP0(void (*f)(unsigned char)){this->sendP0=f;}
 		void subscribeP1(void (*f)(unsigned char)){this->sendP1=f;}
 		void subscribeP2(void (*f)(unsigned char)){this->sendP2=f;}
