@@ -1,0 +1,171 @@
+Fonction de vérification du message à l'adresse 0x1CC16 (code partie 2, adresse 0xCC16) 
+
+Communication série avec des messages de 2 octets (o1 et o2 / .h: partie haute de l'octet, .l: partie basse de l'octet)
+Liaison série 8 bits + 1 bit start (0) + 2 bits stop (1) / pas de bit de parité / bit de poids faible en premier
+Au niveau du câble: Vcc=0 (par défaut), GND=1 (niveaux logiques inversés)
+Liaison clavier->Microcontrôleur 600 Baud
+Microcontrôleur->Liaison clavier 300 Baud
+
+y: bit non utilisé / inconnu
+xxxx (o1.h): bits de détection d'erreur 
+o1.h=(o1.l+o2.h+o2.l)&0x0F
+
+Transfert d'état des touches (clavier -> microcontrôleur):
+	o1: xxxxa0y0
+	o2: bcdefgh1
+
+	a: 0=pressé 1=relâché
+
+	Liste des touches et o2:
+
+		6 0x11
+	 volume - 0x13
+	      Bis 0x15
+		2 0x17
+		4 0x19
+		8 0x1B
+		# 0x1D
+		* 0x1F
+		3 0x21
+	 volume + 0x23
+	      …/… 0x25
+		1 0x27
+		5 0x29
+		7 0x2B
+		9 0x2D
+		0 0x2F
+	      Mem 0x31
+ appel répertoire 0x33
+     haut parleur 0x35
+		) 0x37
+	   entrée 0x39
+		M 0x3B
+		: 0x3D
+    flèche droite 0x3F
+
+   appel annuaire 0x45
+
+		ç 0x51
+
+	   on/off 0x55
+		P 0x57
+		L 0x59
+      flèche haut 0x5B
+    flèche gauche 0x5D
+       flèche bas 0x5F
+		! 0x61
+	    Envoi 0x63
+       Répétition 0x65
+		I 0x67
+		O 0x69
+		K 0x6B
+		; 0x6D
+		, 0x6F
+		è 0x71
+	    Suite 0x73
+	   Retour 0x75
+		U 0x77
+		J 0x79
+		N 0x7B
+		B 0x7D
+	   espace 0x7F
+		- 0x81
+       Correction 0x83
+       Annulation 0x85
+		Y 0x87
+		H 0x89
+		G 0x8B
+		C 0x8D
+		V 0x8F
+		( 0x91
+	    Guide 0x93
+	 Sommaire 0x95
+		T 0x97
+		F 0x99
+		X 0x9B
+	     Ctrl 0x9D
+	  Min/Maj 0x9F
+		' 0xA1
+	     Fnct 0xA3
+	      Esc 0xA5
+		" 0xA7
+		R 0xA9
+		D 0xAB
+		W 0xAD
+	    shift 0xAF
+		é 0xB1
+		& 0xB3
+       Connex/Fin 0xB5
+		Z 0xB7
+		E 0xB9
+		A 0xBB
+		S 0xBD
+		Q 0xBF
+
+		à 0xD3
+
+Transfert de numérotation téléphone (microcontrôleur -> clavier):
+	o1: xxxx0000
+	o2: abcdefg1
+	
+	o2:
+	0x01 tonalité 0
+	0x03 tonalité 1
+	0x05 tonalité 2
+	0x07 tonalité 3
+	0x09 tonalité 4
+	0x0B tonalité 5
+	0x0D tonalité 6
+	0x0F tonalité 7
+	0x11 tonalité 8
+	0x13 tonalité 9
+	0x15 tonalité A (supposition / non utilisé)
+	0x17 tonalité B (supposition / non utilisé)
+	0x19 tonalité C (supposition / non utilisé)
+	0x1B tonalité D (supposition / non utilisé)
+	0x1D tonalité *
+	0x1F tonalité #
+
+Status du téléphone (clavier -> microcontrôleur):
+	o1: xxxxy1y0
+	o2: abcdefg1
+
+	o2:
+	a: (actif?) appel?
+	b: ligne occupée ou non utilisée? (1 tout le temps sauf quand il n'y a que le haut parleur ou le micro est désactivé / se met à 1 quand un autre appareil tente d'utiliser la ligne)
+	c: numérotation FV (fréquence vocale)/!DC (décimal)
+	d: numérotation en cours?
+	e: courant dans la ligne téléphonique (seulement si téléphone décroché)?
+	f: (passif?)
+	g: téléphone décroché?
+
+	Le status est envoyé quand il y a un changement de status ou quand il est demandé
+
+Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
+	o1: xxxx0100
+	o2: abcdefg1
+
+	o2:
+	0x01 fermer le circuit de la ligne téléphonique (?)
+	0x03 ouvrir le circuit de la ligne téléphonique (?)
+	0x05 activer le haut parleur
+	0x07 désactiver le haut parleur
+	0x11 activer le micro du combiné
+	0x13 désactiver le micro du combiné
+	0x17 demande de status téléphone
+
+	0x21 éteindre la led haut parleur
+	0x23 éteindre la led on/off
+	0x29 allumer la led haut parleur
+	0x2B allumer la led on/off
+	0x33 faire clignoter la led on/off
+
+	0x41, 0x43, 0x45, 0x47 volume du haut parleur (0x41 volume minimal / 0x47 volume maximal)
+
+	0x81, 0x83, 0x85, 0x87, 0x89 sélection de la sonnerie (0x81 sonnerie 1 / 0x89 sonnerie 5)
+	0x8B sonnerie
+
+En cours:
+	Décrocher/raccrocher le combiné téléphonique à le même effet que 0x01/0x03 si le haut parleur n'est pas activé
+	La sortie audio du combiné téléphonique semble activé quand la ligne téléphonique est fermée
+	La partie clavier/téléphone ne prends aucune décision à part lorsque quelqu'un décroche/raccroche le combiné

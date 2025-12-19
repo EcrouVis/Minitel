@@ -1,0 +1,90 @@
+	Fonctionnement général
+
+MBSL 4000FH5-5 est une puce faite sur mesure s'occupant de plusieurs tâches en même temps:
+	-Démultiplexage des données et de l'adresse basse avec ALE
+	-Inversion du signal nCS pour la RAM externe
+	-Ajout d'un port (de sortie seulement?)
+	-Ajout d'une horloge temps réel
+	-Ajout d'une liaison série
+	-Gestion partielle du signal de remise à zéro du microcontrôleur?
+
+Pour un peu plus de contexte sur la puce: Scans-0035392.pdf
+
+Le fonctionnement de la puce a été déduit du schéma du circuit du minitel, de la décompilation d'une partie de la ROM du minitel, des signaux sur la liaison série avec le clavier ainsi que des tests dans l'émulateur (en cours de développement). Certaines informations ne sont pas entièrement vérifiées et peuvent changer dans de futures révisions de la documentation.
+
+Les registres de la puce sont accédées si et seulement si nCS=0, l'adresse 8 bit correspond et nRD=0 pour la lecture ou nWR=0 pour l'écriture.
+
+Cela se traduit en assembleur pour un 8051:
+MOV R0, 0xXX ;On met l'adresse du registre dans R0 ou R1
+CLR PX.Y ;On met à 0 le pin Y du port X qui est lié au pin nCS de la puce
+MOVX A, @R0 ;On vient lire le registre
+;ou bien
+MOVX @R0, A ;On vient écrire dans le registre
+
+
+
+	Le circuit de gestion du reset
+
+Il permet d'une part de mettre en dormance toute la puce excepté l'horloge temps réel lorsque le minitel n'est plus alimenté par l'alimentation générale et d'autre part il renvoi le signal de reset au 80C32 quand le système a terminé de s'initialiser (supposition).
+
+
+
+	Le port
+
+Adresse: 0x70
+
+Le registre est très probablement en écriture seule car chaque pin est uniquement utilisé comme sortie, je n'ai pas trouvé de lecture du registre dans la ROM du M12 (jusqu'à présent) et cela à sûrement permis de réduire la complexité du circuit.
+
+Chaque bit du registre (b0: bit de poids faible / b7: bit de poids fort) est associé à l'état d'un pin de la puce.
+Voici à quoi sont liés probablement les bits du registre dans le circuit (suppositions, certaines actions changeront possiblement de place plus tard):
+	b0: MC/nBC TS7514
+	b1: MODEM/nDMTF TS7514
+	b2: force l'état 0 sur la demie liaison série vers clavier
+	b3: remet à zéro le chien de garde
+	b4: connecte le modem à la ligne téléphonique
+	b5: met sous tension le tube cathodique
+	b6: active l'alimentation sur la prise DIN (M/V L6720)
+	b7: non utilisé, l'utilisateur est dans les menus du M12?
+
+
+
+	La liaison série
+
+Adresse: 0x50
+
+Une écriture dans ce registre permet d'envoyer des données sur le pin Tx et une lecture permet de lire le dernier message reçu sur le pin Rx.
+La liaison série se faire par message de 8 bit + 1 bit de départ + 1 (ou 2?) bit de fin
+Pour une description plus détaillée ainsi que les messages échangés: Communication clavier - corps du minitel.txt
+
+
+
+	L'horloge temps réel
+
+Adresses: 0x40, 0x41, 0x42, 0x43, 0x44, 0x45
+
+L'horloge temps réel est la partie qui garde le minitel à l'heure et c'est pourquoi la puce est alimenté par une pile de secours (en même temps que la RAM externe) quand le reste du système n'est pas alimenté.
+Les registres sont en lecture et écriture mais sous forme BCD (binaire codé décimal).
+
+Voici quelle adresse est liée à quelle partie de la date:
+	0x40: minute
+	0x41: heure
+	0x42: jour du mois
+	0x43: mois
+	0x44: partie basse de l'année
+	0x45: partie haute de l'année
+
+
+
+	Le status de la puce
+
+Adresse: 0x51
+
+Ce registre est en lecture/écriture et donne l'état général de la puce. Chaque bit (b0: bit de poids faible / b7: bit de poids fort) a un sens / une utilisation différente.
+
+Voici ce qui a été déduit à ce jour:
+	b0 et b1: bits liés à la réception de la liaison série (mis à 1 et 0 respectivement lors de l'initialisation / les données du tampon ne sont gardées que si les 2 bits sont à 0)
+	b2 et b3: bits liés à la transmission de la liaison série - en attente de transmission? (supposition) (mis à 0 lors de l'initialisation / les données ne sont envoyées que si les 2 bits sont à 1)
+	b4: autorise l'activation du signal de reset du 80C32 si la puce reçoit un signal de reset? (supposition) (mis à 0 par défaut?) (mis à 1 lors de l'initialisation / jamais utilisé ou modifié par la suite)
+	b5: un message est arrivé sur Rx et se trouve dans le tampon d'entrée - se met à 1 automatiquement et est remis à 0 quand 0x50 est lue (le programme du minitel continue de lire 0x50 jusqu'à ce que ce bit soit mis à 0)
+	b6: la date de l'horloge temps réel a changé (une minute a passé) - se met à 1 automatiquement et est remis à 0 quand la date est lue (sûrement quand 0x40 est lue)
+	b7: initialisation de la puce? (mis à 1, attente puis mis à 0 lors de l'initialisation / action effectué si 1 - à investiguer)
