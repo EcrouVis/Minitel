@@ -9,8 +9,9 @@ MBSL 4000FH5-5 est une puce faite sur mesure s'occupant de plusieurs tâches en 
 	-Gestion partielle du signal de remise à zéro du microcontrôleur?
 
 Pour un peu plus de contexte sur la puce: Scans-0035392.pdf
+Schéma de fonctionnement de la puce: MBSL 4000FH5-5 - Schéma.png
 
-Le fonctionnement de la puce a été déduit du schéma du circuit du minitel, de la décompilation d'une partie de la ROM du minitel, des signaux sur la liaison série avec le clavier ainsi que des tests dans l'émulateur (en cours de développement). Certaines informations ne sont pas entièrement vérifiées et peuvent changer dans de futures révisions de la documentation.
+Le fonctionnement de la puce a été déduit du schéma du circuit du minitel, de la décompilation d'une partie de la ROM du minitel (principalement à partir du code partie 2, adresse 0xDD18), des signaux sur la liaison série avec le clavier ainsi que des tests dans l'émulateur (en cours de développement). Certaines informations ne sont pas entièrement vérifiées et peuvent changer dans de futures révisions de la documentation.
 
 Les registres de la puce sont accédées si et seulement si nCS=0, l'adresse 8 bit correspond et nRD=0 pour la lecture ou nWR=0 pour l'écriture.
 
