@@ -1,6 +1,6 @@
 	Fonctionnement général
 
-MBSL 4000FH5-5 est une puce faite sur mesure s'occupant de plusieurs tâches en même temps:
+MBSL-4000FH5-5 est une puce faite sur mesure s'occupant de plusieurs tâches en même temps:
 	-Démultiplexage des données et de l'adresse basse avec ALE
 	-Inversion du signal nCS pour la RAM externe
 	-Ajout d'un port (de sortie seulement?)
@@ -9,7 +9,7 @@ MBSL 4000FH5-5 est une puce faite sur mesure s'occupant de plusieurs tâches en 
 	-Gestion partielle du signal de remise à zéro du microcontrôleur?
 
 Pour un peu plus de contexte sur la puce: Scans-0035392.pdf
-Schéma de fonctionnement de la puce: MBSL 4000FH5-5 - Schéma.png
+Schéma de fonctionnement de la puce: MBSL-4000FH5-5 - Schéma.png
 
 Le fonctionnement de la puce a été déduit du schéma du circuit du minitel, de la décompilation d'une partie de la ROM du minitel (principalement à partir du code partie 2, adresse 0xDD18), des signaux sur la liaison série avec le clavier ainsi que des tests dans l'émulateur (en cours de développement). Certaines informations ne sont pas entièrement vérifiées et peuvent changer dans de futures révisions de la documentation.
 
