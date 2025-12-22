@@ -80,81 +80,107 @@ class Keyboard{
 		}
 		void KeyboardChangeIn(keyboard_message* kb_m){
 			if (kb_m->focus){
-				if (kb_m->scancode==74&&kb_m->action==GLFW_PRESS){//-=take phone
-					if (this->line_closed){
-						this->SBUF_out_queue.push(0x3C);
-						this->SBUF_out_queue.push(0x61);
-						this->line_closed=false;
+				if (kb_m->action==GLFW_PRESS||kb_m->action==GLFW_RELEASE){
+					bool keyPressed=(kb_m->action==GLFW_PRESS);
+					switch (kb_m->scancode){
+						case 16:queueKey(0xBB,keyPressed);break;//A
+						case 17:queueKey(0xB7,keyPressed);break;//Z
+						case 18:queueKey(0xB9,keyPressed);break;//E
+						case 19:queueKey(0xA9,keyPressed);break;//R
+						case 20:queueKey(0x97,keyPressed);break;//T
+						case 21:queueKey(0x87,keyPressed);break;//Y
+						case 22:queueKey(0x77,keyPressed);break;//U
+						case 23:queueKey(0x67,keyPressed);break;//I
+						case 24:queueKey(0x69,keyPressed);break;//O
+						case 25:queueKey(0x57,keyPressed);break;//P
+						case 30:queueKey(0xBF,keyPressed);break;//Q
+						case 31:queueKey(0xBD,keyPressed);break;//S
+						case 32:queueKey(0xAB,keyPressed);break;//D
+						case 33:queueKey(0x99,keyPressed);break;//F
+						case 34:queueKey(0x8B,keyPressed);break;//G
+						case 35:queueKey(0x89,keyPressed);break;//H
+						case 36:queueKey(0x79,keyPressed);break;//J
+						case 37:queueKey(0x6B,keyPressed);break;//K
+						case 38:queueKey(0x59,keyPressed);break;//L
+						case 39:queueKey(0x3B,keyPressed);break;//M
+						case 44:queueKey(0xAD,keyPressed);break;//W
+						case 45:queueKey(0x9B,keyPressed);break;//X
+						case 46:queueKey(0x8D,keyPressed);break;//C
+						case 47:queueKey(0x8F,keyPressed);break;//V
+						case 48:queueKey(0x7D,keyPressed);break;//B
+						case 49:queueKey(0x7B,keyPressed);break;//N
+						case 57:queueKey(0x7F,keyPressed);break;//espace
+						case 28:queueKey(0x39,keyPressed);break;//entrée
+						case 50:queueKey(0x6F,keyPressed);break;//,
+						case 51:queueKey(0x6D,keyPressed);break;//;
+						case 52:queueKey(0x3D,keyPressed);break;//:
+						
+						case 82:queueKey(0x2F,keyPressed);break;//numpad 0
+						case 79:queueKey(0x27,keyPressed);break;//numpad 1
+						case 80:queueKey(0x17,keyPressed);break;//numpad 2
+						case 81:queueKey(0x21,keyPressed);break;//numpad 3
+						case 75:queueKey(0x19,keyPressed);break;//numpad 4
+						case 76:queueKey(0x29,keyPressed);break;//numpad 5
+						case 77:queueKey(0x11,keyPressed);break;//numpad 6
+						case 71:queueKey(0x2B,keyPressed);break;//numpad 7
+						case 72:queueKey(0x1B,keyPressed);break;//numpad 8
+						case 73:queueKey(0x2D,keyPressed);break;//numpad 9
+						
+						case 2:queueKey(0xB3,keyPressed);break;//&
+						case 3:queueKey(0xB1,keyPressed);break;//é
+						case 4:queueKey(0xA7,keyPressed);break;//"
+						case 5:queueKey(0xA1,keyPressed);break;//'
+						case 6:queueKey(0x91,keyPressed);break;//(
+						case 7:queueKey(0x81,keyPressed);break;//-
+						case 8:queueKey(0x71,keyPressed);break;//è
+						case 9:queueKey(0x61,keyPressed);break;//_=!
+						case 10:queueKey(0x51,keyPressed);break;//ç
+						case 11:queueKey(0xD3,keyPressed);break;//à
+						case 12:queueKey(0x37,keyPressed);break;//)
+						
+						case 43:queueKey(0x1F,keyPressed);break;//*
+						case 40:queueKey(0x1D,keyPressed);break;//ù=#
+						
+						case 328:queueKey(0x5B,keyPressed);break;//flèche haut
+						case 331:queueKey(0x5D,keyPressed);break;//flèche gauche
+						case 336:queueKey(0x5F,keyPressed);break;//flèche bas
+						case 333:queueKey(0x3F,keyPressed);break;//flèche droite
+						
+						case 42:queueKey(0xAF,keyPressed);break;//shift
+						case 58:queueKey(0x9F,keyPressed);break;//min/maj
+						case 29:queueKey(0x9D,keyPressed);break;//ctrl
+						
+						case 56:queueKey(0xA3,keyPressed);break;//alt=fnct
+						case 1:queueKey(0xA5,keyPressed);break;//échap=Esc
+						
+						case 41:queueKey(0x55,keyPressed);break;//²=on/off
+						case 13:queueKey(0x31,keyPressed);break;//==mem
+						case 15:queueKey(0xB5,keyPressed);break;//tab=Connex/Fin
+						case 78:queueKey(0x23,keyPressed);break;//numpad +=HP+
+						case 74:queueKey(0x13,keyPressed);break;//numpad -=HP-
+						case 14:queueKey(0x35,keyPressed);break;//backspace=HP
+						case 55:queueKey(0x1F,keyPressed);break;//numpad *=*
+						case 309:queueKey(0x1D,keyPressed);break;//numpad /=#
+						//.../... bis repertoire annuaire decrochage
+						
+						case 60:queueKey(0x95,keyPressed);break;//F2=Sommaire
+						case 61:queueKey(0x93,keyPressed);break;//F3=Guide
+						case 62:queueKey(0x85,keyPressed);break;//F4=Annulation
+						case 63:queueKey(0x83,keyPressed);break;//F5=Correction
+						case 64:queueKey(0x75,keyPressed);break;//F6=Retour
+						case 65:queueKey(0x73,keyPressed);break;//F7=Suite
+						case 66:queueKey(0x65,keyPressed);break;//F8=Répétition
+						case 67:queueKey(0x63,keyPressed);break;//F9=Envoi
+						
 					}
-					else{
-						this->SBUF_out_queue.push(0x5C);
-						this->SBUF_out_queue.push(0x63);
-						this->line_closed=true;
-					}
-					return;
-				}
-				unsigned char c=0;
-				switch (kb_m->scancode){
-					case 16:c=0xBB;break;//A
-					case 17:c=0xB7;break;//Z
-					case 18:c=0xB9;break;//E
-					case 19:c=0xA9;break;//R
-					case 20:c=0x97;break;//T
-					case 21:c=0x87;break;//Y
-					case 22:c=0x77;break;//U
-					case 23:c=0x67;break;//I
-					case 24:c=0x69;break;//O
-					case 25:c=0x57;break;//P
-					case 30:c=0xBF;break;//Q
-					case 31:c=0xBD;break;//S
-					case 32:c=0xAB;break;//D
-					case 33:c=0x99;break;//F
-					case 34:c=0x8B;break;//G
-					case 35:c=0x89;break;//H
-					case 36:c=0x79;break;//J
-					case 37:c=0x6B;break;//K
-					case 38:c=0x59;break;//L
-					case 39:c=0x3B;break;//M
-					case 44:c=0xAD;break;//W
-					case 45:c=0x9B;break;//X
-					case 46:c=0x8D;break;//C
-					case 47:c=0x8F;break;//V
-					case 48:c=0x7D;break;//B
-					case 49:c=0x7B;break;//N
-					case 41:c=0x55;break;//²=on/off
-					case 42:c=0xAF;break;//shift
-					case 58:c=0x9F;break;//min/maj
-					case 29:c=0x9D;break;//ctrl
-					case 86:c=0xA3;break;//<>=fnct
-					case 82:c=0x2F;break;//0
-					case 79:c=0x27;break;//1
-					case 80:c=0x17;break;//2
-					case 81:c=0x21;break;//3
-					case 75:c=0x19;break;//4
-					case 76:c=0x29;break;//5
-					case 77:c=0x11;break;//6
-					case 71:c=0x2B;break;//7
-					case 72:c=0x1B;break;//8
-					case 73:c=0x2D;break;//9
-					case 78:c=0x31;break;//+=mem
-					case 55:c=0x95;break;//*=Sommaire
-					case 309:c=0x63;break;///=Envoi
-					case 328:c=0x5B;break;//flèche haut
-					case 331:c=0x5D;break;//flèche gauche
-					case 336:c=0x5F;break;//flèche bas
-					case 333:c=0x3F;break;//flèche droite
-					case 57:c=0x7F;break;//espace
-					case 28:c=0x39;break;//entrée
-					case 67:c=0xB5;break;//+/-=Connex/Fin
-					
-				}
-				if ((bool)(c&1)&&(kb_m->action==GLFW_PRESS||kb_m->action==GLFW_RELEASE)){
-					unsigned char a=(kb_m->action==GLFW_PRESS)?0x00:0x08;
-					a|=(a+c+(c>>4))<<4;
-					this->SBUF_out_queue.push(a);
-					this->SBUF_out_queue.push(c);
 				}
 			}
+		}
+		void queueKey(unsigned char keycode,bool keyPressed){
+			unsigned char a=keyPressed?0x00:0x08;
+			a|=(a+keycode+(keycode>>4))<<4;
+			this->SBUF_out_queue.push(a);
+			this->SBUF_out_queue.push(keycode);
 		}
 		void subscribeSerial(std::function<void(bool)> f){
 			this->sendSerial=f;
@@ -174,7 +200,7 @@ class Keyboard{
 			this->S_in=b;
 		}
 	private:
-		bool line_closed=false;
+		unsigned char phone_status=0x61;
 	
 		bool S_in=false;
 		unsigned char S_in_step=0;
@@ -206,17 +232,86 @@ class Keyboard{
 				}
 			}
 		}
+		void sendStatus(){
+			this->SBUF_out_queue.push((unsigned char)(((0x0C+this->phone_status+(this->phone_status>>4))<<4)|0x0C));
+			this->SBUF_out_queue.push(this->phone_status);
+		}
 		void executeCommand(){
-			if (this->cmd_p1==0xC4&&this->cmd_p2==0x17){
+			printf("keyboard serial in %02X%02X\n",this->cmd_p1,this->cmd_p2);
+			if ((bool)(this->cmd_p1&0x04)){//commande
+				switch (this->cmd_p2){
+					case 0x01:
+						if((this->phone_status&0x48)!=0x08){
+							this->phone_status=(this->phone_status&(~0x48))|0x08;
+							sendStatus();
+						}
+						printf("phone line connected\n");
+						break;
+					case 0x03:
+						if((this->phone_status&0x48)!=0x40){
+							this->phone_status=(this->phone_status&(~0x48))|0x40;
+							sendStatus();
+						}
+						printf("phone line disconnected\n");
+						break;
+					case 0x05:printf("speaker activated\n");break;
+					case 0x07:printf("speaker deactivated\n");break;
+					case 0x11:
+						if (!(bool)(this->phone_status&0x40)){
+							this->phone_status=this->phone_status|0x40;
+							sendStatus();
+						}
+						printf("microphone activated\n");
+						break;
+					case 0x13:
+						if ((bool)(this->phone_status&0x40)){
+							this->phone_status=this->phone_status&(~0x40);
+							sendStatus();
+						}
+						printf("microphone deactivated\n");
+						break;
+					case 0x17:sendStatus();break;
+					
+					case 0x21:printf("power off speaker led\n");break;
+					case 0x23:printf("power off on/off led\n");break;
+					case 0x29:printf("power on speaker led\n");break;
+					case 0x2B:printf("power on on/off led\n");break;
+					case 0x33:printf("blink on/off led\n");break;
+					
+					case 0x41:printf("set speaker volume 1\n");break;
+					case 0x43:printf("set speaker volume 2\n");break;
+					case 0x45:printf("set speaker volume 3\n");break;
+					case 0x47:printf("set speaker volume 4\n");break;
+					
+					case 0x81:printf("set ringtone 1\n");break;
+					case 0x83:printf("set ringtone 2\n");break;
+					case 0x85:printf("set ringtone 3\n");break;
+					case 0x87:printf("set ringtone 4\n");break;
+					case 0x89:printf("set ringtone 5\n");break;
+					case 0x8B:printf("play ringtone\n");break;
+					
+					default:printf("Unknown cmd %02X%02X\n",this->cmd_p1,this->cmd_p2);break;
+					
+				}
+			}
+			else if (!(bool)(this->cmd_p2&0xE0)){//tonalités
+				const char tone[16]={'0','1','2','3','4','5','6','7','8','9','A','B','C','D','*','#'};
+				printf("DTMF tone %c\n",tone[(this->cmd_p2>>1)&0x0F]);
+				/////////////////////////////
+			}
+			else{
+				printf("Unknown cmd %02X%02X\n",this->cmd_p1,this->cmd_p2);
+			}
+			/*if (this->cmd_p1==0xC4&&this->cmd_p2==0x17){
 				if (this->line_closed){
-					this->SBUF_out_queue.push(0x5C);
-					this->SBUF_out_queue.push(0x63);
+					this->SBUF_out_queue.push(0xFC);
+					this->SBUF_out_queue.push(0x21);
 				}
 				else{
 					this->SBUF_out_queue.push(0x3C);
 					this->SBUF_out_queue.push(0x61);
 				}
-			}
+			}*/
 		}
 };
 #endif

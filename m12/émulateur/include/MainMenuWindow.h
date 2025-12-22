@@ -275,6 +275,25 @@ void mainMenuWindow(Parameters* p_params,Mailbox* p_mb_circuit){
 		static ma_uint32 captureDeviceCount;
 		
 		ImGui::SeparatorText("Clavier");
+		ImGui::Text("L'émulateur est conçu pour un clavier AZERTY avec un pavé numérique.");
+		ImGui::Text("Les touches différentes du minitel sont les suivantes:");
+		ImGui::Text("_=!");
+		ImGui::Text("Echap=Esc");
+		ImGui::Text("Alt=Fnct");
+		ImGui::Text("²=On/Off");
+		ImGui::Text("Tab=Connex/Fin");
+		ImGui::Text("==Mem");
+		ImGui::Text("Backspace=Haut parleur");
+		ImGui::Text("F2=Sommaire");
+		ImGui::Text("F3=Guide");
+		ImGui::Text("F4=Annulation");
+		ImGui::Text("F5=Correction");
+		ImGui::Text("F6=Retour");
+		ImGui::Text("F7=Suite");
+		ImGui::Text("F8=Répétition");
+		ImGui::Text("F9=Envoi");
+		ImGui::Text("Pavé numérique *=*");
+		ImGui::Text("Pavé numérique /=#");
 		
 		ImGui::SeparatorText("Prise péri-informatique");
 		static int peri_io=0;

@@ -212,10 +212,10 @@ void MBSL_4000FH5_5::UC2CPLD(){
 		// 1: modem/nDMTF 
 		// 2: enable comunication to keyboard and reset keyboard
 		// 3: watchdog timer kick in
-		// 4: not used???
-		// 5: close modem line
-		// 6: enable CRT 
-		// 7: M/V - power to DIN plug
+		// 4: close modem line
+		// 5: enable CRT 
+		// 6: M/V - power to DIN plug
+		// 7: not used???
 			//printf("to CPLD IO %02X\n",this->data);
 			this->IO=this->data;
 			this->sendPIO(this->data);
@@ -281,10 +281,10 @@ void MBSL_4000FH5_5::CPLD2UC(){
 		case 0x51://0x51: R/W
 		// 0/1: stop bit not detected? / other error? - if both bits aren't set, set i25.6 after reading SBUFin (accept data)
 		// 2/3: wait for data? / transmit succed? - accept data to SBUFout when both bits and i22.6 are set
-		// 4: ??? 
+		// 4: enable watchdog timer output? 
 		// 5: data in SBUFin 
 		// 6: RTC time change 
-		// 7: reset?
+		// 7: reset/power up?
 		{
 			unsigned char d=this->STATUS;
 			//printf("from CPLD status %02X\n",d);
@@ -350,9 +350,6 @@ void MBSL_4000FH5_5::CPLD2UC(){
 			break;
 		case 0x70:
 			this->sendD(this->IO);
-			break;
-		case 0x96:
-			printf("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 			break;
 		default:
 			break;//4 minutes CRT off

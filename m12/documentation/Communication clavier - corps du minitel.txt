@@ -135,9 +135,9 @@ Status du téléphone (clavier -> microcontrôleur):
 	b: ligne occupée ou non utilisée? (1 tout le temps sauf quand il n'y a que le haut parleur ou le micro est désactivé / se met à 1 quand un autre appareil tente d'utiliser la ligne)
 	c: numérotation FV (fréquence vocale)/!DC (décimal)
 	d: numérotation en cours?
-	e: courant dans la ligne téléphonique (seulement si téléphone décroché)?
+	e: courant dans la ligne téléphonique?
 	f: (passif?)
-	g: téléphone décroché?
+	g: combiné téléphonique décroché?
 
 	Le status est envoyé quand il y a un changement de status ou quand il est demandé
 
@@ -150,8 +150,10 @@ Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
 	0x03 ouvrir le circuit de la ligne téléphonique (?)
 	0x05 activer le haut parleur
 	0x07 désactiver le haut parleur
+	0x09
 	0x11 activer le micro du combiné
 	0x13 désactiver le micro du combiné
+	0x15 ? (supposition)
 	0x17 demande de status téléphone
 
 	0x21 éteindre la led haut parleur
@@ -161,9 +163,10 @@ Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
 	0x33 faire clignoter la led on/off
 
 	0x41, 0x43, 0x45, 0x47 volume du haut parleur (0x41 volume minimal / 0x47 volume maximal)
+	0x4D
 
 	0x81, 0x83, 0x85, 0x87, 0x89 sélection de la sonnerie (0x81 sonnerie 1 / 0x89 sonnerie 5)
-	0x8B sonnerie
+	0x8B déclencher la sonnerie
 
 En cours:
 	Décrocher/raccrocher le combiné téléphonique à le même effet que 0x01/0x03 si le haut parleur n'est pas activé

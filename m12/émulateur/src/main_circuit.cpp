@@ -513,7 +513,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	
 	auto dbgIOIN=[p_gState,&modem](unsigned char a,unsigned char d){
 		if ((a&0xF0)==0x20){
-			printf("To TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
+			//printf("To TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
 		}
 		else if ((a&0xF0)==0x40){
 			const char* type[]={"minute","hour","day","month","year low","year high"};
@@ -534,14 +534,14 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		else{
-			printf("To IO A: 0x%02X / D: 0x%02X\n",a,d);
-			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
+			printf("To unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
+			p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 	};
 	iol.subscribeIN(dbgIOIN);
 	auto dbgIOOUT=[p_gState](unsigned char a,unsigned char d){
 		if ((a&0xF0)==0x20){
-			printf("From TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
+			//printf("From TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
 		}
 		else if ((a&0xF0)==0x40){
 			const char* type[]={"minute","hour","day","month","year low","year high"};
@@ -560,8 +560,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		else{
-			printf("From IO A: 0x%02X / D: 0x%02X\n",a,d);
-			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
+			printf("From unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
+			p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		//if(a!=0x20) r=0xff;
 	};
@@ -570,18 +570,18 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		if (p_gState->stepByStep.load(std::memory_order_relaxed)) print_m12_alu_instruction(&uc);
 		sm.updateState();
 		unsigned long addr=((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16);
-		if (addr==0x10068||addr==0x1C5CC){
+		/*if (addr==0x10068||addr==0x1C5CC){
 			p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}
+		}*/
 		/*if (((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16)==0x10074){
 			p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}*/
 		/*if (uc.instruction[0]==0xD2&&uc.instruction[1]==0x99){//SETB TI
 			p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}*/
-		if ((uc.instruction[0]==0xE0||uc.instruction[0]==0xF0)&&(!(bool)(uc.PX_out[1]&(1<<5)))){
+		/*if ((uc.instruction[0]==0xE0||uc.instruction[0]==0xF0)&&(!(bool)(uc.PX_out[1]&(1<<5)))){
 			p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}
+		}*/
 		//print_m12_alu_instruction(&uc);
 	};
 	

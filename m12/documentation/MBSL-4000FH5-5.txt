@@ -72,7 +72,7 @@ Voici quelle adresse est liée à quelle partie de la date:
 	0x42: jour du mois
 	0x43: mois
 	0x44: partie basse de l'année
-	0x45: partie haute de l'année
+	0x45: partie haute de l'année (supposition)
 
 
 
@@ -88,4 +88,4 @@ Voici ce qui a été déduit à ce jour:
 	b4: autorise l'activation du signal de reset du 80C32 si la puce reçoit un signal de reset? (supposition) (mis à 0 par défaut?) (mis à 1 lors de l'initialisation / jamais utilisé ou modifié par la suite)
 	b5: un message est arrivé sur Rx et se trouve dans le tampon d'entrée - se met à 1 automatiquement et est remis à 0 quand 0x50 est lue (le programme du minitel continue de lire 0x50 jusqu'à ce que ce bit soit mis à 0)
 	b6: la date de l'horloge temps réel a changé (une minute a passé) - se met à 1 automatiquement et est remis à 0 quand la date est lue (sûrement quand 0x40 est lue)
-	b7: initialisation de la puce? (mis à 1, attente puis mis à 0 lors de l'initialisation / action effectué si 1 - à investiguer)
+	b7: initialisation de la puce? (mis à 1, attente puis mis à 0 lors de l'initialisation / action effectuée si 1 - à investiguer)
