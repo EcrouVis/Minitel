@@ -2,6 +2,7 @@ Fonction de vérification du message à l'adresse 0x1CC16 (code partie 2, adress
 
 Communication série avec des messages de 2 octets (o1 et o2 / .h: partie haute de l'octet, .l: partie basse de l'octet)
 Liaison série 8 bits + 1 bit start (0) + 2 bits stop (1) / pas de bit de parité / bit de poids faible en premier
+Au niveau des puces: Vcc=1 (par défaut), GND=0
 Au niveau du câble: Vcc=0 (par défaut), GND=1 (niveaux logiques inversés)
 Liaison clavier->Microcontrôleur 600 Baud
 Microcontrôleur->Liaison clavier 300 Baud
@@ -119,10 +120,9 @@ Transfert de numérotation téléphone (microcontrôleur -> clavier):
 	0x0F tonalité 7
 	0x11 tonalité 8
 	0x13 tonalité 9
-	0x15 tonalité A (supposition / non utilisé)
-	0x17 tonalité B (supposition / non utilisé)
-	0x19 tonalité C (supposition / non utilisé)
-	0x1B tonalité D (supposition / non utilisé)
+
+	0x19 attente de 1s
+
 	0x1D tonalité *
 	0x1F tonalité #
 
@@ -131,12 +131,12 @@ Status du téléphone (clavier -> microcontrôleur):
 	o2: abcdefg1
 
 	o2:
-	a: (actif?) appel?
+	a: reset?
 	b: ligne occupée ou non utilisée? (1 tout le temps sauf quand il n'y a que le haut parleur ou le micro est désactivé / se met à 1 quand un autre appareil tente d'utiliser la ligne)
 	c: numérotation FV (fréquence vocale)/!DC (décimal)
-	d: numérotation en cours?
+	d: numérotation en cours? (appui sur une touche seulement: 1 sur une durée de 148ms sauf 0x19 avant de retourner à zéro)
 	e: courant dans la ligne téléphonique?
-	f: (passif?)
+	f: ?
 	g: combiné téléphonique décroché?
 
 	Le status est envoyé quand il y a un changement de status ou quand il est demandé
@@ -146,14 +146,14 @@ Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
 	o2: abcdefg1
 
 	o2:
-	0x01 fermer le circuit de la ligne téléphonique (?)
-	0x03 ouvrir le circuit de la ligne téléphonique (?)
+	0x01 fermer le circuit de la ligne téléphonique (supposition / très probable)
+	0x03 ouvrir le circuit de la ligne téléphonique (supposition / très probable)
 	0x05 activer le haut parleur
 	0x07 désactiver le haut parleur
-	0x09
+	0x09 répondeur minitel hors service ou avec sonnerie - pas de réponse du clavier (à étudier plus en détail)
+	0x0B répondeur minitel enregistreur ou simple sans sonnerie - pas de réponse du clavier (à étudier plus en détail)
 	0x11 activer le micro du combiné
 	0x13 désactiver le micro du combiné
-	0x15 ? (supposition)
 	0x17 demande de status téléphone
 
 	0x21 éteindre la led haut parleur
@@ -163,12 +163,16 @@ Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
 	0x33 faire clignoter la led on/off
 
 	0x41, 0x43, 0x45, 0x47 volume du haut parleur (0x41 volume minimal / 0x47 volume maximal)
-	0x4D
+	0x49, 0x4B, 0x4D, 0x4F volume de la sonnerie (0x49 volume minimal / 0x4F volume maximal)
 
 	0x81, 0x83, 0x85, 0x87, 0x89 sélection de la sonnerie (0x81 sonnerie 1 / 0x89 sonnerie 5)
 	0x8B déclencher la sonnerie
 
+Remise à zéro du téléphone? (microcontrôleur -> clavier):
+	Mise à 0 prolongée du signal (temps supérieur à un message en UART soit >~33.3ms)
+	Le clavier renvoie l'état par défaut (?) avec le bit 7 mis à 1 quand il détecte que le signal est revenu à 1.
+
 En cours:
-	Décrocher/raccrocher le combiné téléphonique à le même effet que 0x01/0x03 si le haut parleur n'est pas activé
 	La sortie audio du combiné téléphonique semble activé quand la ligne téléphonique est fermée
 	La partie clavier/téléphone ne prends aucune décision à part lorsque quelqu'un décroche/raccroche le combiné
+	Lire les données échangées quand un appel est effectué

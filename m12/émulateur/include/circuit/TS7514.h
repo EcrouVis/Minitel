@@ -2,8 +2,12 @@
 #define TS7514_H
 #include <functional>
 #include <cstdio>
+#include <atomic>
 class TS7514{
 	public:
+		
+		std::atomic<float> buzzer_amplitude=0.;
+		
 		void Reset(){
 			this->REG[this->RPROG]=0;
 			this->REG[this->RATE]=0x0F;
@@ -50,6 +54,10 @@ class TS7514{
 			this->sendnDCD=f;
 		}
 		
+		void subscribeCMD(std::function<void(unsigned char)> f){
+			this->sendCMD=f;
+		}
+		
 	private:
 		enum Constants{
 			RPROG=0,
@@ -73,6 +81,8 @@ class TS7514{
 		std::function<void(bool)> sendWLO=[](bool b){};
 		std::function<void(bool)> sendnDCD=[](bool b){};
 		
+		std::function<void(unsigned char)> sendCMD=[](unsigned char b){};
+		
 		void writeRegister(){
 			unsigned char n_reg=(this->input_register>>4)&0x07;
 			unsigned char rprog=this->REG[this->RPROG];
@@ -84,7 +94,20 @@ class TS7514{
 			printf("TS7514 CMD 0x%02X ",this->input_register);
 			if (n_reg==this->RPROG||cmd_ok){
 				this->REG[n_reg]=this->input_register&0x0F;
+				switch(n_reg){
+					case 3:
+						if ((this->REG[3]&0x0C)==0x08){
+							const float Amp[4]={1.,0.316227766,0.1,0.0316227766};
+							buzzer_amplitude.store(Amp[this->REG[3]&0x03],std::memory_order_release);
+						}
+						else{
+							buzzer_amplitude.store(0.,std::memory_order_release);
+						}
+						break;
+				}
 				printf("OK\n");
+				this->sendCMD(this->input_register);
+				
 			}
 			else{
 				printf("NOK\n");

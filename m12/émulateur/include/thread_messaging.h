@@ -12,6 +12,7 @@ struct thread_message{
 const int ERAM=1;
 const int NOTIFICATION=3;
 const int NOTIFICATION_BUZZER=4;
+const int NOTIFICATION_REBOOT=15;
 const int NOTIFICATION_RED=5;
 const int NOTIFICATION_GREEN=6;
 const int NOTIFICATION_BLUE=7;
@@ -33,6 +34,8 @@ const int EMU_NEXT_STEP=1<<5;
 const int KEYBOARD_STATE_UPDATE=1<<6;
 /*
 const int RESTART;*/
+
+const int BUZZER_AMPLITUDE=1;
 
 class Mailbox{
 	public:

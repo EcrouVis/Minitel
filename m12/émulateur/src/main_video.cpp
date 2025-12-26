@@ -47,7 +47,7 @@ void imguiStartFrame(Parameters* p_params,NotificationServer* p_notif,Mailbox* p
 	//bool use_font=(p_params->imgui.font!=NULL);
 	//if (use_font) ImGui::PushFont(p_params->imgui.font);
 	if (p_params->imgui.show_menu){
-		ImGui::ShowDemoWindow(&(p_params->imgui.show_menu));
+		//ImGui::ShowDemoWindow(&(p_params->imgui.show_menu));
 		mainMenuWindow(p_params,p_mb_circuit);
 	}
 	if (p_params->debug.eram.mem!=NULL&&p_params->debug.eram.show) memoryWindow("RAM externe",&p_params->debug.eram);
@@ -186,13 +186,21 @@ class M12Window{
 						case NOTIFICATION:
 							this->Notification.notify((const char*)ms.p,true);
 							//imgui_notify((const char*)ms.p,true);
-							fprintf(stdout,"notification from thread\n");
+							//fprintf(stdout,"notification from thread\n");
 							break;
 						case NOTIFICATION_BUZZER:
 							this->Notification.notify(0,ImVec4(1,0.5,0,1));
-							//imgui_notify(0,ImVec4(1,0.5,0,1));
-							fprintf(stdout,"buzzer\n");
 							break;
+						case NOTIFICATION_REBOOT:
+							this->Notification.notify(1,ImVec4(0,1,1,1));
+							break;
+						case NOTIFICATION_RED:this->Notification.notify((const char*)ms.p,true,ImVec4(1,0,0,1));break;
+						case NOTIFICATION_GREEN:this->Notification.notify((const char*)ms.p,true,ImVec4(0,1,0,1));break;
+						case NOTIFICATION_BLUE:this->Notification.notify((const char*)ms.p,true,ImVec4(0,0,1,1));break;
+						case NOTIFICATION_ORANGE:this->Notification.notify((const char*)ms.p,true,ImVec4(1,0.5,0,1));break;
+						case NOTIFICATION_YELLOW:this->Notification.notify((const char*)ms.p,true,ImVec4(1,1,0,1));break;
+						case NOTIFICATION_CYAN:this->Notification.notify((const char*)ms.p,true,ImVec4(0,1,1,1));break;
+						case NOTIFICATION_PURPLE:this->Notification.notify((const char*)ms.p,true,ImVec4(1,0,1,1));break;
 						default:
 							fprintf(stdout,"unknown cmd %i\n",ms.cmd);
 							break;

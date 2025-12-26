@@ -273,16 +273,18 @@ void m80C32::CLKTickIn(){
 	if (!(bool)(tmod&(1<<this->C_T_1))) this->T1Tick();
 	
 	this->ResetCountdown();
-	unsigned char pd_mask=1<<this->PD;
-	unsigned char idl_mask=1<<this->IDL;
-	unsigned char power_mode=this->getSFRByteIn(this->PCON)&(pd_mask|idl_mask);
-	if ((power_mode&pd_mask)==0){
-		if ((power_mode&idl_mask)==0){
-			this->nextCycleALU();
+	if (this->reset_count!=0){
+		unsigned char pd_mask=1<<this->PD;
+		unsigned char idl_mask=1<<this->IDL;
+		unsigned char power_mode=this->getSFRByteIn(this->PCON)&(pd_mask|idl_mask);
+		if ((power_mode&pd_mask)==0){
+			if ((power_mode&idl_mask)==0){
+				this->nextCycleALU();
+			}
 		}
-	}
-	if (this->i_cycle[this->instruction[0]]-this->i_cycle_n<=0){
-		this->checkInterrupts();
+		if (this->i_cycle[this->instruction[0]]-this->i_cycle_n<=0){
+			this->checkInterrupts();
+		}
 	}
 }
 void m80C32::ResetChangeIn(bool level){

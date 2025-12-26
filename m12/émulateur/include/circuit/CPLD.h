@@ -50,7 +50,7 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		std::function<void(bool)> sendRST=[](bool b){};
 		std::function<void(bool)> sendSerial=[](bool b){};
 		
-		unsigned char STATUS=0;
+		unsigned char STATUS=0x10;
 		unsigned char IO=0xFF;//0x70
 		unsigned char SBUF_in;
 		unsigned char SBUF_in_tmp;

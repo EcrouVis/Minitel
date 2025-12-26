@@ -85,7 +85,7 @@ Ce registre est en lecture/écriture et donne l'état général de la puce. Chaq
 Voici ce qui a été déduit à ce jour:
 	b0 et b1: bits liés à la réception de la liaison série (mis à 1 et 0 respectivement lors de l'initialisation / les données du tampon ne sont gardées que si les 2 bits sont à 0)
 	b2 et b3: bits liés à la transmission de la liaison série - en attente de transmission? (supposition) (mis à 0 lors de l'initialisation / les données ne sont envoyées que si les 2 bits sont à 1)
-	b4: autorise l'activation du signal de reset du 80C32 si la puce reçoit un signal de reset? (supposition) (mis à 0 par défaut?) (mis à 1 lors de l'initialisation / jamais utilisé ou modifié par la suite)
+	b4: autorise l'activation du signal de reset du 80C32 si la puce reçoit un signal de reset? (supposition) (mis à 1 au début puis 0 après le premier reset?) (mis à 1 lors de l'initialisation / jamais utilisé ou modifié par la suite)
 	b5: un message est arrivé sur Rx et se trouve dans le tampon d'entrée - se met à 1 automatiquement et est remis à 0 quand 0x50 est lue (le programme du minitel continue de lire 0x50 jusqu'à ce que ce bit soit mis à 0)
 	b6: la date de l'horloge temps réel a changé (une minute a passé) - se met à 1 automatiquement et est remis à 0 quand la date est lue (sûrement quand 0x40 est lue)
 	b7: initialisation de la puce? (mis à 1, attente puis mis à 0 lors de l'initialisation / action effectuée si 1 - à investiguer)

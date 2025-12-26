@@ -5,68 +5,70 @@
 class WatchdogTimer{//74HC4538 + 7705AC
 	public:
 		void incrementTimer(){
-			if (this->EN){
-				if (this->t2!=0){
-					this->t2=(this->t2+1)%this->tmax;
-					if (this->t2==0) this->changeOutput();
+			if (this->toff!=0&&this->toff!=this->toff_max){
+				this->toff=this->toff+1;
+				if (this->toff==this->toff_reset){
+					this->sendRST(true);
 				}
-				if (this->t1!=0){
-					this->t1=(this->t1+1)%this->tmax;
-					if (this->t1==0){
-						this->t2=1;
-						this->changeOutput();
-					}
+				if (this->toff==this->toff_max&&this->PWR){
+					this->toff=0;
+					this->sendnWRST(true);
+					this->sendRST(false);
 				}
 			}
-			if (this->toff!=0) this->toff=(this->toff+1)%this->toff_max;
+			if (this->t1!=0){
+				this->t1+=1;
+				if (this->t1==this->tmax){
+					this->t1=0;
+					this->toff=1;
+					this->sendnWRST(false);
+				}
+			}
 		}
 		void ENChangeIn(bool b){
-			if (b&&(!this->EN)){
-				
-			}
-			this->EN=b;
 			if (!b){
 				this->t1=0;
-				this->t2=0;
-				this->changeOutput();
 			}
+			this->EN=b;
 		}
 		void PWRChangeIn(bool b){
-			if (b&&(!this->PWR)) this->toff=1;
-			if (!b) this->toff=0;
+			if (b!=this->PWR&&this->toff==0){
+				this->toff=1;
+				this->sendnWRST(false);
+			}
+			if (b&&this->toff==this->toff_max){
+				this->toff=0;
+				this->sendnWRST(true);
+				this->sendRST(false);
+			}
 			this->PWR=b;
-			this->changeOutput();
 		}
 		void KICKChangeIn(bool b){
-			if (b&&(!this->KICK)){
-				this->KICK=b;
-				//printf("%li\n",this->t1);
-				this->t1=1;
+			if ((!b)&&this->KICK){
+				if (this->EN) this->t1=1;
 			}
-			else this->KICK=b;
+			this->KICK=b;
 		}
 		
 		void subscribeRST(std::function<void(bool)> f){
 			this->sendRST=f;
 		}
+		void subscribenWRST(std::function<void(bool)> f){
+			this->sendnWRST=f;
+		}
 	private:
-		unsigned long t1=0;//<160000 clock periods -> 10ms
-		unsigned long t2=0;
-		unsigned long trise=0;
-		unsigned long tmax=49900;//3380us@10nF->49900 clock periods
+		//delta between warn and reset: 1128 clock periods minimum -> ISR 0x0003
+		unsigned long t1=0;//timeout: t1==tmax
+		unsigned long tmax=200000;//3380us@10nF->49900 clock periods -> reset at startup -> *4 ok (guess)
 		unsigned long toff=0;
-		unsigned long toff_max=5;
+		unsigned long toff_reset=1536;//1128<t<1917
+		unsigned long toff_max=1917;//130us@10nF->1917 clock periods (guess)
 		std::function<void(bool)> sendRST=[](bool b){};
+		std::function<void(bool)> sendnWRST=[](bool b){};
 		
 		bool KICK=false;
 		bool EN=true;
 		bool PWR=false;
-		bool nRST=false;
-		
-		void changeOutput(){
-			this->nRST=((this->t2==0)&&(this->PWR&&(this->toff==0))&&this->EN);
-			this->sendRST(!this->nRST);//720us
-		}
 	
 };
 

@@ -77,6 +77,21 @@ class Keyboard{
 			if ((!this->S_in)&&this->S_in_low<22){
 				this->S_in_low++;
 			}
+			if (this->DTMF_step>0||this->DTMF_queue.size()!=0){
+				this->DTMF_step++;
+				if (!(bool)(this->phone_status&0x10)){
+					this->phone_status|=0x10;
+					this->sendStatus();
+				}
+				if (this->DTMF_step>=((this->DTMF_queue.front()==12)?600:89)){
+					this->DTMF_step=0;
+					this->DTMF_queue.pop();
+				}
+			}
+			else if ((bool)(this->phone_status&0x10)){
+				this->phone_status&=~0x10;
+				this->sendStatus();
+			}
 		}
 		void KeyboardChangeIn(keyboard_message* kb_m){
 			if (kb_m->focus){
@@ -192,8 +207,9 @@ class Keyboard{
 				if(this->S_in_low>=22){
 					printf("Keyboard reset !!!!!!!!!!!!!!!!!!!!!!!!!\n");
 					/////////////////////////////////////////////////reset?
-					this->SBUF_out_queue.push(0xBC);
-					this->SBUF_out_queue.push(0xE1);
+					this->phone_status|=0x80;
+					this->sendStatus();
+					this->phone_status&=~0x80;
 				}
 				this->S_in_low=0;
 			}
@@ -209,6 +225,8 @@ class Keyboard{
 		unsigned char SBUF_in=0;
 		unsigned char SBUF_out=0;
 		std::queue<unsigned char> SBUF_out_queue;
+		unsigned short DTMF_step=0;
+		std::queue<unsigned char> DTMF_queue;
 		std::function<void(bool)> sendSerial=[](bool b){};
 		bool command_part=false;
 		unsigned char cmd_p1;
@@ -243,34 +261,36 @@ class Keyboard{
 					case 0x01:
 						if((this->phone_status&0x48)!=0x08){
 							this->phone_status=(this->phone_status&(~0x48))|0x08;
-							sendStatus();
+							this->sendStatus();
 						}
 						printf("phone line connected\n");
 						break;
 					case 0x03:
 						if((this->phone_status&0x48)!=0x40){
 							this->phone_status=(this->phone_status&(~0x48))|0x40;
-							sendStatus();
+							this->sendStatus();
 						}
 						printf("phone line disconnected\n");
 						break;
 					case 0x05:printf("speaker activated\n");break;
 					case 0x07:printf("speaker deactivated\n");break;
+					case 0x09:printf("kb cmd 0x09 ????\n");break;
+					case 0x0B:printf("kb cmd 0x0B ????\n");break;
 					case 0x11:
 						if (!(bool)(this->phone_status&0x40)){
 							this->phone_status=this->phone_status|0x40;
-							sendStatus();
+							this->sendStatus();
 						}
 						printf("microphone activated\n");
 						break;
 					case 0x13:
 						if ((bool)(this->phone_status&0x40)){
 							this->phone_status=this->phone_status&(~0x40);
-							sendStatus();
+							this->sendStatus();
 						}
 						printf("microphone deactivated\n");
 						break;
-					case 0x17:sendStatus();break;
+					case 0x17:this->sendStatus();break;
 					
 					case 0x21:printf("power off speaker led\n");break;
 					case 0x23:printf("power off on/off led\n");break;
@@ -282,6 +302,10 @@ class Keyboard{
 					case 0x43:printf("set speaker volume 2\n");break;
 					case 0x45:printf("set speaker volume 3\n");break;
 					case 0x47:printf("set speaker volume 4\n");break;
+					case 0x49:printf("set ringtone volume 1\n");break;
+					case 0x4B:printf("set ringtone volume 2\n");break;
+					case 0x4D:printf("set ringtone volume 3\n");break;
+					case 0x4F:printf("set ringtone volume 4\n");break;
 					
 					case 0x81:printf("set ringtone 1\n");break;
 					case 0x83:printf("set ringtone 2\n");break;
@@ -295,8 +319,10 @@ class Keyboard{
 				}
 			}
 			else if (!(bool)(this->cmd_p2&0xE0)){//tonalités
-				const char tone[16]={'0','1','2','3','4','5','6','7','8','9','A','B','C','D','*','#'};
+				const char tone[16]={'0','1','2','3','4','5','6','7','8','9','?','?','-','?','*','#'};
 				printf("DTMF tone %c\n",tone[(this->cmd_p2>>1)&0x0F]);
+				DTMF_queue.push((this->cmd_p2>>1)&0x0F);
+				
 				/////////////////////////////
 			}
 			else{

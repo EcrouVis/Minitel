@@ -145,7 +145,7 @@ De potentielles adresses (en recherchant la séquence 0xC2 0x95 - CLR P1.5 dans 
 ---------- Sauts indirects ----------
 JMP @A+DPTR
 
-ROM partie 2 adresse 0x6792 (juste pourquoi ne pas utiliser JMP @A+DPTR ???):
+ROM partie 2 adresse 0x6792:
 F_JMP:
   RL A
   MOV R0, A
@@ -160,12 +160,16 @@ Les fonctions qui utilisent ce type de saut sont:
 -p1: 0x9A5A, 0xB04B, 0xB0B6
 -p2: 0x675D, 0x6792
 
-Une implémentation qui pourrai complexifier le code comme ci-dessous n'as pas encore été trouvée:
+Il existe aussi dans la rom une suite d'instruction de ce type qui ignore la fin d'exécution de la fonction appelante:
 POP X
 …
 POP Y
 …
 RET
+
+On trouve aussi du code qui vient réinitialiser la stack:
+MOV SP, X
+
 
 
 

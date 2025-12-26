@@ -48,10 +48,10 @@ class NotificationServer{
 	private:
 		imgui_notification* notification_list=NULL;
 		const char* notification_message_list[5]={
-			"BIP!!!",
+			"<Buzzer>",
+			"Redémarrage du minitel",
 			"Suspension de l'émulation",
 			"Reprise de l'émulation",
-			"Redémarrage du minitel",
 			"Appuyez sur F1 pour faire apparaitre le menu"
 		};
 		
