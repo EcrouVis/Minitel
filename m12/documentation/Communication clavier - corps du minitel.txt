@@ -126,13 +126,15 @@ Transfert de numérotation téléphone (microcontrôleur -> clavier):
 	0x1D tonalité *
 	0x1F tonalité #
 
+	tonalité pendant 75ms puis pause de 75ms? (minimum 50ms et 50ms - https://people.ece.ubc.ca/edc/4550.fall2017/lec2.pdf)
+
 Status du téléphone (clavier -> microcontrôleur):
 	o1: xxxxy1y0
 	o2: abcdefg1
 
 	o2:
 	a: reset?
-	b: ligne occupée ou non utilisée? (1 tout le temps sauf quand il n'y a que le haut parleur ou le micro est désactivé / se met à 1 quand un autre appareil tente d'utiliser la ligne)
+	b: ligne occupée ou non utilisée? (1 tout le temps sauf quand il n'y a que le haut parleur ou quand le micro est désactivé / se met à 1 quand un autre appareil tente d'utiliser la ligne)
 	c: numérotation FV (fréquence vocale)/!DC (décimal)
 	d: numérotation en cours? (appui sur une touche seulement: 1 sur une durée de 148ms sauf 0x19 avant de retourner à zéro)
 	e: courant dans la ligne téléphonique?
@@ -150,8 +152,8 @@ Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
 	0x03 ouvrir le circuit de la ligne téléphonique (supposition / très probable)
 	0x05 activer le haut parleur
 	0x07 désactiver le haut parleur
-	0x09 répondeur minitel hors service ou avec sonnerie - pas de réponse du clavier (à étudier plus en détail)
-	0x0B répondeur minitel enregistreur ou simple sans sonnerie - pas de réponse du clavier (à étudier plus en détail)
+	0x09 activer la sonnerie (répondeur minitel hors service ou avec sonnerie - pas de réponse du clavier)
+	0x0B désactiver la sonnerie (répondeur minitel enregistreur ou simple sans sonnerie - pas de réponse du clavier)
 	0x11 activer le micro du combiné
 	0x13 désactiver le micro du combiné
 	0x17 demande de status téléphone
@@ -166,7 +168,7 @@ Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
 	0x49, 0x4B, 0x4D, 0x4F volume de la sonnerie (0x49 volume minimal / 0x4F volume maximal)
 
 	0x81, 0x83, 0x85, 0x87, 0x89 sélection de la sonnerie (0x81 sonnerie 1 / 0x89 sonnerie 5)
-	0x8B déclencher la sonnerie
+	0x8B déclencher la sonnerie (prioritaire par rapport à 0x0B)
 
 Remise à zéro du téléphone? (microcontrôleur -> clavier):
 	Mise à 0 prolongée du signal (temps supérieur à un message en UART soit >~33.3ms)

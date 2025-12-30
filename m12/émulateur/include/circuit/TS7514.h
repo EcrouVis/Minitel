@@ -3,6 +3,9 @@
 #include <functional>
 #include <cstdio>
 #include <atomic>
+#include "PhoneLine.h"
+
+
 class TS7514{
 	public:
 		
@@ -56,6 +59,10 @@ class TS7514{
 		
 		void subscribeCMD(std::function<void(unsigned char)> f){
 			this->sendCMD=f;
+		}
+		
+		void updatePhoneLineState(){
+			
 		}
 		
 	private:

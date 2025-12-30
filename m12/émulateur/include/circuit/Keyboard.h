@@ -187,6 +187,15 @@ class Keyboard{
 						case 66:queueKey(0x65,keyPressed);break;//F8=Répétition
 						case 67:queueKey(0x63,keyPressed);break;//F9=Envoi
 						
+						case 53:
+							if (keyPressed){
+								this->phone_status|=0x40;
+							}
+							else{
+								this->phone_status&=~0x40;
+							}
+							sendStatus();
+							break;
 					}
 				}
 			}
@@ -274,8 +283,8 @@ class Keyboard{
 						break;
 					case 0x05:printf("speaker activated\n");break;
 					case 0x07:printf("speaker deactivated\n");break;
-					case 0x09:printf("kb cmd 0x09 ????\n");break;
-					case 0x0B:printf("kb cmd 0x0B ????\n");break;
+					case 0x09:printf("ringtone activated\n");break;
+					case 0x0B:printf("ringtone deactivated\n");break;
 					case 0x11:
 						if (!(bool)(this->phone_status&0x40)){
 							this->phone_status=this->phone_status|0x40;
