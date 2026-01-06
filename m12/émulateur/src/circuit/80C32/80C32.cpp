@@ -205,6 +205,7 @@ void m80C32::setSFRByte(unsigned char address, unsigned char d){
 			break;
 		case this->P3:
 			this->PX_out[3]=d;
+			d=d&this->P3_out_alt;
 			if ((this->getSFRByteIn(address)^d)!=0){
 				this->sendP3(d);
 			}
@@ -214,7 +215,7 @@ void m80C32::setSFRByte(unsigned char address, unsigned char d){
 			this->PCONChange();
 			break;
 		case this->SBUF:
-			printf("SBUF %02X\n",d);
+			//printf("SBUF %02X\n",d);
 			this->SBUF_out=d;
 			this->TEN=true;
 			break;
@@ -670,15 +671,16 @@ void m80C32::updateRX(){
 				break;
 			default:
 				this->RX_bit++;
-				if ((this->RX_bit&0x03)!=2) break;
+				if ((this->RX_bit&0x03)!=3) break;
 				sbuf=this->SBUF_in;
 				sbuf=sbuf>>1;
 				sbuf|=this->getBitIn(this->RxD)?0x80:0x00;
 				this->SBUF_in=sbuf;
 				break;
-			case 38://stop bit/RB8 (n_bit+1)*4-3: 10*4-2
+			case 38://stop bit/RB8
 				rb8=this->getBitIn(this->RxD);
-				this->setSFRByte(this->SBUF,this->SBUF_in);
+				this->SFR[this->SBUF&0x7F].store(this->SBUF_in,std::memory_order_relaxed);//avoid overwrite SBUF_out+trigger transmit
+				//this->setSFRByte(this->SBUF,this->SBUF_in);
 				this->setBitIn(this->RB8,rb8);
 				rb8=rb8||(!this->getBitIn(this->SM2));
 				this->setBitIn(this->RI,rb8);
@@ -686,21 +688,25 @@ void m80C32::updateRX(){
 		}
 	}
 	else{//mode 0
-		if (this->RX_bit>=8) this->RX_bit=0;
-		bool rx_state=this->getBitIn(this->TxD);
-		if (this->RX_state&&(!rx_state)){
-			this->RX_bit++;
-			unsigned char sbuf=this->SBUF_in;
-			sbuf=sbuf>>1;
-			sbuf|=this->getBitIn(this->RxD)?0x80:0x00;
-			this->SBUF_in=sbuf;
-			if (this->RX_bit>=8){
-				this->setSFRByte(this->SBUF,this->SBUF_in);
+		if (this->getBitIn(this->RI)&&this->RX_bit==0) return;
+		
+		if (this->RX_bit>=31) this->RX_bit=0;
+		
+		if ((this->RX_bit&0x03)==1){
+			this->P3_out_alt&=~0x02;
+			this->sendP3(this->PX_out[3]&this->P3_out_alt);
+		}
+		else if ((this->RX_bit&0x03)==3){
+			this->SBUF_in=(this->SBUF_in>>1)|(this->getBitIn(this->RxD)?0x80:0x00);
+			this->P3_out_alt|=0x02;
+			this->sendP3(this->PX_out[3]&this->P3_out_alt);
+			if ((this->RX_bit&0xFC)>=0x1C){
+				this->SFR[this->SBUF&0x7F].store(this->SBUF_in,std::memory_order_relaxed);//avoid overwrite SBUF_out+trigger transmit
+				//this->setSFRByte(this->SBUF,this->SBUF_in);
 				this->setBitIn(this->RI,true);
 				this->RX_bit=0;
 			}
 		}
-		this->RX_state=rx_state;
 	}
 }
 void m80C32::updateTX(){
@@ -714,22 +720,28 @@ void m80C32::updateTX(){
 				case 0:
 					//(*this->sendTxD)(false);
 					//this->sendTxD(false);
-					this->sendP3(this->PX_out[3]&0xFD);
+					this->P3_out_alt&=~0x02;
+					this->sendP3(this->PX_out[3]&this->P3_out_alt);
 					break;
 				case 10:
 					//(*this->sendTxD)((bool)(this->PX_out[3]&0x02));
 					//this->sendTxD((bool)(this->PX_out[3]&0x02));
-					this->sendP3(this->PX_out[3]);
+					this->P3_out_alt|=0x02;
+					this->sendP3(this->PX_out[3]&this->P3_out_alt);
 					break;
 				case 9:
 					//(*this->sendTxD)(this->getBitIn(this->TB8)&&((bool)(this->PX_out[3]&0x02)));
 					//this->sendTxD(this->getBitIn(this->TB8)&&((bool)(this->PX_out[3]&0x02)));
-					this->sendP3(this->PX_out[3]&(this->getBitIn(this->TB8)?0xFF:0xFD));
+					if (this->getBitIn(this->TB8)) this->P3_out_alt|=0x02;
+					else this->P3_out_alt&=~0x02;
+					this->sendP3(this->PX_out[3]&this->P3_out_alt);
 					break;
 				default:
 					//(*this->sendTxD)(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
 					//this->sendTxD(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
-					this->sendP3(this->PX_out[3]&(((bool)(this->SBUF_out&0x01))?0xFF:0xFD));
+					if ((bool)(this->SBUF_out&0x01)) this->P3_out_alt|=0x02;
+					else this->P3_out_alt&=~0x02;
+					this->sendP3(this->PX_out[3]&this->P3_out_alt);
 					this->SBUF_out=this->SBUF_out>>1;
 			}
 		}
@@ -742,17 +754,21 @@ void m80C32::updateTX(){
 				case 0:
 					//(*this->sendTxD)(false);
 					//this->sendTxD(false);
-					this->sendP3(this->PX_out[3]&0xFD);
+					this->P3_out_alt&=~0x02;
+					this->sendP3(this->PX_out[3]&this->P3_out_alt);
 					break;
 				case 9:
 					//(*this->sendTxD)((bool)(this->PX_out[3]&0x02));
 					//this->sendTxD((bool)(this->PX_out[3]&0x02));
-					this->sendP3(this->PX_out[3]);
+					this->P3_out_alt|=0x02;
+					this->sendP3(this->PX_out[3]&this->P3_out_alt);
 					break;
 				default:
 					//(*this->sendTxD)(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
 					//this->sendTxD(((bool)(this->SBUF_out&0x01))&&((bool)(this->PX_out[3]&0x02)));
-					this->sendP3(this->PX_out[3]&(((bool)(this->SBUF_out&0x01))?0xFF:0xFD));
+					if ((bool)(this->SBUF_out&0x01)) this->P3_out_alt|=0x02;
+					else this->P3_out_alt&=~0x02;
+					this->sendP3(this->PX_out[3]&this->P3_out_alt);
 					this->SBUF_out=this->SBUF_out>>1;
 			}
 		}
@@ -766,13 +782,17 @@ void m80C32::updateTX(){
 			//this->setBitIn(this->RxD,(bool)(this->SBUF_out&0x01));
 			//(*this->sendTxD)((bool)(this->PX_out[3]&0x02));
 			//this->sendTxD((bool)(this->PX_out[3]&0x02));
-			this->sendP3(this->PX_out[3]&(((bool)(this->SBUF_out&0x01))?0xFF:0xFE));
+			if ((bool)(this->SBUF_out&0x01)) this->P3_out_alt|=0x01;
+			else this->P3_out_alt&=~0x01;
+			this->P3_out_alt&=~0x02;
+			this->sendP3(this->PX_out[3]&this->P3_out_alt);
 			this->SBUF_out=this->SBUF_out>>1;
 		}
 		else if ((this->TX_bit&0x03)==2){
 			//(*this->sendTxD)(false);
 			//this->sendTxD(false);
-			this->sendP3(this->getSFRByteIn(this->P3)&0xFD);
+			this->P3_out_alt|=0x02;
+			this->sendP3(this->getSFRByteIn(this->P3)&this->P3_out_alt);
 		}
 	}
 	this->TX_bit++;
@@ -784,7 +804,8 @@ void m80C32::updateTX(){
 	(*this->sendRxD)((bool)(this->PX_out[3]&0x01));*/
 	//this->sendTxD((bool)(this->PX_out[3]&0x02));
 	//this->sendRxD((bool)(this->PX_out[3]&0x01));
-	this->sendP3(this->PX_out[3]);
+	this->P3_out_alt|=0x03;
+	this->sendP3(this->PX_out[3]&this->P3_out_alt);
 }
 
 /*
@@ -1456,9 +1477,9 @@ void m80C32::MOVX_I(unsigned char a){//8 bit address
 	this->sendP0(a);
 	this->sendALE(true);
 	this->sendALE(false);
-	this->sendP3((this->PX_out[3]&0x3F)|0x40);
+	this->sendP3(((this->PX_out[3]&0x3F)|0x40)&this->P3_out_alt);
 	this->setSFRByte(this->ACC,this->getSFRByteIn(this->P0));
-	this->sendP3(this->PX_out[3]);
+	this->sendP3(this->PX_out[3]&this->P3_out_alt);
 	this->sendP0(this->PX_out[0]);
 	//printf("in ic 8bits %02X %02X\n",a,this->getSFRByteIn(this->ACC));
 }
@@ -1468,9 +1489,9 @@ void m80C32::MOVX_I(unsigned short a){//16 bit address
 	this->sendP2((unsigned char)(a>>8));
 	this->sendALE(true);
 	this->sendALE(false);
-	this->sendP3((this->PX_out[3]&0x3F)|0x40);
+	this->sendP3(((this->PX_out[3]&0x3F)|0x40)&this->P3_out_alt);
 	this->setSFRByte(this->ACC,this->getSFRByteIn(this->P0));
-	this->sendP3(this->PX_out[3]);
+	this->sendP3(this->PX_out[3]&this->P3_out_alt);
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
 	//printf("in ic 16bits %02X %02X\n",a,this->getSFRByteIn(this->ACC));
@@ -1482,8 +1503,8 @@ void m80C32::MOVX_O(unsigned char a){//8 bit address
 	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP0(this->getSFRByteIn(this->ACC));
-	this->sendP3((this->PX_out[3]&0x3F)|0x80);
-	this->sendP3(this->PX_out[3]);
+	this->sendP3(((this->PX_out[3]&0x3F)|0x80)&this->P3_out_alt);
+	this->sendP3(this->PX_out[3]&this->P3_out_alt);
 	this->sendP0(this->PX_out[0]);
 }
 void m80C32::MOVX_O(unsigned short a){//16 bit address
@@ -1494,8 +1515,8 @@ void m80C32::MOVX_O(unsigned short a){//16 bit address
 	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP0(this->getSFRByteIn(this->ACC));
-	this->sendP3((this->PX_out[3]&0x3F)|0x80);
-	this->sendP3(this->PX_out[3]);
+	this->sendP3(((this->PX_out[3]&0x3F)|0x80)&this->P3_out_alt);
+	this->sendP3(this->PX_out[3]&this->P3_out_alt);
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
 }

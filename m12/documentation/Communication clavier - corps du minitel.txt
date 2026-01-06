@@ -47,7 +47,7 @@ Transfert d'état des touches (clavier -> microcontrôleur):
    appel annuaire 0x45
 
 		ç 0x51
-
+		à 0x53
 	   on/off 0x55
 		P 0x57
 		L 0x59
@@ -103,8 +103,6 @@ Transfert d'état des touches (clavier -> microcontrôleur):
 		S 0xBD
 		Q 0xBF
 
-		à 0xD3
-
 Transfert de numérotation téléphone (microcontrôleur -> clavier):
 	o1: xxxx0000
 	o2: abcdefg1
@@ -138,7 +136,7 @@ Status du téléphone (clavier -> microcontrôleur):
 	c: numérotation FV (fréquence vocale)/!DC (décimal)
 	d: numérotation en cours? (appui sur une touche seulement: 1 sur une durée de 148ms sauf 0x19 avant de retourner à zéro)
 	e: courant dans la ligne téléphonique?
-	f: ?
+	f: signal d'appel entrant (1 pendant 1.75s puis 0 pendant 6.75s répété autant de fois qu'il y a de sonneries soit 5 fois sur ma ligne téléphonique / d'après mes recherches, historiquement cela était 2s et 4s https://www.pedagogie.ac-aix-marseille.fr/upload/docs/application/pdf/2012-07/rtc.pdf) - la sonnerie s'enclenche quand le signal passe à 1 et est arrêtée si la fin de la sonnerie à été atteinte ou bien le signal est repassé à 0
 	g: combiné téléphonique décroché?
 
 	Le status est envoyé quand il y a un changement de status ou quand il est demandé

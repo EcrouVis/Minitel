@@ -3,6 +3,7 @@
 #include <functional>
 #include <queue>
 #include <cstdio>
+#include <cmath>
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
 struct keyboard_message{
@@ -150,7 +151,7 @@ class Keyboard{
 						case 8:queueKey(0x71,keyPressed);break;//è
 						case 9:queueKey(0x61,keyPressed);break;//_=!
 						case 10:queueKey(0x51,keyPressed);break;//ç
-						case 11:queueKey(0xD3,keyPressed);break;//à
+						case 11:queueKey(0x53,keyPressed);break;//à
 						case 12:queueKey(0x37,keyPressed);break;//)
 						
 						case 43:queueKey(0x1F,keyPressed);break;//*
@@ -349,4 +350,5 @@ class Keyboard{
 			}*/
 		}
 };
+
 #endif

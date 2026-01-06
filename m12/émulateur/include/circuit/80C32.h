@@ -44,6 +44,7 @@ class m80C32{
 		std::atomic_uint last_memory_operation;
 		std::atomic_uchar SFR[SFR_SIZE];
 		unsigned char PX_out[4];
+		unsigned char P3_out_alt=0xFF;
 		unsigned char SBUF_out;
 		unsigned char SBUF_in;//buffer
 		bool TEN=false;

@@ -11,6 +11,7 @@
 #include "circuit/Keyboard.h"
 #include "circuit/clocks.h"
 #include "circuit/L6720.h"
+#include "circuit/DIN5Interface.h"
 
 #include <chrono>
 
@@ -305,6 +306,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	Keyboard kb;
 	Clocks CLKs;
 	L6720 l6720;
+	SimpleDIN5Interface din5(8080);
 	
 	//construct circuit
 	auto Dbus=[&cpld,&eram,&video,&uc,&iol](unsigned char d){//in ic
@@ -408,7 +410,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	unsigned char P3_uc=0xFF;
 	unsigned char P3_ext=0xFF;
 	//P3 unfinished
-	auto P3bus=[&cpld,&eram,&video,&uc,&iol,&l6720,&wt,&P3_uc,&P3_ext](unsigned char d){
+	auto P3bus=[&cpld,&eram,&video,&uc,&iol,&l6720,&wt,&din5,&P3_uc,&P3_ext](unsigned char d){
 		P3_uc=d;
 		d&=P3_ext;
 		bool nRD=(bool)(d&0x80);
@@ -424,11 +426,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		l6720.PTSChangeIn((bool)(d&(1<<4)));
 		uc.PXChangeIn(3,d);
 		wt.ENChangeIn((bool)(d&0x04));
-		/*static bool txd=false;
-		if (txd!=((bool)(d&0x02))){
-			txd=!txd;
-			printf("DIN TxD %i\n",(int)txd);
-		}*/
+		//bypass L6720 -> buffer
+		din5.RxChangeIn((bool)(d&0x02));
 	};
 	uc.subscribeP3(P3bus);
 	
@@ -438,6 +437,14 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		uc.PXChangeIn(3,P3_uc&P3_ext);
 	};
 	l6720.subscribePTE(PTEwire);
+	
+	//bypass L6720 -> buffer
+	auto DIN5Txwire=[&uc,&P3_uc,&P3_ext](bool b){
+		if (b) P3_ext|=1;
+		else P3_ext&=~(1);
+		uc.PXChangeIn(3,P3_uc&P3_ext);
+	};
+	din5.subscribeTx(DIN5Txwire);
 	
 	auto mRxDwire=[&uc,&P3_uc,&P3_ext](bool b){
 		P3_ext&=~(1<<3);
@@ -580,7 +587,11 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 			printf("From CPLD RTC %s 0x%02X\n",type[a&0x0F],d);
 		}
 		else if (a==0x50){
-			printf("From Keyboard 0x%02X\n",d);
+			static unsigned char data=0xFF;
+			if (d!=data){//deduplicate reading of the same data
+				data=d;
+				printf("From Keyboard 0x%02X\n",d);
+			}
 			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		else if (a==0x51){
@@ -738,7 +749,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 				{
 					keyboard_message* kbm=(keyboard_message*)ms.p;
 					kb.KeyboardChangeIn(kbm);
-					fprintf(stdout,"keyboard state update\n");
+					//fprintf(stdout,"keyboard state update\n");
 					delete kbm;
 					break;
 				}
@@ -759,9 +770,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		kb.CLKTickIn();
 	};
 	CLKs.subscribe600Hz(CLKTick600);
-	
-	
-	
+	auto CLKTick9600=[&din5](){
+		din5.CLKTickIn();
+	};
+	CLKs.subscribe9600Hz(CLKTick9600);
 	
 	CLKs.start();
 	
