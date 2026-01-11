@@ -26,6 +26,7 @@
 #include "Parameters.h"
 #include "io/video.h"
 #include "circuit/Keyboard.h"
+#include "circuit/clocks.h"
 
 void imguiInit(GLFWwindow* window){
 	IMGUI_CHECKVERSION();
@@ -201,13 +202,15 @@ class M12Window{
 						case NOTIFICATION_YELLOW:this->Notification.notify((const char*)ms.p,true,ImVec4(1,1,0,1));break;
 						case NOTIFICATION_CYAN:this->Notification.notify((const char*)ms.p,true,ImVec4(0,1,1,1));break;
 						case NOTIFICATION_PURPLE:this->Notification.notify((const char*)ms.p,true,ImVec4(1,0,1,1));break;
+						case CRT_POWER_ON:break;
+						case CRT_POWER_OFF:break;
 						default:
 							fprintf(stdout,"unknown cmd %i\n",ms.cmd);
 							break;
 					}
 					glfwPostEmptyEvent();
 				}
-				if (this->PARAMETERS.imgui.idle) glfwWaitEventsTimeout(0.2);
+				if (this->PARAMETERS.imgui.idle) glfwWaitEventsTimeout(0.05);
 				else glfwPollEvents();
 				int width, height;
 				glfwGetFramebufferSize(this->window, &width, &height);

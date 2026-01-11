@@ -275,7 +275,7 @@ void mainMenuWindow(Parameters* p_params,Mailbox* p_mb_circuit){
 		static ma_uint32 captureDeviceCount;
 		
 		ImGui::SeparatorText("Clavier");
-		ImGui::Text("L'émulateur est conçu pour un clavier AZERTY avec un pavé numérique.");
+		ImGui::Text("L'émulateur est conçu pour un clavier AZERTY avec un pavé numérique (de préférence) et verr num désactivé.");
 		ImGui::Text("Les touches différentes du minitel sont les suivantes:");
 		ImGui::Text("_=!");
 		ImGui::Text("Echap=Esc");
@@ -292,21 +292,16 @@ void mainMenuWindow(Parameters* p_params,Mailbox* p_mb_circuit){
 		ImGui::Text("F7=Suite");
 		ImGui::Text("F8=Répétition");
 		ImGui::Text("F9=Envoi");
-		ImGui::Text("Pavé numérique *=*");
-		ImGui::Text("Pavé numérique /=#");
+		ImGui::Text("Pavé numérique * ou *=*");
+		ImGui::Text("Pavé numérique / ou ù=#");
 		
 		ImGui::SeparatorText("Prise péri-informatique");
-		static int peri_io=0;
-		ImGui::RadioButton("Débranchée##peri", &peri_io, 0);
-		ImGui::SameLine();
-		ImGui::RadioButton("Socket UNIX##peri", &peri_io, 1);
-		if (peri_io==1){
-			ImGui::Indent();
-			ImGui::Text("Socket:");
-			ImGui::Unindent();
-		}
+		ImGui::Text("Websocket: ws://127.0.0.1:8080/[baudrate]");
+		ImGui::Text("Baudrate acceptés: 300, 1200 (défaut), 4800, 9600");
+		ImGui::TextDisabled("La vitesse doit être changé côté minitel avec les commandes fnct+P.");
+		ImGui::TextDisabled("Le websocket n'accepte qu'une connexion à la fois.");
+		ImGui::TextDisabled("Le signal PT est considéré comme toujours actif (réseau minitel non implémenté).");
 		ImGui::Checkbox("Afficher les notifications##peri",&(p_params->io.peri.notify_state));
-		ImGui::TextDisabled("Le signal PT est considéré comme toujours actif.");
 		
 		ImGui::SeparatorText("Modem");
 		static int modem_io=0;
@@ -475,7 +470,7 @@ void mainMenuWindow(Parameters* p_params,Mailbox* p_mb_circuit){
 			ImGui::Checkbox("Afficher le contenu de la RAM vidéo",&(p_params->debug.vram.show));
 		}
 		ImGui::Text("Statistiques");
-		ImGui::Text("%.1f FPS",ImGui::GetIO().Framerate);
+		ImGui::Text("Rafraichissement d'image: %.1f FPS",ImGui::GetIO().Framerate);
 	}
 	if (ImGui::CollapsingHeader("À propos")){
 		ImGui::Text(p_params->info.title);
@@ -488,7 +483,7 @@ void mainMenuWindow(Parameters* p_params,Mailbox* p_mb_circuit){
 				ImGui::TreePop();
 			}
 		}
-		ImGui::Text("Font:");
+		ImGui::Text("Polices de caractères:");
 		for (License l:p_params->info.font_licenses){
 			if (ImGui::TreeNode(l.title)){
 				ImGui::TextWrapped(l.content);

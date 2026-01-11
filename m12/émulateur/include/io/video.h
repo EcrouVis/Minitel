@@ -59,7 +59,7 @@ class TS9347Renderer{
 		}
 		void setIC(TS9347wVRAM* p_ic){ this->p_ic=p_ic;}
 		void render(){
-			unsigned char bgr2rgb_3bit[8]={0,4,2,6,1,5,3,7};
+			//unsigned char bgr2rgb_3bit[8]={0,4,2,6,1,5,3,7};
 			int width, height;
 			glfwGetFramebufferSize(this->window, &width, &height);
 			GLfloat mvp[4][4]={{0,0,0,0},
@@ -182,8 +182,8 @@ class TS9347Renderer{
 								}
 							}
 							
-							unsigned char fg_color=bgr2rgb_3bit[(A&0x70)>>4];
-							unsigned char bg_color=bgr2rgb_3bit[A&0x07];
+							unsigned char fg_color=(A&0x70)>>4;//bgr2rgb_3bit[(A&0x70)>>4];
+							unsigned char bg_color=A&0x07;//bgr2rgb_3bit[A&0x07];
 							bool dbl_h=(bool)(B&2);
 							bool dbl_w=false;
 							bool conceal=(bool)(B&4);
@@ -266,8 +266,8 @@ class TS9347Renderer{
 							
 							char_pos[0]=i;
 							
-							unsigned char fg_color=bgr2rgb_3bit[(dor>>((A&1)<<2))&0x07];//D
-							unsigned char bg_color=bgr2rgb_3bit[mat&0x07];
+							unsigned char fg_color=(dor>>((A&1)<<2))&0x07;//bgr2rgb_3bit[(dor>>((A&1)<<2))&0x07];//D
+							unsigned char bg_color=mat&0x07;//bgr2rgb_3bit[mat&0x07];
 							if ((bool)(A&0x08)){//N
 								unsigned char tmp=fg_color;
 								fg_color=bg_color;
@@ -343,8 +343,8 @@ class TS9347Renderer{
 									}
 								}
 								
-								unsigned char fg_color=bgr2rgb_3bit[(A&0x70)>>4];
-								unsigned char bg_color=bgr2rgb_3bit[A&0x07];
+								unsigned char fg_color=(A&0x70)>>4;//bgr2rgb_3bit[(A&0x70)>>4];
+								unsigned char bg_color=A&0x07;//bgr2rgb_3bit[A&0x07];
 								bool dbl_h=(bool)(B&2);
 								bool dbl_w=false;
 								bool conceal=(bool)(B&4);
@@ -435,8 +435,8 @@ class TS9347Renderer{
 								
 								char_pos[0]=i;
 								
-								unsigned char fg_color=bgr2rgb_3bit[(dor>>((A&1)<<2))&0x07];//D
-								unsigned char bg_color=bgr2rgb_3bit[mat&0x07];
+								unsigned char fg_color=(dor>>((A&1)<<2))&0x07;//bgr2rgb_3bit[(dor>>((A&1)<<2))&0x07];//D
+								unsigned char bg_color=mat&0x07;//bgr2rgb_3bit[mat&0x07];
 								if ((bool)(A&0x08)){//N
 									unsigned char tmp=fg_color;
 									fg_color=bg_color;

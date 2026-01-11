@@ -91,6 +91,38 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n\
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n\
 THE SOFTWARE.";
 
+const char* lib_ixwebsocket="IXWebSocket";
+const char* license_ixwebsocket="\
+Copyright (c) 2018 Machine Zone, Inc. All rights reserved.\n\
+\n\
+Redistribution and use in source and binary forms, with or without\n\
+modification, are permitted provided that the following conditions are\n\
+met:\n\
+\n\
+1. Redistributions of source code must retain the above copyright\n\
+   notice, this list of conditions and the following disclaimer.\n\
+\n\
+2. Redistributions in binary form must reproduce the above copyright\n\
+   notice, this list of conditions and the following disclaimer in the\n\
+   documentation and/or other materials provided with the\n\
+   distribution.\n\
+\n\
+3. Neither the name of the copyright holder nor the names of its\n\
+   contributors may be used to endorse or promote products derived\n\
+   from this software without specific prior written permission.\n\
+\n\
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS\n\
+\"AS IS\" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT\n\
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR\n\
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT\n\
+HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,\n\
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT\n\
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,\n\
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY\n\
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n\
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\n\
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.";
+
 const char* font_proggyclean="ProggyClean";
 const char* license_proggyclean="\
 MIT License\n\

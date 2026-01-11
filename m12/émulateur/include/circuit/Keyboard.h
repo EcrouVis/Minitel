@@ -164,6 +164,7 @@ class Keyboard{
 						
 						case 42:queueKey(0xAF,keyPressed);break;//shift
 						case 58:queueKey(0x9F,keyPressed);break;//min/maj
+						case 285:
 						case 29:queueKey(0x9D,keyPressed);break;//ctrl
 						
 						case 56:queueKey(0xA3,keyPressed);break;//alt=fnct
@@ -187,16 +188,6 @@ class Keyboard{
 						case 65:queueKey(0x73,keyPressed);break;//F7=Suite
 						case 66:queueKey(0x65,keyPressed);break;//F8=Répétition
 						case 67:queueKey(0x63,keyPressed);break;//F9=Envoi
-						
-						case 53:
-							if (keyPressed){
-								this->phone_status|=0x40;
-							}
-							else{
-								this->phone_status&=~0x40;
-							}
-							sendStatus();
-							break;
 					}
 				}
 			}
@@ -241,6 +232,7 @@ class Keyboard{
 		bool command_part=false;
 		unsigned char cmd_p1;
 		unsigned char cmd_p2;
+		
 		void commandReceived(){
 			if (this->command_part){
 				if ((this->SBUF_in&1)==1){
@@ -286,6 +278,7 @@ class Keyboard{
 					case 0x07:printf("speaker deactivated\n");break;
 					case 0x09:printf("ringtone activated\n");break;
 					case 0x0B:printf("ringtone deactivated\n");break;
+					
 					case 0x11:
 						if (!(bool)(this->phone_status&0x40)){
 							this->phone_status=this->phone_status|0x40;
@@ -300,12 +293,15 @@ class Keyboard{
 						}
 						printf("microphone deactivated\n");
 						break;
+						
 					case 0x17:this->sendStatus();break;
 					
 					case 0x21:printf("power off speaker led\n");break;
 					case 0x23:printf("power off on/off led\n");break;
+					
 					case 0x29:printf("power on speaker led\n");break;
 					case 0x2B:printf("power on on/off led\n");break;
+					
 					case 0x33:printf("blink on/off led\n");break;
 					
 					case 0x41:printf("set speaker volume 1\n");break;

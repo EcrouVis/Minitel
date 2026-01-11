@@ -96,11 +96,12 @@ struct P_Debug{
 struct P_Info{
 	const char* title="Minitel 12 Philips";
 	const char* programmer="";
-	License lib_licenses[4]={
+	License lib_licenses[5]={
 		{lib_imgui,license_imgui},
 		{lib_glfw,license_glfw},
 		{lib_miniaudio,license_miniaudio},
-		{lib_cjson,license_cjson}
+		{lib_cjson,license_cjson},
+		{lib_ixwebsocket,license_ixwebsocket}
 	};
 	License font_licenses[1]={
 		{font_proggyclean,license_proggyclean}

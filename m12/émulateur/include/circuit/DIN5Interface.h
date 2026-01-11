@@ -10,6 +10,8 @@
 
 class SimpleDIN5Interface{
 	public:
+		std::function<void(int)> debug_connection_change=[](int s){};
+		
 		SimpleDIN5Interface(int port): 
 			DIN5server(port, "127.0.0.1", ix::WebSocketServer::kDefaultTcpBacklog, 1)
 		{
@@ -19,25 +21,25 @@ class SimpleDIN5Interface{
 
 				if (msg->type == ix::WebSocketMessageType::Open)
 				{
-					if (!msg->openInfo.uri.compare("/75")){
-						this->RxTx_div.store(128,std::memory_order_release);
-						printf("Serial connected => 75 Baud\n");
-					}
-					else if (!msg->openInfo.uri.compare("/300")){
+					if (!msg->openInfo.uri.compare("/300")){
 						this->RxTx_div.store(32,std::memory_order_release);
 						printf("Serial connected => 300 Baud\n");
+						this->debug_connection_change(300);
 					}
 					else if (!msg->openInfo.uri.compare("/4800")){
 						this->RxTx_div.store(2,std::memory_order_release);
 						printf("Serial connected => 4800 Baud\n");
+						this->debug_connection_change(4800);
 					}
 					else if (!msg->openInfo.uri.compare("/9600")){
 						this->RxTx_div.store(1,std::memory_order_release);
 						printf("Serial connected => 9600 Baud\n");
+						this->debug_connection_change(9600);
 					}
 					else{//1200 by default
 						this->RxTx_div.store(8,std::memory_order_release);
 						printf("Serial connected => 1200 Baud (default)\n");
+						this->debug_connection_change(1200);
 					}
 					{
 						std::lock_guard<std::mutex> lock(this->p_mutex);
@@ -51,6 +53,7 @@ class SimpleDIN5Interface{
 						std::lock_guard<std::mutex> lock(this->p_mutex);
 						this->pWebSocket=NULL;
 					}
+					this->debug_connection_change(0);
 				}
 				else if (msg->type == ix::WebSocketMessageType::Message)
 				{

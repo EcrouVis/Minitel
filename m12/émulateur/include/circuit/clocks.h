@@ -1,6 +1,8 @@
 #ifndef CLOCKS_H
 #define CLOCKS_H
 #include <functional>
+#include <chrono>
+#include <thread>
 class Clocks{
 	public:
 		void setPauseCondition(std::function<bool()> f){
@@ -25,8 +27,21 @@ class Clocks{
 			this->checkMailbox=f;
 		}
 		void start(){
+			this->last_t=std::chrono::steady_clock::now();
 			while (!this->stop()){
-				this->checkMailbox();
+				
+				this->div_mailbox++;
+				if (this->div_mailbox>=this->div_mailbox_max){//reduce time in mailbox + sleep -> 900Hz polling
+					this->div_mailbox=0;
+					
+					std::chrono::time_point<std::chrono::steady_clock> new_t=std::chrono::steady_clock::now();
+					this->dt+=std::chrono::duration<double>(new_t-this->last_t)-this->dt_sleep_max;
+					if (this->dt<this->dt_sleep_max) std::this_thread::sleep_for(this->dt_sleep_max-this->dt);
+					this->last_t=new_t;
+					
+					this->checkMailbox();
+				}
+				
 				if (!this->pause()){
 					this->CLK14745600();
 					
@@ -64,5 +79,11 @@ class Clocks{
 		unsigned long div9600_4800_max=2;
 		unsigned long div4800_600=0;
 		unsigned long div4800_600_max=8;
+		
+		unsigned long div_mailbox=0;
+		unsigned long div_mailbox_max=16384;
+		std::chrono::time_point<std::chrono::steady_clock> last_t;
+		std::chrono::duration<double> dt;
+		const std::chrono::duration<double> dt_sleep_max=std::chrono::microseconds(1000000/900);
 };
 #endif

@@ -24,6 +24,8 @@ const int EROM=2;
 const int UC=12;
 const int VC=13;
 const int CPLD=14;
+const int CRT_POWER_ON=16;
+const int CRT_POWER_OFF=17;
 
 const int DUMP_ERAM=1;
 const int LOAD_ERAM=1<<1;

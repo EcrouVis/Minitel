@@ -457,12 +457,23 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	bool kb_s1=false;
 	bool kb_s2=false;
 	
-	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2](unsigned char d){
+	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2,p_mb_video](unsigned char d){
 		modem.MCnBCChangeIn((bool)(d&1));
 		modem.MODEMnDTMFChangeIn((bool)(d&2));
-		wt.KICKChangeIn((bool)(d&8));
 		kb_s1=(bool)(d&4);
 		kb.serialChangeIn(kb_s1&&kb_s2);
+		wt.KICKChangeIn((bool)(d&8));
+		//0x10->close modem circuit
+		//0x20->crt power
+		static bool crt_power=false;
+		if (crt_power!=((bool)(d&0x20))){
+			crt_power=(bool)(d&0x20);
+			thread_message ms_p_notif;
+			ms_p_notif.cmd=crt_power?CRT_POWER_ON:CRT_POWER_OFF;
+			p_mb_video->send(&ms_p_notif);
+		}
+		//0x40->din power - not used in the emulator
+		//0x80->minitel memory access? - not wired
 	};
 	cpld.subscribePIO(CPLDIObus);
 	
@@ -571,7 +582,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 			
 			thread_message ms_p_notif;
 			ms_p_notif.cmd=NOTIFICATION_RED;
-			char* buffer=(char*)malloc(51*sizeof(char));
+			char* buffer=(char*)calloc(51,sizeof(char));
 			snprintf(buffer,50,"E/S inconnue (0x%02X)<=0x%02X",a,d);
 			ms_p_notif.p=(void*)buffer;
 			p_mb_video->send(&ms_p_notif);
@@ -608,7 +619,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 			
 			thread_message ms_p_notif;
 			ms_p_notif.cmd=NOTIFICATION_RED;
-			char* buffer=(char*)malloc(51*sizeof(char));
+			char* buffer=(char*)calloc(51,sizeof(char));
 			snprintf(buffer,50,"E/S inconnue (0x%02X)=>0x%02X",a,d);
 			ms_p_notif.p=(void*)buffer;
 			p_mb_video->send(&ms_p_notif);
@@ -633,6 +644,25 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 			p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}*/
 		//print_m12_alu_instruction(&uc);
+	};
+	
+	din5.debug_connection_change=[p_mb_video](int s){
+		if (s<=0){
+			thread_message ms_p_notif;
+			ms_p_notif.cmd=NOTIFICATION_CYAN;
+			char* buffer=(char*)calloc(30,sizeof(char));
+			snprintf(buffer,29,"Liaison série déconnectée");
+			ms_p_notif.p=(void*)buffer;
+			p_mb_video->send(&ms_p_notif);
+		}
+		else{
+			thread_message ms_p_notif;
+			ms_p_notif.cmd=NOTIFICATION_CYAN;
+			char* buffer=(char*)calloc(37,sizeof(char));
+			snprintf(buffer,36,"Liaison série connectée @%iBaud",s);
+			ms_p_notif.p=(void*)buffer;
+			p_mb_video->send(&ms_p_notif);
+		}
 	};
 	
 	thread_message ms_p_ram;
