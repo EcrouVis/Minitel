@@ -103,8 +103,9 @@ struct P_Info{
 		{lib_cjson,license_cjson},
 		{lib_ixwebsocket,license_ixwebsocket}
 	};
-	License font_licenses[1]={
-		{font_proggyclean,license_proggyclean}
+	License font_licenses[2]={
+		{font_proggyclean,license_proggyclean},
+		{font_fontawesome,license_fontawesome}
 	};
 };
 struct Parameters{

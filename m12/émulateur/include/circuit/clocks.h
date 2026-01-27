@@ -30,17 +30,20 @@ class Clocks{
 			this->last_t=std::chrono::steady_clock::now();
 			while (!this->stop()){
 				
-				this->div_mailbox++;
-				if (this->div_mailbox>=this->div_mailbox_max){//reduce time in mailbox + sleep -> 900Hz polling
-					this->div_mailbox=0;
+				this->div_sync++;
+				if (this->div_sync>=this->div_sync_max){
+					this->div_sync=0;
 					
 					std::chrono::time_point<std::chrono::steady_clock> new_t=std::chrono::steady_clock::now();
 					this->dt+=std::chrono::duration<double>(new_t-this->last_t)-this->dt_sleep_max;
+					//while (std::chrono::steady_clock::now()-new_t<this->dt_sleep_max-this->dt);
 					if (this->dt<this->dt_sleep_max) std::this_thread::sleep_for(this->dt_sleep_max-this->dt);
 					this->last_t=new_t;
 					
-					this->checkMailbox();
+					
 				}
+				
+				this->checkMailbox();
 				
 				if (!this->pause()){
 					this->CLK14745600();
@@ -80,10 +83,10 @@ class Clocks{
 		unsigned long div4800_600=0;
 		unsigned long div4800_600_max=8;
 		
-		unsigned long div_mailbox=0;
-		unsigned long div_mailbox_max=16384;
+		unsigned long div_sync=0;
+		unsigned long div_sync_max=524288;
 		std::chrono::time_point<std::chrono::steady_clock> last_t;
 		std::chrono::duration<double> dt;
-		const std::chrono::duration<double> dt_sleep_max=std::chrono::microseconds(1000000/900);
+		const std::chrono::duration<double> dt_sleep_max=std::chrono::microseconds(32000000/900);
 };
 #endif

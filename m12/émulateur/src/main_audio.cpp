@@ -6,17 +6,16 @@
 
 #include <cstdio>
 #include <atomic>
+#include <thread>
 
-struct mBuzzer{
-	std::atomic<float>* p_buzzer_amplitude=NULL;
-	ma_waveform wf;
-	ma_lpf lpf;
-	ma_pcm_rb rb;
+#include "io/TS7514Audio.h"
+
+struct audioContext{
+	WLOConf* wloc;
+	TS7514* modem=NULL;
 };
 
 void phone_line_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){
-	
-	mBuzzer* p_buzzer=(mBuzzer*)pDevice->pUserData;
 	
 	//audio to speaker
 	/*ma_uint32 framesToWrite=frameCount;
@@ -33,14 +32,10 @@ void phone_line_data_callback(ma_device* pDevice, void* pOutput, const void* pIn
 
 void audio_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){
 	//buzzer
-	mBuzzer* p_buzzer=(mBuzzer*)pDevice->pUserData;
-	if (p_buzzer->p_buzzer_amplitude!=NULL){
-		float A=p_buzzer->p_buzzer_amplitude->load(std::memory_order_acquire);
-		ma_waveform_set_amplitude(&(p_buzzer->wf),A);
-		ma_waveform_read_pcm_frames(&(p_buzzer->wf), pOutput, frameCount,NULL);
-		ma_lpf_process_pcm_frames(&(p_buzzer->lpf), pOutput, pOutput, frameCount);
+	audioContext* AC=(audioContext*)pDevice->pUserData;
+	if (AC->modem!=NULL){
+		TS7514_WLO(AC->modem, AC->wloc, pOutput, frameCount);
 	}
-	
 	//audio from phone line
 	/*ma_uint32 framesToRead=frameCount;
 	void* pMappedBuffer;
@@ -54,20 +49,15 @@ void audio_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, 
 
 void thread_audio_main(Mailbox* p_mb_circuit,Mailbox* p_mb_audio,GlobalState* p_gState){
 	
-	ma_waveform waveform;
-	ma_waveform_config wf_config = ma_waveform_config_init(ma_format_f32,1,48000,ma_waveform_type_square,0,2982);
-	ma_waveform_init(&wf_config, &waveform);
+	WLOConf wloc;
 	
-	ma_lpf lpf;
-	ma_lpf_config lpf_config = ma_lpf_config_init(ma_format_f32, 1, 48000, 3000, 1);
-	ma_lpf_init(&lpf_config, NULL, &lpf);
+	TS7514_WLO_init(&wloc,48000);
 	
-	mBuzzer buzzer;
-	buzzer.wf=waveform;
-	buzzer.lpf=lpf;
+	audioContext AC;
+	AC.wloc=&wloc;
 	
-	ma_pcm_rb_init(ma_format_f32, 1, 512, NULL, NULL, &(buzzer.rb));
-	ma_pcm_rb_set_sample_rate(&(buzzer.rb), 48000);
+	/*ma_pcm_rb_init(ma_format_f32, 1, 512, NULL, NULL, &(buzzer.rb));
+	ma_pcm_rb_set_sample_rate(&(buzzer.rb), 48000);*/
 	
 	ma_result result;
     ma_context context;
@@ -118,7 +108,7 @@ void thread_audio_main(Mailbox* p_mb_circuit,Mailbox* p_mb_audio,GlobalState* p_
     deviceConfig.dataCallback      = phone_line_data_callback;
 	deviceConfig.periodSizeInFrames = 64;//audio glitch if >100 frames ???
 	deviceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
-    deviceConfig.pUserData         = &buzzer;
+    deviceConfig.pUserData         = NULL;
 
     if (ma_device_init(NULL, &deviceConfig, &device) != MA_SUCCESS) {
         printf("Failed to open playback device.\n");
@@ -145,7 +135,7 @@ void thread_audio_main(Mailbox* p_mb_circuit,Mailbox* p_mb_audio,GlobalState* p_
     device2Config.dataCallback      = audio_data_callback;
 	device2Config.periodSizeInFrames = 64;
 	device2Config.wasapi.usage = ma_wasapi_usage_pro_audio;
-    device2Config.pUserData         = &buzzer;
+    device2Config.pUserData         = &AC;
 
     if (ma_device_init(NULL, &device2Config, &device2) != MA_SUCCESS) {
         printf("Failed to open playback device.\n");
@@ -164,13 +154,17 @@ void thread_audio_main(Mailbox* p_mb_circuit,Mailbox* p_mb_audio,GlobalState* p_
 		thread_message ms;
 		while (p_mb_audio->receive(&ms)){
 			switch(ms.cmd){
-				case BUZZER_AMPLITUDE:
-					buzzer.p_buzzer_amplitude=(std::atomic<float>*)ms.p;
+				case MODEM:
+					AC.modem=(TS7514*)ms.p;
 					break;
 					
 			}
 		}
+		
+		std::this_thread::yield();
 	}
+	
+	TS7514_WLO_uninit(&wloc);
 	
 	ma_device_uninit(&device);
 }

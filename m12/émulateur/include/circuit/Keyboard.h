@@ -4,6 +4,7 @@
 #include <queue>
 #include <cstdio>
 #include <cmath>
+#include <atomic>
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
 struct keyboard_message{
@@ -12,8 +13,18 @@ struct keyboard_message{
 	int action;
 	int mods;
 };
+const unsigned char LED_OFF=0;
+const unsigned char LED_ON=1;
+const unsigned char LED_BLINK=2;
+
+
 class Keyboard{
 	public:
+		std::atomic_uchar LED_POWER=LED_OFF;
+		std::atomic_uchar LED_SPEAKER=LED_OFF;
+		
+		std::atomic_ushort SPEAKER_STATE=0;//0: speaker on /1: play ringtone (set to 0 by audio/this thread) /2&3: speaker volume /4&5: ringtone volume /6: restart ringtone (set to 0 by audio thread) /8&9&10: ringtone
+	
 		void CLKTickIn(){
 			if (this->S_out_step>0||this->SBUF_out_queue.size()!=0){
 				switch (this->S_out_step){
@@ -233,6 +244,8 @@ class Keyboard{
 		unsigned char cmd_p1;
 		unsigned char cmd_p2;
 		
+		bool ringtone_activated=false;
+		
 		void commandReceived(){
 			if (this->command_part){
 				if ((this->SBUF_in&1)==1){
@@ -274,10 +287,22 @@ class Keyboard{
 						}
 						printf("phone line disconnected\n");
 						break;
-					case 0x05:printf("speaker activated\n");break;
-					case 0x07:printf("speaker deactivated\n");break;
-					case 0x09:printf("ringtone activated\n");break;
-					case 0x0B:printf("ringtone deactivated\n");break;
+					case 0x05:
+						printf("speaker activated\n");
+						this->SPEAKER_STATE.fetch_or(0x0001,std::memory_order_release);
+						break;
+					case 0x07:
+						printf("speaker deactivated\n");
+						this->SPEAKER_STATE.fetch_and(~0x0001,std::memory_order_release);
+						break;
+					case 0x09:
+						printf("ringtone activated\n");
+						this->ringtone_activated=true;
+						break;
+					case 0x0B:
+						printf("ringtone deactivated\n");
+						this->ringtone_activated=false;
+						break;
 					
 					case 0x11:
 						if (!(bool)(this->phone_status&0x40)){
@@ -296,29 +321,71 @@ class Keyboard{
 						
 					case 0x17:this->sendStatus();break;
 					
-					case 0x21:printf("power off speaker led\n");break;
-					case 0x23:printf("power off on/off led\n");break;
+					case 0x21:this->LED_SPEAKER.store(LED_OFF,std::memory_order_release);printf("power off speaker led\n");break;
+					case 0x23:this->LED_POWER.store(LED_OFF,std::memory_order_release);printf("power off on/off led\n");break;
 					
-					case 0x29:printf("power on speaker led\n");break;
-					case 0x2B:printf("power on on/off led\n");break;
+					case 0x29:this->LED_SPEAKER.store(LED_ON,std::memory_order_release);printf("power on speaker led\n");break;
+					case 0x2B:this->LED_POWER.store(LED_ON,std::memory_order_release);printf("power on on/off led\n");break;
 					
-					case 0x33:printf("blink on/off led\n");break;
+					case 0x33:this->LED_POWER.store(LED_BLINK,std::memory_order_release);printf("blink on/off led\n");break;
 					
-					case 0x41:printf("set speaker volume 1\n");break;
-					case 0x43:printf("set speaker volume 2\n");break;
-					case 0x45:printf("set speaker volume 3\n");break;
-					case 0x47:printf("set speaker volume 4\n");break;
-					case 0x49:printf("set ringtone volume 1\n");break;
-					case 0x4B:printf("set ringtone volume 2\n");break;
-					case 0x4D:printf("set ringtone volume 3\n");break;
-					case 0x4F:printf("set ringtone volume 4\n");break;
+					case 0x41:
+						printf("set speaker volume 1\n");
+						this->SPEAKER_STATE.fetch_and(~0x000C,std::memory_order_release);
+						break;
+					case 0x43:
+						printf("set speaker volume 2\n");
+						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x000C))|0x0004,std::memory_order_release);
+						break;
+					case 0x45:
+						printf("set speaker volume 3\n");
+						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x000C))|0x0008,std::memory_order_release);
+						break;
+					case 0x47:
+						printf("set speaker volume 4\n");
+						this->SPEAKER_STATE.fetch_or(0x000C,std::memory_order_release);
+						break;
+					case 0x49:
+						printf("set ringtone volume 1\n");
+						this->SPEAKER_STATE.fetch_and(~0x0030,std::memory_order_release);
+						break;
+					case 0x4B:
+						printf("set ringtone volume 2\n");
+						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0030))|0x0010,std::memory_order_release);
+						break;
+					case 0x4D:
+						printf("set ringtone volume 3\n");
+						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0030))|0x0020,std::memory_order_release);
+						break;
+					case 0x4F:
+						printf("set ringtone volume 4\n");
+						this->SPEAKER_STATE.fetch_or(0x0030,std::memory_order_release);
+						break;
 					
-					case 0x81:printf("set ringtone 1\n");break;
-					case 0x83:printf("set ringtone 2\n");break;
-					case 0x85:printf("set ringtone 3\n");break;
-					case 0x87:printf("set ringtone 4\n");break;
-					case 0x89:printf("set ringtone 5\n");break;
-					case 0x8B:printf("play ringtone\n");break;
+					case 0x81:
+						printf("set ringtone 1\n");
+						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(0<<8),std::memory_order_release);
+						break;
+					case 0x83:
+						printf("set ringtone 2\n");
+						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(1<<8),std::memory_order_release);
+						break;
+					case 0x85:
+						printf("set ringtone 3\n");
+						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(2<<8),std::memory_order_release);
+						break;
+					case 0x87:
+						printf("set ringtone 4\n");
+						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(3<<8),std::memory_order_release);
+						break;
+					case 0x89:
+						printf("set ringtone 5\n");
+						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(4<<8),std::memory_order_release);
+						break;
+					case 0x8B:
+						printf("play ringtone\n");
+						this->SPEAKER_STATE.fetch_or(0x0042,std::memory_order_release);
+						break;
 					
 					default:printf("Unknown cmd %02X%02X\n",this->cmd_p1,this->cmd_p2);break;
 					

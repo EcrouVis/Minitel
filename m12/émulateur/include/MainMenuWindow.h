@@ -479,14 +479,14 @@ void mainMenuWindow(Parameters* p_params,Mailbox* p_mb_circuit){
 		ImGui::Text("Bibliothèques:");
 		for (License l:p_params->info.lib_licenses){
 			if (ImGui::TreeNode(l.title)){
-				ImGui::TextWrapped(l.content);
+				ImGui::TextUnformatted(l.content);
 				ImGui::TreePop();
 			}
 		}
 		ImGui::Text("Polices de caractères:");
 		for (License l:p_params->info.font_licenses){
 			if (ImGui::TreeNode(l.title)){
-				ImGui::TextWrapped(l.content);
+				ImGui::TextUnformatted(l.content);
 				ImGui::TreePop();
 			}
 		}

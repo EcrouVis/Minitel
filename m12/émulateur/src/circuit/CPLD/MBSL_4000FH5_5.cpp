@@ -42,7 +42,7 @@ void MBSL_4000FH5_5::DChangeIn(unsigned char d){
 	this->data=d;
 }
 void MBSL_4000FH5_5::ALEChangeIn(bool b){
-	if (b&&!this->ALE){
+	if ((!b)&&this->ALE){
 		this->address=this->data;
 		this->sendAL(this->data);
 	}
@@ -355,6 +355,6 @@ void MBSL_4000FH5_5::CPLD2UC(){
 			this->sendD(this->IO);
 			break;
 		default:
-			break;//4 minutes CRT off
+			break;
 	}
 }

@@ -23,7 +23,6 @@
 
 #include <iostream>
 
-#include <chrono>
 #include <thread>
 
 class stackMonitor{
@@ -480,6 +479,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	auto RSTwire=[&uc,p_mb_video](bool b){
 		uc.ResetChangeIn(b);
 		static bool bp=true;
+		printf("rst wire %i\n",b);
 		if (!b&&bp){
 			thread_message ms_p_notif;
 			ms_p_notif.cmd=NOTIFICATION_REBOOT;
@@ -630,7 +630,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	uc.debug_signal_alu_before_exec=[p_gState,&uc,&sm](){
 		if (p_gState->stepByStep.load(std::memory_order_relaxed)) print_m12_alu_instruction(&uc);
 		sm.updateState();
-		unsigned long addr=((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16);
+		//unsigned long addr=((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16);
 		/*if (addr==0x10068||addr==0x1C5CC){
 			p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}*/
@@ -690,10 +690,15 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	ms_p_cpld.cmd=CPLD;
 	p_mb_video->send(&ms_p_cpld);
 	
-	thread_message ms_p_buzzer;
-	ms_p_buzzer.p=(void*)&(modem.buzzer_amplitude);
-	ms_p_buzzer.cmd=BUZZER_AMPLITUDE;
-	p_mb_audio->send(&ms_p_buzzer);
+	thread_message ms_p_kb;
+	ms_p_kb.p=(void*)&kb;
+	ms_p_kb.cmd=KEYBOARD;
+	p_mb_video->send(&ms_p_kb);
+	
+	thread_message ms_p_modem;
+	ms_p_modem.p=(void*)&modem;
+	ms_p_modem.cmd=MODEM;
+	p_mb_audio->send(&ms_p_modem);
 	
 	/*thread_message ms_p_notif;
 	ms_p_notif.cmd=NOTIFICATION_BUZZER;
@@ -706,7 +711,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	};
 	CLKs.setStopCondition(stopC);
 	auto pauseC=[p_gState,&next_step,&uc](){
-		bool p=(!p_gState->minitelOn.load(std::memory_order_relaxed))||(p_gState->stepByStep.load(std::memory_order_relaxed)&&(uc.exec_instruction||!next_step));
+		bool p=(p_gState->stepByStep.load(std::memory_order_relaxed)&&(uc.exec_instruction||!next_step));
 		if (uc.exec_instruction){
 			uc.exec_instruction=false;
 			next_step=false;
@@ -790,9 +795,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		}
 	};
 	CLKs.subscribeMailbox(checkMB);
-	auto CLKTick14745600=[&uc,&wt](){
+	auto CLKTick14745600=[&uc,&wt,&p_gState](){
 		uc.CLKTickIn();
-		wt.incrementTimer();
+		wt.incrementTimer();//(!p_gState->minitelOn.load(std::memory_order_relaxed))||
+		wt.PWRChangeIn(p_gState->minitelOn.load(std::memory_order_relaxed));
 	};
 	CLKs.subscribe14745600Hz(CLKTick14745600);
 	auto CLKTick600=[&kb,&cpld](){

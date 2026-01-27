@@ -26,6 +26,7 @@ const int VC=13;
 const int CPLD=14;
 const int CRT_POWER_ON=16;
 const int CRT_POWER_OFF=17;
+const int KEYBOARD=18;
 
 const int DUMP_ERAM=1;
 const int LOAD_ERAM=1<<1;
@@ -37,7 +38,7 @@ const int KEYBOARD_STATE_UPDATE=1<<6;
 /*
 const int RESTART;*/
 
-const int BUZZER_AMPLITUDE=1;
+const int MODEM=1;
 
 class Mailbox{
 	public:

@@ -411,7 +411,7 @@ void m80C32::Reset(){
 	//reset pins
 	/*(*this->sendALE)(true);
 	(*this->sendnPSEN)(true);*/
-	this->sendALE(false);
+	this->sendALE(true);
 	this->sendnPSEN(true);
 	
 	//reset ALU
@@ -896,11 +896,11 @@ void m80C32::nextCycleALU(){
 		//printf("PC 0x%04X %02X\n",this->PC,this->PX_out[3]);
 		this->sendP0((unsigned char)(this->PC&0xFF));
 		this->sendP2((unsigned char)(this->PC>>8));
-		this->sendALE(true);
 		this->sendALE(false);
 		this->sendnPSEN(false);
 		this->instruction[this->i_part_n]=this->getSFRByteIn(this->P0);
 		this->sendnPSEN(true);
+		this->sendALE(true);
 		this->sendP0(this->PX_out[0]);
 		this->sendP2(this->PX_out[2]);
 		this->PC++;
@@ -1464,22 +1464,22 @@ void m80C32::MOVC(unsigned short ptr){
 	ptr+=this->getSFRByteIn(this->ACC);
 	this->sendP0((unsigned char)(ptr&0xFF));
 	this->sendP2((unsigned char)(ptr>>8));
-	this->sendALE(true);
 	this->sendALE(false);
 	this->sendnPSEN(false);
 	this->setSFRByte(this->ACC,this->getSFRByteIn(this->P0));
 	this->sendnPSEN(true);
+	this->sendALE(true);
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
 }
 void m80C32::MOVX_I(unsigned char a){//8 bit address
 	//printf("MOVXin 8bit\n");
 	this->sendP0(a);
-	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP3(((this->PX_out[3]&0x3F)|0x40)&this->P3_out_alt);
 	this->setSFRByte(this->ACC,this->getSFRByteIn(this->P0));
 	this->sendP3(this->PX_out[3]&this->P3_out_alt);
+	this->sendALE(true);
 	this->sendP0(this->PX_out[0]);
 	//printf("in ic 8bits %02X %02X\n",a,this->getSFRByteIn(this->ACC));
 }
@@ -1487,11 +1487,11 @@ void m80C32::MOVX_I(unsigned short a){//16 bit address
 	//printf("MOVXin 16bit\n");
 	this->sendP0((unsigned char)(a&0xFF));
 	this->sendP2((unsigned char)(a>>8));
-	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP3(((this->PX_out[3]&0x3F)|0x40)&this->P3_out_alt);
 	this->setSFRByte(this->ACC,this->getSFRByteIn(this->P0));
 	this->sendP3(this->PX_out[3]&this->P3_out_alt);
+	this->sendALE(true);
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
 	//printf("in ic 16bits %02X %02X\n",a,this->getSFRByteIn(this->ACC));
@@ -1500,11 +1500,11 @@ void m80C32::MOVX_O(unsigned char a){//8 bit address
 	//printf("MOVXout 8bit\n");
 	//printf("out ic 8bits %02X %02X\n",a,this->getSFRByteIn(this->ACC));
 	this->sendP0(a);
-	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP0(this->getSFRByteIn(this->ACC));
 	this->sendP3(((this->PX_out[3]&0x3F)|0x80)&this->P3_out_alt);
 	this->sendP3(this->PX_out[3]&this->P3_out_alt);
+	this->sendALE(true);
 	this->sendP0(this->PX_out[0]);
 }
 void m80C32::MOVX_O(unsigned short a){//16 bit address
@@ -1512,11 +1512,11 @@ void m80C32::MOVX_O(unsigned short a){//16 bit address
 	//printf("out ic 16bits %04X %02X\n",a,this->getSFRByteIn(this->ACC));
 	this->sendP0((unsigned char)(a&0xFF));
 	this->sendP2((unsigned char)(a>>8));
-	this->sendALE(true);
 	this->sendALE(false);
 	this->sendP0(this->getSFRByteIn(this->ACC));
 	this->sendP3(((this->PX_out[3]&0x3F)|0x80)&this->P3_out_alt);
 	this->sendP3(this->PX_out[3]&this->P3_out_alt);
+	this->sendALE(true);
 	this->sendP0(this->PX_out[0]);
 	this->sendP2(this->PX_out[2]);
 }

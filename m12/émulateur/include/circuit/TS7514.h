@@ -4,21 +4,38 @@
 #include <cstdio>
 #include <atomic>
 #include "PhoneLine.h"
+#define MA_NO_DECODING
+#define MA_NO_ENCODING
+#include "miniaudio/miniaudio.h"
 
 
 class TS7514{
 	public:
 		
-		std::atomic<float> buzzer_amplitude=0.;
+		//std::atomic<float> buzzer_amplitude=0.;
+		std::atomic_uchar REG[8];
+		enum Constants{
+			RPROG=0,
+			RDTMF=1,
+			RATE=2,
+			RWLO=3,
+			RPTF=4,
+			RPRF=5,
+			RHDL=6,
+			RPRX=7
+		};
+		
+		
+		
 		
 		void Reset(){
-			this->REG[this->RPROG]=0;
-			this->REG[this->RATE]=0x0F;
-			this->REG[this->RWLO]=0x0C;
-			this->REG[this->RPRF]=0x01;
-			this->REG[this->RPTF]=0x00;
-			this->REG[this->RHDL]=0x00;
-			this->REG[this->RPRX]=0x00;
+			this->REG[this->RPROG].store(0,std::memory_order_release);
+			this->REG[this->RATE].store(0x0F,std::memory_order_release);
+			this->REG[this->RWLO].store(0x0C,std::memory_order_release);
+			this->REG[this->RPRF].store(0x01,std::memory_order_release);
+			this->REG[this->RPTF].store(0x00,std::memory_order_release);
+			this->REG[this->RHDL].store(0x00,std::memory_order_release);
+			this->REG[this->RPRX].store(0x00,std::memory_order_release);
 		}
 		
 		void MODEMnDTMFChangeIn(bool b){
@@ -66,17 +83,6 @@ class TS7514{
 		}
 		
 	private:
-		enum Constants{
-			RPROG=0,
-			RDTMF=1,
-			RATE=2,
-			RWLO=3,
-			RPTF=4,
-			RPRF=5,
-			RHDL=6,
-			RPRX=7
-		};
-		unsigned char REG[8];
 		unsigned char input_register;
 		bool MODEMnDTMF=true;
 		bool MCnBC=true;
@@ -92,7 +98,7 @@ class TS7514{
 		
 		void writeRegister(){
 			unsigned char n_reg=(this->input_register>>4)&0x07;
-			unsigned char rprog=this->REG[this->RPROG];
+			unsigned char rprog=this->REG[this->RPROG].load(std::memory_order_relaxed);
 			bool cmd_ok=(((rprog&3)==0)||
 						 ((rprog&3)==3)||
 						 ((rprog&3)==1&&(this->input_register&0x80)==0)||
@@ -100,8 +106,8 @@ class TS7514{
 						)&&((rprog&0x08)==0);
 			printf("TS7514 CMD 0x%02X ",this->input_register);
 			if (n_reg==this->RPROG||cmd_ok){
-				this->REG[n_reg]=this->input_register&0x0F;
-				switch(n_reg){
+				this->REG[n_reg].store(this->input_register&0x0F,std::memory_order_release);
+				/*switch(n_reg){
 					case 3:
 						if ((this->REG[3]&0x0C)==0x08){
 							const float Amp[4]={1.,0.316227766,0.1,0.0316227766};
@@ -111,7 +117,7 @@ class TS7514{
 							buzzer_amplitude.store(0.,std::memory_order_release);
 						}
 						break;
-				}
+				}*/
 				printf("OK\n");
 				this->sendCMD(this->input_register);
 				

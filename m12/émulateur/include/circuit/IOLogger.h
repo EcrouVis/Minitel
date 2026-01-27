@@ -9,7 +9,7 @@ class IOLogger{
 			this->data=d;
 		}
 		void ALEChangeIn(bool b){
-			if (b&&!this->ALE){
+			if ((!b)&&this->ALE){
 				this->address=this->data;
 			}
 			this->ALE=b;

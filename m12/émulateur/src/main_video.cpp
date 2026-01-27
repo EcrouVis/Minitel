@@ -20,11 +20,12 @@
 #include <vector>
 
 #include "license.h"
-#include "NotificationServer.h"
+#include "io/NotificationServer.h"
 #include "MemoryWindow.h"
 #include "MainMenuWindow.h"
 #include "Parameters.h"
-#include "io/video.h"
+#include "io/TS9347Renderer.h"
+#include "io/KeyboardIndicator.h"
 #include "circuit/Keyboard.h"
 #include "circuit/clocks.h"
 
@@ -41,7 +42,7 @@ void imguiInit(GLFWwindow* window){
 	ImGui::PushFont(font);*/
 }
 
-void imguiStartFrame(Parameters* p_params,NotificationServer* p_notif,Mailbox* p_mb_circuit){
+void imguiStartFrame(Parameters* p_params, NotificationServer* p_notif, Mailbox* p_mb_circuit, KeyboardIndicator* kb_ind){
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
@@ -57,6 +58,7 @@ void imguiStartFrame(Parameters* p_params,NotificationServer* p_notif,Mailbox* p
 	if (p_params->debug.sfr.show) sfr80C32Window(&p_params->debug.sfr);
 	if (p_params->debug.vram.mem!=NULL&&p_params->debug.vram.show) memoryWindow("VRAM",&p_params->debug.vram);
 	p_notif->notification_window();
+	kb_ind->window();
 	//if (use_font) ImGui::PopFont();
 }
 
@@ -111,10 +113,12 @@ class M12Window{
 			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
 			
 			this->p_TS9347out=new TS9347Renderer(this->window,&(this->PARAMETERS));
+			this->keyboardIndicator=new KeyboardIndicator();
 		}
 		~M12Window(){
 			imguiShutdown();
 			delete this->p_TS9347out;
+			delete this->keyboardIndicator;
 			glfwDestroyWindow(this->window);
 			glfwTerminate();
 			this->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
@@ -184,6 +188,9 @@ class M12Window{
 						case CPLD:
 							this->PARAMETERS.io.other.os_rtc=&((MBSL_4000FH5_5*)ms.p)->OS_RTC;
 							break;
+						case KEYBOARD:
+							this->keyboardIndicator->setKeyboard((Keyboard*)ms.p);
+							break;
 						case NOTIFICATION:
 							this->Notification.notify((const char*)ms.p,true);
 							//imgui_notify((const char*)ms.p,true);
@@ -217,7 +224,7 @@ class M12Window{
 				glClear(GL_COLOR_BUFFER_BIT);
 				glViewport(0,0,width,height);
 				
-				imguiStartFrame(&(this->PARAMETERS),&(this->Notification),this->p_mb_circuit);
+				imguiStartFrame(&(this->PARAMETERS),&(this->Notification),this->p_mb_circuit, this->keyboardIndicator);
 				
 				this->p_TS9347out->render();
 		 
@@ -231,6 +238,7 @@ class M12Window{
 		Parameters PARAMETERS;
 		NotificationServer Notification;
 		TS9347Renderer* p_TS9347out;
+		KeyboardIndicator* keyboardIndicator;
 		Mailbox* p_mb_circuit;
 		Mailbox* p_mb_video;
 		
