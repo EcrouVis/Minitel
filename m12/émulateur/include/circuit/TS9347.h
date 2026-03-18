@@ -32,7 +32,6 @@ class TS9347wVRAM{
 		std::atomic_uchar ROR=0;
 		
 		std::atomic_uchar VRAM[VRAM_SIZE];
-		void set(unsigned char* array);
 	private:
 		std::function<void(unsigned char)> sendD;
 		std::atomic_uint ADDR_BUF=0;

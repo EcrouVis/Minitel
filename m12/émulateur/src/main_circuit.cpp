@@ -2,7 +2,6 @@
 #include "circuit/80C32.h"
 #include "circuit/SRAM_64k.h"
 #include "circuit/ROM_256k.h"
-#include "circuit/IOLogger.h"
 #include "circuit/Latch.h"
 #include "circuit/TS7514.h"
 #include "circuit/TS9347.h"
@@ -12,6 +11,11 @@
 #include "circuit/clocks.h"
 #include "circuit/L6720.h"
 #include "circuit/DIN5Interface.h"
+
+#include "circuit/debug/IOLogger.h"
+#include "circuit/debug/dbg_80C32.h"
+
+#include "FileAccess.h"
 
 #include <chrono>
 
@@ -25,271 +29,7 @@
 
 #include <thread>
 
-class stackMonitor{
-	public:
-		const unsigned char UNDEFINED_DATA=0;
-		
-		const unsigned char ADDRESS_LOW=1;
-		const unsigned char ADDRESS_HIGH=2;
-		const unsigned char MASK_DATA_USAGE=0x0F;
-		
-		const unsigned char RETURN_ADDRESS=1<<4;
-		const unsigned char USER_DATA_WRITE=2<<4;
-		const unsigned char USER_DATA_PUSH=3<<4;
-		const unsigned char MASK_DATA_ORIGIN=0x70;
-		
-		const unsigned char OLD_DATA=0x80;
-		
-		std::function<void(void)> SPManualyModified=[](){};
-		std::function<void(void)> stackPOPed=[](){};
-		std::function<void(void)> stackPUSHed=[](){};
-		std::function<void(bool)> addressPOPed=[](bool high){};
-		std::function<void(void)> funcCalled=[](){};
-		std::function<void(bool,bool,bool)> funcReturned=[](bool ud,bool ind,bool old){};
-		std::function<void(void)> stackOverwrited=[](){};
-		stackMonitor(m80C32* uc){
-			this->uc=uc;
-			for (int i=0;i<256;i++){
-				this->mem[i]=this->UNDEFINED_DATA;
-			}
-		}
-		void updateState(){
-			unsigned char aw;
-			bool wm=this->isManualyWritingToRam(&aw);
-			bool pop=this->isPOPing();
-			if (pop){
-				unsigned char a=this->uc->getSFRByteIn(this->uc->SP);
-				unsigned char s=this->mem[a];
-				this->mem[a]|=this->OLD_DATA;
-				this->stackPOPed();
-				if ((s&this->MASK_DATA_ORIGIN)==this->RETURN_ADDRESS&&(s&this->OLD_DATA)==0) this->addressPOPed((s&this->MASK_DATA_USAGE)==this->ADDRESS_HIGH);
-			}
-			if (wm){
-				unsigned char s=this->mem[aw];
-				this->mem[aw]=this->USER_DATA_WRITE;
-				if (((s&this->MASK_DATA_ORIGIN)==this->USER_DATA_PUSH||(s&this->MASK_DATA_ORIGIN)==this->RETURN_ADDRESS)&&(s&this->OLD_DATA)==0) this->stackOverwrited();
-			}
-			bool push=this->isPUSHing();
-			if (push){
-				this->mem[this->uc->getSFRByteIn(this->uc->SP)+1]=this->USER_DATA_PUSH;
-				this->stackPUSHed();
-			}
-			
-			if (this->isCALLing()){
-				unsigned char a=this->uc->getSFRByteIn(this->uc->SP);
-				this->mem[a+1]=this->ADDRESS_LOW|this->RETURN_ADDRESS;
-				this->mem[a+2]=this->ADDRESS_HIGH|this->RETURN_ADDRESS;
-				this->funcCalled();
-				return;
-			}
-			if (this->isRETing()){
-				unsigned char a=this->uc->getSFRByteIn(this->uc->SP);
-				unsigned char al=this->mem[a-1];
-				unsigned char ah=this->mem[a];
-				this->mem[a-1]&=~this->MASK_DATA_USAGE;
-				this->mem[a-1]|=this->ADDRESS_LOW;
-				this->mem[a-1]|=this->OLD_DATA;
-				this->mem[a]&=~this->MASK_DATA_USAGE;
-				this->mem[a]|=this->ADDRESS_HIGH;
-				this->mem[a]|=this->OLD_DATA;
-				
-				bool ud=(al&this->MASK_DATA_ORIGIN)!=(ah&this->MASK_DATA_ORIGIN);
-				ud=ud||((al&this->MASK_DATA_USAGE)==this->ADDRESS_HIGH||(ah&this->MASK_DATA_USAGE)==this->ADDRESS_LOW);
-				bool old=(al&this->OLD_DATA)==this->OLD_DATA;
-				bool ind=(al&this->MASK_DATA_ORIGIN)!=this->RETURN_ADDRESS;
-				
-				this->funcReturned(ud,ind,old);
-				return;
-			}
-			if(this->isWritingToSP()){
-				this->SPManualyModified();
-				return;
-			}
-		}
-	private:
-		m80C32* uc;
-		unsigned char mem[256];
-		
-		bool isWritingToSP(){
-			unsigned char a=0x00;
-			switch (this->uc->instruction[0]){
-				case 0x05:
-				case 0x15:
-				case 0x42:
-				case 0x43:
-				case 0x52:
-				case 0x53:
-				case 0x62:
-				case 0x63:
-				case 0x75:
-				case 0x86:
-				case 0x87:
-				case 0x88:
-				case 0x89:
-				case 0x8A:
-				case 0x8B:
-				case 0x8C:
-				case 0x8D:
-				case 0x8E:
-				case 0x8F:
-				case 0xC5:
-				case 0xD0:
-				case 0xD5:
-				case 0xF5:a=this->uc->instruction[1];break;
-				case 0x85:a=this->uc->instruction[2];break;
-			}
-			return (a==this->uc->SP);
-		}
-		bool isPUSHing(){
-			return this->uc->instruction[0]==0xC0;
-		}
-		bool isPOPing(){
-			return this->uc->instruction[0]==0xD0;
-		}
-		bool isRETing(){
-			return this->uc->instruction[0]==0x22||this->uc->instruction[0]==0x32;
-		}
-		bool isCALLing(){
-			bool b=false;
-			switch(this->uc->instruction[0]){
-				case 0x11:
-				case 0x12:
-				case 0x31:
-				case 0x51:
-				case 0x71:
-				case 0x91:
-				case 0xB1:
-				case 0xD1:
-				case 0xF1:b=true;break;
-			}
-			return b;
-		}
-		bool isManualyWritingToRam(unsigned char* p_a){
-			bool b=false;
-			switch (this->uc->instruction[0]){
-				case 0x05://direct 1
-				case 0x15:
-				case 0x42:
-				case 0x43:
-				case 0x52:
-				case 0x53:
-				case 0x62:
-				case 0x63:
-				case 0x75:
-				case 0x86:
-				case 0x87:
-				case 0x88:
-				case 0x89:
-				case 0x8A:
-				case 0x8B:
-				case 0x8C:
-				case 0x8D:
-				case 0x8E:
-				case 0x8F:
-				case 0xC5:
-				case 0xD0:
-				case 0xD5:
-				case 0xF5:
-					b=!(bool)(this->uc->instruction[1]&0x80);
-					if (b) *p_a=this->uc->instruction[1];
-					break;
-				
-				case 0x85://direct 2
-					b=!(bool)(this->uc->instruction[2]&0x80);
-					if (b) *p_a=this->uc->instruction[2];
-					break;
-				
-				case 0x06://@Ri
-				case 0x07:
-				case 0x16:
-				case 0x17:
-				case 0x76:
-				case 0x77:
-				case 0xA6:
-				case 0xA7:
-				case 0xC6:
-				case 0xC7:
-				case 0xD6:
-				case 0xD7:
-				case 0xF6:
-				case 0xF7:
-					b=true;
-					*p_a=this->uc->getRAMByte(this->uc->getR(this->uc->instruction[0]&1));
-					break;
-				
-				case 0x08://Rn
-				case 0x09:
-				case 0x0A:
-				case 0x0B:
-				case 0x0C:
-				case 0x0D:
-				case 0x0E:
-				case 0x0F:
-				case 0x18:
-				case 0x19:
-				case 0x1A:
-				case 0x1B:
-				case 0x1C:
-				case 0x1D:
-				case 0x1E:
-				case 0x1F:
-				case 0x78:
-				case 0x79:
-				case 0x7A:
-				case 0x7B:
-				case 0x7C:
-				case 0x7D:
-				case 0x7E:
-				case 0x7F:
-				case 0xA8:
-				case 0xA9:
-				case 0xAA:
-				case 0xAB:
-				case 0xAC:
-				case 0xAD:
-				case 0xAE:
-				case 0xAF:
-				case 0xC8:
-				case 0xC9:
-				case 0xCA:
-				case 0xCB:
-				case 0xCC:
-				case 0xCD:
-				case 0xCE:
-				case 0xCF:
-				case 0xD8:
-				case 0xD9:
-				case 0xDA:
-				case 0xDB:
-				case 0xDC:
-				case 0xDD:
-				case 0xDE:
-				case 0xDF:
-				case 0xF8:
-				case 0xF9:
-				case 0xFA:
-				case 0xFB:
-				case 0xFC:
-				case 0xFD:
-				case 0xFE:
-				case 0xFF:
-					b=true;
-					*p_a=this->uc->getR(this->uc->instruction[0]&7);
-					break;
-				
-				case 0x10://bit
-				case 0x92:
-				case 0xB2:
-				case 0xC2:
-				case 0xD2:
-					b=!(bool)(this->uc->instruction[1]&0x80);
-					if (b) *p_a=this->uc->getBitDirectAddress(this->uc->instruction[1]);
-			}
-			return b;
-		}
-};
-
-void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb_audio,Mailbox* p_mb_log,GlobalState* p_gState){
+void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* p_gState){
 	//create ic
 	SRAM_64k eram;
 	ROM_256k erom;
@@ -532,21 +272,21 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		printf("Address ");
 		printf(high?"high":"low");
 		printf(" poped c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])));
-		p_gState->stepByStep.store(true,std::memory_order_relaxed);
+		//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 	};
 	sm.stackOverwrited=[p_gState,&uc](){
 		printf("Stack overwrited c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])));
-		p_gState->stepByStep.store(true,std::memory_order_relaxed);		
+		//p_gState->stepByStep.store(true,std::memory_order_relaxed);		
 	};
 	sm.funcReturned=[p_gState,&uc](bool ud,bool ind,bool old){
 		if (ud){
 			printf("Return to undefined c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])));
-			p_gState->stepByStep.store(true,std::memory_order_relaxed);
+			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 		}
 		else{
 			if (ind||old){
 				printf("Return to ");
-				if (old) printf("old ");
+				if (old) printf("already used ");
 				if (ind) printf("indirect ");
 				unsigned char sp=uc.getSFRByteIn(uc.SP);
 				printf("address c:%05lX -> c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])),(((unsigned long)uc.PX_out[1]&3)<<16)|(((unsigned short)uc.getRAMByte(sp))<<8)|((unsigned short)uc.getRAMByte(sp-1)));
@@ -665,45 +405,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		}
 	};
 	
-	thread_message ms_p_ram;
-	ms_p_ram.p=(void*)&eram;
-	ms_p_ram.cmd=ERAM;
-	p_mb_video->send(&ms_p_ram);
-	
-	thread_message ms_p_rom;
-	ms_p_rom.p=(void*)&erom;
-	ms_p_rom.cmd=EROM;
-	p_mb_video->send(&ms_p_rom);
-	
-	thread_message ms_p_vc;
-	ms_p_vc.p=(void*)&video;
-	ms_p_vc.cmd=VC;
-	p_mb_video->send(&ms_p_vc);
-	
-	thread_message ms_p_uc;
-	ms_p_uc.p=(void*)&uc;
-	ms_p_uc.cmd=UC;
-	p_mb_video->send(&ms_p_uc);
-	
-	thread_message ms_p_cpld;
-	ms_p_cpld.p=(void*)&cpld;
-	ms_p_cpld.cmd=CPLD;
-	p_mb_video->send(&ms_p_cpld);
-	
-	thread_message ms_p_kb;
-	ms_p_kb.p=(void*)&kb;
-	ms_p_kb.cmd=KEYBOARD;
-	p_mb_video->send(&ms_p_kb);
-	
-	thread_message ms_p_modem;
-	ms_p_modem.p=(void*)&modem;
-	ms_p_modem.cmd=MODEM;
-	p_mb_audio->send(&ms_p_modem);
-	
-	/*thread_message ms_p_notif;
-	ms_p_notif.cmd=NOTIFICATION_BUZZER;
-	for (int i=0;i<16;i++) p_mb_video->send(&ms_p_notif);*/
-	
 	bool next_step=false;
 	
 	auto stopC=[p_gState](){
@@ -719,11 +420,13 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		return p;
 	};
 	CLKs.setPauseCondition(pauseC);
-	auto checkMB=[p_mb_circuit,&eram,&erom,&uc,&modem,&wt,&next_step,&kb,p_gState](){
+	auto checkMB=[p_mb_circuit,&eram,&erom,&uc,&modem,&wt,&cpld,&next_step,&kb,p_gState](){
 		thread_message ms;
+		static unsigned char erom_cpy[EROM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
+		static unsigned char eram_cpy[ERAM_SIZE];
 		while (p_mb_circuit->receive(&ms)){
 			switch(ms.cmd){
-				case LOAD_ERAM:
+				/*case LOAD_ERAM:
 				{
 					static unsigned char eram_cpy[ERAM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
 					if (ms.p==NULL){
@@ -764,15 +467,24 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 						free(ms.p);
 					}
 					break;
-				}
+				}*/
 				case EMU_ON:
-					//uc.Reset();
+					//load rom/ram files
+					readM(p_gState->p_thread_mutex,p_gState->erom,erom_cpy,EROM_SIZE);
+					erom.set((unsigned char*)erom_cpy);
+					readM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
+					eram.set((unsigned char*)eram_cpy);
+					//reset
+					uc.Reset();//ensure the reset of the 80C32
 					modem.Reset();
 					wt.PWRChangeIn(true);
 					p_gState->minitelOn.store(true,std::memory_order_relaxed);
 					printf("power on\n");
 					break;
 				case EMU_OFF:
+					//save ram to file
+					eram.copy((unsigned char*)eram_cpy);
+					writeM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
 					wt.PWRChangeIn(false);
 					p_gState->minitelOn.store(false,std::memory_order_relaxed);
 					printf("power off\n");
@@ -795,8 +507,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 		}
 	};
 	CLKs.subscribeMailbox(checkMB);
-	auto CLKTick14745600=[&uc,&wt,&p_gState](){
+	auto CLKTick14745600=[&uc,&wt,&modem,&p_gState](){
 		uc.CLKTickIn();
+		modem.CLKTickIn();
 		wt.incrementTimer();//(!p_gState->minitelOn.load(std::memory_order_relaxed))||
 		wt.PWRChangeIn(p_gState->minitelOn.load(std::memory_order_relaxed));
 	};
@@ -811,8 +524,70 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,Mailbox* p_mb
 	};
 	CLKs.subscribe9600Hz(CLKTick9600);
 	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	thread_message ms_p_ram;
+	ms_p_ram.p=(void*)&eram;
+	ms_p_ram.cmd=ERAM;
+	p_mb_video->send(&ms_p_ram);
+	
+	thread_message ms_p_rom;
+	ms_p_rom.p=(void*)&erom;
+	ms_p_rom.cmd=EROM;
+	p_mb_video->send(&ms_p_rom);
+	
+	thread_message ms_p_vc;
+	ms_p_vc.p=(void*)&video;
+	ms_p_vc.cmd=VC;
+	p_mb_video->send(&ms_p_vc);
+	
+	thread_message ms_p_uc;
+	ms_p_uc.p=(void*)&uc;
+	ms_p_uc.cmd=UC;
+	p_mb_video->send(&ms_p_uc);
+	
+	thread_message ms_p_cpld;
+	ms_p_cpld.p=(void*)&cpld;
+	ms_p_cpld.cmd=CPLD;
+	p_mb_video->send(&ms_p_cpld);
+	
+	thread_message ms_p_kb;
+	ms_p_kb.p=(void*)&kb;
+	ms_p_kb.cmd=KEYBOARD;
+	p_mb_video->send(&ms_p_kb);
+	
+	thread_message ms_p_modem;
+	ms_p_modem.p=(void*)&modem;
+	ms_p_modem.cmd=MODEM;
+	p_mb_video->send(&ms_p_modem);
+	
+	thread_message ms_p_clock;
+	ms_p_clock.p=(void*)&CLKs;
+	ms_p_clock.cmd=CLOCK;
+	p_mb_video->send(&ms_p_clock);
+	
+	
+	
+	
 	CLKs.start();
 	
+	//save ram if possible
+	unsigned char eram_cpy[ERAM_SIZE];
+	eram.copy((unsigned char*)eram_cpy);
+	writeM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
+	
+	//signal emulation end
+	p_gState->minitelOn.store(false,std::memory_order_relaxed);
 	
 	
 }

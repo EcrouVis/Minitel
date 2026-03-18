@@ -20,6 +20,7 @@ const unsigned char LED_BLINK=2;
 
 class Keyboard{
 	public:
+		
 		std::atomic_uchar LED_POWER=LED_OFF;
 		std::atomic_uchar LED_SPEAKER=LED_OFF;
 		
@@ -110,95 +111,95 @@ class Keyboard{
 				if (kb_m->action==GLFW_PRESS||kb_m->action==GLFW_RELEASE){
 					bool keyPressed=(kb_m->action==GLFW_PRESS);
 					switch (kb_m->scancode){
-						case 16:queueKey(0xBB,keyPressed);break;//A
-						case 17:queueKey(0xB7,keyPressed);break;//Z
-						case 18:queueKey(0xB9,keyPressed);break;//E
-						case 19:queueKey(0xA9,keyPressed);break;//R
-						case 20:queueKey(0x97,keyPressed);break;//T
-						case 21:queueKey(0x87,keyPressed);break;//Y
-						case 22:queueKey(0x77,keyPressed);break;//U
-						case 23:queueKey(0x67,keyPressed);break;//I
-						case 24:queueKey(0x69,keyPressed);break;//O
-						case 25:queueKey(0x57,keyPressed);break;//P
-						case 30:queueKey(0xBF,keyPressed);break;//Q
-						case 31:queueKey(0xBD,keyPressed);break;//S
-						case 32:queueKey(0xAB,keyPressed);break;//D
-						case 33:queueKey(0x99,keyPressed);break;//F
-						case 34:queueKey(0x8B,keyPressed);break;//G
-						case 35:queueKey(0x89,keyPressed);break;//H
-						case 36:queueKey(0x79,keyPressed);break;//J
-						case 37:queueKey(0x6B,keyPressed);break;//K
-						case 38:queueKey(0x59,keyPressed);break;//L
-						case 39:queueKey(0x3B,keyPressed);break;//M
-						case 44:queueKey(0xAD,keyPressed);break;//W
-						case 45:queueKey(0x9B,keyPressed);break;//X
-						case 46:queueKey(0x8D,keyPressed);break;//C
-						case 47:queueKey(0x8F,keyPressed);break;//V
-						case 48:queueKey(0x7D,keyPressed);break;//B
-						case 49:queueKey(0x7B,keyPressed);break;//N
-						case 57:queueKey(0x7F,keyPressed);break;//espace
-						case 28:queueKey(0x39,keyPressed);break;//entrée
-						case 50:queueKey(0x6F,keyPressed);break;//,
-						case 51:queueKey(0x6D,keyPressed);break;//;
-						case 52:queueKey(0x3D,keyPressed);break;//:
+						case 16:this->queueKey(0xBB,keyPressed);break;//A
+						case 17:this->queueKey(0xB7,keyPressed);break;//Z
+						case 18:this->queueKey(0xB9,keyPressed);break;//E
+						case 19:this->queueKey(0xA9,keyPressed);break;//R
+						case 20:this->queueKey(0x97,keyPressed);break;//T
+						case 21:this->queueKey(0x87,keyPressed);break;//Y
+						case 22:this->queueKey(0x77,keyPressed);break;//U
+						case 23:this->queueKey(0x67,keyPressed);break;//I
+						case 24:this->queueKey(0x69,keyPressed);break;//O
+						case 25:this->queueKey(0x57,keyPressed);break;//P
+						case 30:this->queueKey(0xBF,keyPressed);break;//Q
+						case 31:this->queueKey(0xBD,keyPressed);break;//S
+						case 32:this->queueKey(0xAB,keyPressed);break;//D
+						case 33:this->queueKey(0x99,keyPressed);break;//F
+						case 34:this->queueKey(0x8B,keyPressed);break;//G
+						case 35:this->queueKey(0x89,keyPressed);break;//H
+						case 36:this->queueKey(0x79,keyPressed);break;//J
+						case 37:this->queueKey(0x6B,keyPressed);break;//K
+						case 38:this->queueKey(0x59,keyPressed);break;//L
+						case 39:this->queueKey(0x3B,keyPressed);break;//M
+						case 44:this->queueKey(0xAD,keyPressed);break;//W
+						case 45:this->queueKey(0x9B,keyPressed);break;//X
+						case 46:this->queueKey(0x8D,keyPressed);break;//C
+						case 47:this->queueKey(0x8F,keyPressed);break;//V
+						case 48:this->queueKey(0x7D,keyPressed);break;//B
+						case 49:this->queueKey(0x7B,keyPressed);break;//N
+						case 57:this->queueKey(0x7F,keyPressed);break;//espace
+						case 28:this->queueKey(0x39,keyPressed);break;//entrée
+						case 50:this->queueKey(0x6F,keyPressed);break;//,
+						case 51:this->queueKey(0x6D,keyPressed);break;//;
+						case 52:this->queueKey(0x3D,keyPressed);break;//:
 						
-						case 82:queueKey(0x2F,keyPressed);break;//numpad 0
-						case 79:queueKey(0x27,keyPressed);break;//numpad 1
-						case 80:queueKey(0x17,keyPressed);break;//numpad 2
-						case 81:queueKey(0x21,keyPressed);break;//numpad 3
-						case 75:queueKey(0x19,keyPressed);break;//numpad 4
-						case 76:queueKey(0x29,keyPressed);break;//numpad 5
-						case 77:queueKey(0x11,keyPressed);break;//numpad 6
-						case 71:queueKey(0x2B,keyPressed);break;//numpad 7
-						case 72:queueKey(0x1B,keyPressed);break;//numpad 8
-						case 73:queueKey(0x2D,keyPressed);break;//numpad 9
+						case 82:this->queueKey(0x2F,keyPressed);break;//numpad 0
+						case 79:this->queueKey(0x27,keyPressed);break;//numpad 1
+						case 80:this->queueKey(0x17,keyPressed);break;//numpad 2
+						case 81:this->queueKey(0x21,keyPressed);break;//numpad 3
+						case 75:this->queueKey(0x19,keyPressed);break;//numpad 4
+						case 76:this->queueKey(0x29,keyPressed);break;//numpad 5
+						case 77:this->queueKey(0x11,keyPressed);break;//numpad 6
+						case 71:this->queueKey(0x2B,keyPressed);break;//numpad 7
+						case 72:this->queueKey(0x1B,keyPressed);break;//numpad 8
+						case 73:this->queueKey(0x2D,keyPressed);break;//numpad 9
 						
-						case 2:queueKey(0xB3,keyPressed);break;//&
-						case 3:queueKey(0xB1,keyPressed);break;//é
-						case 4:queueKey(0xA7,keyPressed);break;//"
-						case 5:queueKey(0xA1,keyPressed);break;//'
-						case 6:queueKey(0x91,keyPressed);break;//(
-						case 7:queueKey(0x81,keyPressed);break;//-
-						case 8:queueKey(0x71,keyPressed);break;//è
-						case 9:queueKey(0x61,keyPressed);break;//_=!
-						case 10:queueKey(0x51,keyPressed);break;//ç
-						case 11:queueKey(0x53,keyPressed);break;//à
-						case 12:queueKey(0x37,keyPressed);break;//)
+						case 2:this->queueKey(0xB3,keyPressed);break;//&
+						case 3:this->queueKey(0xB1,keyPressed);break;//é
+						case 4:this->queueKey(0xA7,keyPressed);break;//"
+						case 5:this->queueKey(0xA1,keyPressed);break;//'
+						case 6:this->queueKey(0x91,keyPressed);break;//(
+						case 7:this->queueKey(0x81,keyPressed);break;//-
+						case 8:this->queueKey(0x71,keyPressed);break;//è
+						case 9:this->queueKey(0x61,keyPressed);break;//_=!
+						case 10:this->queueKey(0x51,keyPressed);break;//ç
+						case 11:this->queueKey(0x53,keyPressed);break;//à
+						case 12:this->queueKey(0x37,keyPressed);break;//)
 						
-						case 43:queueKey(0x1F,keyPressed);break;//*
-						case 40:queueKey(0x1D,keyPressed);break;//ù=#
+						case 43:this->queueKey(0x1F,keyPressed);break;//*
+						case 40:this->queueKey(0x1D,keyPressed);break;//ù=#
 						
-						case 328:queueKey(0x5B,keyPressed);break;//flèche haut
-						case 331:queueKey(0x5D,keyPressed);break;//flèche gauche
-						case 336:queueKey(0x5F,keyPressed);break;//flèche bas
-						case 333:queueKey(0x3F,keyPressed);break;//flèche droite
+						case 328:this->queueKey(0x5B,keyPressed);break;//flèche haut
+						case 331:this->queueKey(0x5D,keyPressed);break;//flèche gauche
+						case 336:this->queueKey(0x5F,keyPressed);break;//flèche bas
+						case 333:this->queueKey(0x3F,keyPressed);break;//flèche droite
 						
-						case 42:queueKey(0xAF,keyPressed);break;//shift
-						case 58:queueKey(0x9F,keyPressed);break;//min/maj
+						case 42:this->queueKey(0xAF,keyPressed);break;//shift
+						case 58:this->queueKey(0x9F,keyPressed);break;//min/maj
 						case 285:
-						case 29:queueKey(0x9D,keyPressed);break;//ctrl
+						case 29:this->queueKey(0x9D,keyPressed);break;//ctrl
 						
-						case 56:queueKey(0xA3,keyPressed);break;//alt=fnct
-						case 1:queueKey(0xA5,keyPressed);break;//échap=Esc
+						case 56:this->queueKey(0xA3,keyPressed);break;//alt=fnct
+						case 1:this->queueKey(0xA5,keyPressed);break;//échap=Esc
 						
-						case 41:queueKey(0x55,keyPressed);break;//²=on/off
-						case 13:queueKey(0x31,keyPressed);break;//==mem
-						case 15:queueKey(0xB5,keyPressed);break;//tab=Connex/Fin
-						case 78:queueKey(0x23,keyPressed);break;//numpad +=HP+
-						case 74:queueKey(0x13,keyPressed);break;//numpad -=HP-
-						case 14:queueKey(0x35,keyPressed);break;//backspace=HP
-						case 55:queueKey(0x1F,keyPressed);break;//numpad *=*
-						case 309:queueKey(0x1D,keyPressed);break;//numpad /=#
+						case 41:this->queueKey(0x55,keyPressed);break;//²=on/off
+						case 13:this->queueKey(0x31,keyPressed);break;//==mem
+						case 15:this->queueKey(0xB5,keyPressed);break;//tab=Connex/Fin
+						case 78:this->queueKey(0x23,keyPressed);break;//numpad +=HP+
+						case 74:this->queueKey(0x13,keyPressed);break;//numpad -=HP-
+						case 14:this->queueKey(0x35,keyPressed);break;//backspace=HP
+						case 55:this->queueKey(0x1F,keyPressed);break;//numpad *=*
+						case 309:this->queueKey(0x1D,keyPressed);break;//numpad /=#
 						//.../... bis repertoire annuaire decrochage
 						
-						case 60:queueKey(0x95,keyPressed);break;//F2=Sommaire
-						case 61:queueKey(0x93,keyPressed);break;//F3=Guide
-						case 62:queueKey(0x85,keyPressed);break;//F4=Annulation
-						case 63:queueKey(0x83,keyPressed);break;//F5=Correction
-						case 64:queueKey(0x75,keyPressed);break;//F6=Retour
-						case 65:queueKey(0x73,keyPressed);break;//F7=Suite
-						case 66:queueKey(0x65,keyPressed);break;//F8=Répétition
-						case 67:queueKey(0x63,keyPressed);break;//F9=Envoi
+						case 60:this->queueKey(0x95,keyPressed);break;//F2=Sommaire
+						case 61:this->queueKey(0x93,keyPressed);break;//F3=Guide
+						case 62:this->queueKey(0x85,keyPressed);break;//F4=Annulation
+						case 63:this->queueKey(0x83,keyPressed);break;//F5=Correction
+						case 64:this->queueKey(0x75,keyPressed);break;//F6=Retour
+						case 65:this->queueKey(0x73,keyPressed);break;//F7=Suite
+						case 66:this->queueKey(0x65,keyPressed);break;//F8=Répétition
+						case 67:this->queueKey(0x63,keyPressed);break;//F9=Envoi
 					}
 				}
 			}

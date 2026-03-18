@@ -27,10 +27,12 @@ const int CPLD=14;
 const int CRT_POWER_ON=16;
 const int CRT_POWER_OFF=17;
 const int KEYBOARD=18;
+const int MODEM=19;
+const int CLOCK=20;
 
-const int DUMP_ERAM=1;
+/*const int DUMP_ERAM=1;
 const int LOAD_ERAM=1<<1;
-const int LOAD_EROM=1<<2;
+const int LOAD_EROM=1<<2;*/
 const int EMU_ON=1<<3;
 const int EMU_OFF=1<<4;
 const int EMU_NEXT_STEP=1<<5;
@@ -38,7 +40,6 @@ const int KEYBOARD_STATE_UPDATE=1<<6;
 /*
 const int RESTART;*/
 
-const int MODEM=1;
 
 class Mailbox{
 	public:

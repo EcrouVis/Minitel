@@ -21,7 +21,7 @@ class KeyboardIndicator{
 			
 			ImGui::SetNextWindowBgAlpha(0.75f);
 			ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x-50,10));//TODO: compute position
-			ImGui::Begin("keyboard leds",NULL,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoScrollbar);
+			ImGui::Begin("keyboard leds",NULL,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoNav);
 			double t=glfwGetTime();
 			double n;
 			const double f_blink=2;

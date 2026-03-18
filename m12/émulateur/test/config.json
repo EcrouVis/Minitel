@@ -1,0 +1,28 @@
+{
+	"UI": {
+		"show menu": true,
+		"idle": true,
+		"DPI": 1
+	},
+	"Emulation":{
+		"auto start":false,
+		"ROM file":"",
+		"RAM file":"./profils/aaaa.raw"
+	},
+	"IO":{
+		"DIN":{
+			
+		},
+		"Phone line":{
+			
+		},
+		"Audio":{
+
+		},
+		"Video":{
+			"rgb": false,
+			"crt filter": false,
+			"width factor": 0.3333
+		}
+	}
+}

@@ -59,7 +59,7 @@ class WatchdogTimer{//74HC4538 + 7705AC
 	private:
 		//delta between warn and reset: 1128 clock periods minimum -> ISR 0x0003
 		unsigned long t1=0;//timeout: t1==tmax
-		unsigned long tmax=1474560;//guess (0.1s)
+		unsigned long tmax=1474560*5;//guess 0.5s -> 0.2s could trigger the watchdog timer when restarting the emulator
 		unsigned long toff=0;
 		unsigned long toff_reset=1536;//1128 (maximum time the interrupt can take)<t<1917 (toff_max)
 		unsigned long toff_max=1917;//130us@10nF->1917 clock periods (guess)

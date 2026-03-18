@@ -27,7 +27,7 @@ class NotificationServer{
 			if (delete_old_notifications(duration,max_notification)){
 				ImGui::SetNextWindowBgAlpha(0.75f);
 				ImGui::SetNextWindowPos(ImVec2(10,10));
-				ImGui::Begin("Notifications",NULL,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoScrollbar);
+				ImGui::Begin("Notifications",NULL,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoNav);
 				imgui_notification* tmp=this->notification_list;
 				double t=glfwGetTime()-duration;
 				while (tmp!=NULL){
@@ -47,12 +47,13 @@ class NotificationServer{
 		}
 	private:
 		imgui_notification* notification_list=NULL;
-		const char* notification_message_list[5]={
+		const char* notification_message_list[6]={
 			"<Buzzer>",
 			"Redémarrage du minitel",
 			"Suspension de l'émulation",
 			"Reprise de l'émulation",
-			"Appuyez sur F1 pour faire apparaitre le menu"
+			"Appuyez sur F1 pour faire apparaitre le menu",
+			"config.json est malformé, chargement des parmètres par défaut"
 		};
 		
 		bool delete_old_notifications(double duration=5,int max_notification=5){

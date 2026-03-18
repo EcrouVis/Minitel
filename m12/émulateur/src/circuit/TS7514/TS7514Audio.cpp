@@ -1,0 +1,118 @@
+#include "io/TS7514Audio.h"
+void TS7514_WLO_init(WLOConf* wloc, ma_uint32 sampleRate){
+	
+	ma_waveform_config wf_config = ma_waveform_config_init(ma_format_f32,1,sampleRate,ma_waveform_type_square,0,2982);
+	ma_waveform_init(&wf_config, &(wloc->buzzer));
+	
+	ma_lpf_config lpf_config = ma_lpf_config_init(ma_format_f32, 1, sampleRate, 3000, 1);
+	ma_lpf_init(&lpf_config, NULL, &(wloc->filter));
+	
+	ma_audio_buffer_config config = ma_audio_buffer_config_init(ma_format_f32,1,0,NULL,NULL);
+	ma_audio_buffer_alloc_and_init(&config,&(wloc->pwlo_buffer));
+}
+
+void TS7514_WLO_uninit(WLOConf* wloc){
+	ma_waveform_uninit(&(wloc->buzzer));
+	ma_lpf_uninit(&(wloc->filter),NULL);
+	ma_audio_buffer_uninit_and_free(wloc->pwlo_buffer);
+}
+
+void TS7514_WLO(WLOConf* wloc, void* pOutput, ma_uint32 frameCount){
+	
+	static ma_uint64 availableFrames=0;//resize wlo buffer if needed
+	ma_audio_buffer_seek_to_pcm_frame(wloc->pwlo_buffer, 0);
+	ma_audio_buffer_get_available_frames(wloc->pwlo_buffer,&availableFrames);
+	if (frameCount>availableFrames){
+		ma_audio_buffer_uninit_and_free(wloc->pwlo_buffer);
+		ma_audio_buffer_config config = ma_audio_buffer_config_init(ma_format_f32,1,frameCount,NULL,NULL);
+		ma_audio_buffer_alloc_and_init(&config,&(wloc->pwlo_buffer));
+	}
+	static void* pbuffer;
+	availableFrames=frameCount;
+	ma_audio_buffer_map(wloc->pwlo_buffer,&pbuffer,&availableFrames);
+	
+	if (wloc->pRWLO!=NULL){
+		const unsigned char RWLO=wloc->pRWLO->load(std::memory_order_acquire);
+		switch (RWLO&0x0C){
+			case 0x00:
+			{
+				const float A[4]={0.316227766,0.1,0.028183829,0.007943282};
+				ma_silence_pcm_frames(pbuffer,availableFrames,ma_format_f32,1);//TODO////////////////////////////////////////////////////Tx
+				break;
+			}
+			case 0x04:
+			{
+				const float A[4]={1.,0.316227766,0.1,0.028183829};
+				ma_silence_pcm_frames(pbuffer,availableFrames,ma_format_f32,1);//TODO////////////////////////////////////////////////////Rx
+				break;
+			}
+			case 0x08:
+			{
+				const float A[4]={1.,0.316227766,0.1,0.028183829};
+				ma_waveform_set_amplitude(&(wloc->buzzer),A[RWLO&3]);
+				ma_waveform_read_pcm_frames(&(wloc->buzzer), pbuffer, availableFrames,NULL);
+				break;
+			}
+			case 0x0C:
+				ma_silence_pcm_frames(pbuffer,availableFrames,ma_format_f32,1);
+				break;
+		}
+		
+		ma_lpf_process_pcm_frames(&(wloc->filter), pbuffer, pbuffer, availableFrames);
+		ma_mix_pcm_frames_f32((float*)pOutput, (const float*)pbuffer, availableFrames,1,wloc->wlo_volume);
+		
+		ma_audio_buffer_unmap(wloc->pwlo_buffer,availableFrames);
+	}
+	
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bool TS7514_ATxI_Resample_1228800_48000(bool b, float* ret){
+	float x=b?1.:0.;
+	float y;
+	
+	//filter before downsample (3 biquad filters)
+	const float ATxI_SOS_LPF_1[6]={0.0016506006830212339,-0.00300285092606394,0.0016506006830212343,1.,-1.8598449760063778,0.8652353024330538};
+	static float N_1[2]={0,0};
+	y=(ATxI_SOS_LPF_1[0]/ATxI_SOS_LPF_1[3])*x+N_1[0];
+	N_1[0]=(ATxI_SOS_LPF_1[1]/ATxI_SOS_LPF_1[3])*x-(ATxI_SOS_LPF_1[4]/ATxI_SOS_LPF_1[3])*y+N_1[1];
+	N_1[1]=(ATxI_SOS_LPF_1[2]/ATxI_SOS_LPF_1[3])*x-(ATxI_SOS_LPF_1[5]/ATxI_SOS_LPF_1[3])*y;
+	x=y;
+	
+	const float ATxI_SOS_LPF_2[6]={1.,-1.9747974586511543,0.9999999999999999,1.,-1.9107679201003114,0.9153908270370111};
+	static float N_2[2]={0,0};
+	y=(ATxI_SOS_LPF_2[0]/ATxI_SOS_LPF_2[3])*x+N_2[0];
+	N_2[0]=(ATxI_SOS_LPF_2[1]/ATxI_SOS_LPF_2[3])*x-(ATxI_SOS_LPF_2[4]/ATxI_SOS_LPF_2[3])*y+N_2[1];
+	N_2[1]=(ATxI_SOS_LPF_2[2]/ATxI_SOS_LPF_2[3])*x-(ATxI_SOS_LPF_2[5]/ATxI_SOS_LPF_2[3])*y;
+	x=y;
+	
+	const float ATxI_SOS_LPF_3[6]={1.,-1.986454389602778,1.0000000000000002,1.,-1.9685314457776844,0.9726187727577423};
+	static float N_3[3]={0,0,0};
+	float y_old=N_3[2];
+	y=(ATxI_SOS_LPF_3[0]/ATxI_SOS_LPF_3[3])*x+N_3[0];
+	N_3[0]=(ATxI_SOS_LPF_3[1]/ATxI_SOS_LPF_3[3])*x-(ATxI_SOS_LPF_3[4]/ATxI_SOS_LPF_3[3])*y+N_3[1];
+	N_3[1]=(ATxI_SOS_LPF_3[2]/ATxI_SOS_LPF_3[3])*x-(ATxI_SOS_LPF_3[5]/ATxI_SOS_LPF_3[3])*y;
+	N_3[2]=y;
+	
+	//downsample to f*10/256
+	static unsigned char cnt=0;
+	cnt+=10;
+	if (cnt<10){//when cnt overflow -> take sample
+		//y or y_old+(y-y_old)*cnt/10.
+		*ret=y_old+(y-y_old)*cnt/10.;
+		return true;
+	}
+	return false;
+}

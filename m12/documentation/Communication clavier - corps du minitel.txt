@@ -135,7 +135,7 @@ Status du téléphone (clavier -> microcontrôleur):
 
 	o2:
 	a: reset?
-	b: ligne occupée ou non utilisée? (1 tout le temps sauf quand il n'y a que le haut parleur ou quand le micro est désactivé / se met à 1 quand un autre appareil tente d'utiliser la ligne)
+	b: ligne occupée ou non utilisée? (1 tout le temps sauf quand il n'y a que le haut parleur ou quand le micro est désactivé / se met à 1 quand un autre appareil tente d'utiliser la ligne ou peut-être sous tension)
 	c: numérotation FV (fréquence vocale)/!DC (décimal)
 	d: numérotation en cours? (appui sur une touche seulement: 1 sur une durée de 148ms sauf 0x19 avant de retourner à zéro)
 	e: courant dans la ligne téléphonique?

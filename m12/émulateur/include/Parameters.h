@@ -51,7 +51,6 @@ struct P_Emulation{
 struct P_FileSystem{
 	const char* erom=NULL;
 	const char* eram=NULL;
-	const char* charset=NULL;
 };
 struct P_Keyboard{
 	
@@ -95,7 +94,7 @@ struct P_Debug{
 };
 struct P_Info{
 	const char* title="Minitel 12 Philips";
-	const char* programmer="";
+	const char* programmers="Yves Landemarre";
 	License lib_licenses[5]={
 		{lib_imgui,license_imgui},
 		{lib_glfw,license_glfw},
