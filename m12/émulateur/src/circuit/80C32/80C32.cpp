@@ -929,7 +929,7 @@ void m80C32::nextCycleALU(){
 	
 }
 void m80C32::setACCParity(){
-	unsigned short p=0b0110100110010110;
+	const unsigned short p=0b0110100110010110;
 	unsigned char a=this->getSFRByteIn(this->ACC);
 	p=((p>>(a&0x0F))^(p>>(a>>4)))&0x01;
 	this->setBitIn(this->P,(bool)p);
