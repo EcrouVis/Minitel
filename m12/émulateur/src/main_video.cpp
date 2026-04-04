@@ -15,6 +15,9 @@
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include <filesystem>
 #include <cstdlib>
 
@@ -23,9 +26,9 @@
 #include "license.h"
 #include "io/NotificationServer.h"
 #include "MemoryWindow.h"
-#include "MainMenuWindow.h"
+//#include "MainMenuWindow.h"
 #include "Parameters.h"
-#include "io/TS9347Renderer.h"
+#include "io/CRTRenderer.h"
 #include "io/KeyboardIndicator.h"
 #include "io/KeyboardInput.h"
 #include "circuit/Keyboard.h"
@@ -41,6 +44,9 @@
 #include "circuit/TS7514.h"
 
 #include "FileAccess.h"
+#include "FileSelector.h"
+
+#include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
 
 struct audioContext{
 	WLOConf* wloc=NULL;
@@ -92,14 +98,32 @@ class M12Window{
 			ImGui_ImplOpenGL3_Init();
 		 
 			//emulator display
-			GLuint vertex_buffer;
+			/*GLuint vertex_buffer;
 			glGenBuffers(1, &vertex_buffer);
-			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);*/
+			
+			//RAM and ROM selection callbacks
+			this->RAMS.setCallback([this](char* f){
+				if (f==NULL) unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->eram));
+				else loadRAM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->eram),f);
+			});
+			this->ROMS.setCallback([this](char* f){
+				if (f==NULL){
+					unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->erom));
+					this->RAMS.setDir("./profils");
+				}
+				else{
+					loadROM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->erom),f);
+					std::filesystem::path p="./profils";
+					p/=std::filesystem::path(f).filename();
+					this->RAMS.setDir(p.string().c_str());
+				}
+			});
 			
 			//load parameters
-			const char *fn_config="config.json";
+			const char *fn_config="./config.json";
 			if (std::filesystem::is_regular_file(fn_config)){
-				FILE *f=fopen(fn_config,"rb");
+				FILE *f=fopen(fn_config,"r");
 				fseek(f,0,SEEK_END);
 				long fsize=ftell(f);
 				fseek(f,0,SEEK_SET);
@@ -107,8 +131,10 @@ class M12Window{
 				fread(config_raw,fsize,1,f);
 				fclose(f);
 				
-				cJSON* config=cJSON_ParseWithLength(config_raw,fsize);
-				if (config==NULL){
+				this->JSONConfig=cJSON_ParseWithLength(config_raw,fsize);
+				free(config_raw);
+				
+				if (this->JSONConfig==NULL){
 					const char* e=cJSON_GetErrorPtr();
 					if (e!=NULL){
 						printf("Error while parsing config.json before: %s\n",e);
@@ -116,11 +142,10 @@ class M12Window{
 					}
 				}
 				else{
-					thread_message ms;
 					//UI config
-					cJSON* subconfig=cJSON_GetObjectItemCaseSensitive(config,"UI");
+					cJSON* subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"UI");
 					
-					cJSON* c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"show_menu");
+					cJSON* c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"show menu");
 					if (cJSON_IsBool(c_param)) this->PARAMETERS.imgui.show_menu=cJSON_IsTrue(c_param);
 					
 					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"idle");
@@ -129,57 +154,47 @@ class M12Window{
 					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"DPI");
 					if (cJSON_IsNumber(c_param)&&(c_param->valuedouble>=1)) ImGui::GetStyle().FontScaleDpi=c_param->valuedouble;
 					
-					//emulation config
-					subconfig=cJSON_GetObjectItemCaseSensitive(config,"Emulation");
+					//IO
+					subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
 					
-					/*bool start_emu=true;
+					//CRT
+					cJSON* subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"CRT");
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"rgb");
+					if (cJSON_IsBool(c_param)){
+						this->PARAMETERS.io.crt.rgb=cJSON_IsTrue(c_param);
+					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"width factor");
+					if (cJSON_IsNumber(c_param)){
+						this->PARAMETERS.io.crt.width_factor=c_param->valuedouble;
+					}
 					
-					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"RAM_file");
+					//Other
+					//"os rtc" loaded later
+					
+					//emulation config -> last
+					subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"Emulation");
+					
+					//load rom
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"ROM file");
 					if (cJSON_IsString(c_param)){
-						if (std::filesystem::is_regular_file(c_param->valuestring)){
-							ms.cmd=LOAD_ERAM;
-							ms.p=malloc(strlen(c_param->valuestring)+1);
-							strcpy((char*)ms.p,c_param->valuestring);
-							((char*)ms.p)[strlen(c_param->valuestring)]=0;
-							this->p_mb_circuit->send(&ms);
+						this->ROMS.Select(c_param->valuestring);
+					}
+					//load ram
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"RAM file");
+					if (cJSON_IsString(c_param)){
+						if (strcmp(c_param->valuestring,"")==0){
+							this->RAMS.Select(NULL);
 						}
-						else if (strcmp(c_param->valuestring,"")==0){
-							ms.cmd=LOAD_ERAM;
-							ms.p=NULL;
-							this->p_mb_circuit->send(&ms);
-						}
-						else start_emu=false;
+						this->RAMS.Select(c_param->valuestring);
 					}
-					else if (cJSON_IsNull(c_param)){
-						ms.cmd=LOAD_ERAM;
-						ms.p=NULL;
-						this->p_mb_circuit->send(&ms);
+					else{
+						this->RAMS.Select(NULL);
 					}
-					else start_emu=false;
-					
-					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"ROM_file");
-					if (cJSON_IsString(c_param)&&std::filesystem::is_regular_file(c_param->valuestring)){
-						ms.cmd=LOAD_EROM;
-						ms.p=malloc(strlen(c_param->valuestring)+1);
-						strcpy((char*)ms.p,c_param->valuestring);
-						((char*)ms.p)[strlen(c_param->valuestring)]=0;
-						this->p_mb_circuit->send(&ms);
-					}
-					else start_emu=false;
-					
-					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"auto_start");
-					if (cJSON_IsBool(c_param)&&cJSON_IsTrue(c_param)&&start_emu){
-						ms.cmd=EMU_ON;
-						this->p_mb_circuit->send(&ms);	
-					}*/
-					
-					printf("cJSON is null? %i\n",cJSON_IsNull(config)==cJSON_NULL);
-					char* string=cJSON_Print(config);
-					printf("%s\n",string);
+					//start if possible later when emulator ready
 				}
 			}
 			
-			this->p_TS9347out=new TS9347Renderer(this->window,&(this->PARAMETERS));
+			this->p_CRTout=new CRTRenderer(this->window,&(this->PARAMETERS));
 			this->keyboardIndicator=new KeyboardIndicator();
 			
 			this->Notification.notify(4,ImVec4(0,1,1,1));
@@ -187,6 +202,7 @@ class M12Window{
 			//TS7514_WLO_init(&(this->wloc),48000);
 			
 			//audio
+			//see https://github.com/mackron/miniaudio/discussions/1084
 			this->audioDeviceConfig = ma_device_config_init(ma_device_type_playback);
 			
 			this->audioDeviceConfig.playback.format   = ma_format_f32;
@@ -195,7 +211,8 @@ class M12Window{
 			this->audioDeviceConfig.sampleRate        = 0;//48000;
 			
 			this->audioDeviceConfig.dataCallback      = this->audio_data_callback;
-			this->audioDeviceConfig.periodSizeInFrames = 32;
+			//this->audioDeviceConfig.noFixedSizedCallback=true;
+			this->audioDeviceConfig.periodSizeInFrames = 480;
 			this->audioDeviceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
 			this->audioDeviceConfig.wasapi.noAutoConvertSRC = true;
 			this->audioDeviceConfig.pUserData         = &(this->AC);
@@ -217,6 +234,58 @@ class M12Window{
 			}
 		}
 		~M12Window(){
+			//save config
+			if (this->JSONConfig!=NULL) cJSON_Delete(this->JSONConfig);
+			
+			cJSON* JSONConfigOut = cJSON_CreateObject();
+			cJSON* JSONSubconfig1=cJSON_AddObjectToObject(JSONConfigOut,"UI");
+			cJSON* JSONSubconfig2=NULL;
+			if (JSONSubconfig1!=NULL){
+				cJSON_AddBoolToObject(JSONSubconfig1,"show menu",this->PARAMETERS.imgui.show_menu);
+				cJSON_AddBoolToObject(JSONSubconfig1,"idle",this->PARAMETERS.imgui.idle);
+				cJSON_AddNumberToObject(JSONSubconfig1,"DPI",ImGui::GetStyle().FontScaleDpi);
+			}
+			JSONSubconfig1=cJSON_AddObjectToObject(JSONConfigOut,"Emulation");
+			if (JSONSubconfig1!=NULL){
+				cJSON_AddBoolToObject(JSONSubconfig1,"auto start",this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed));
+				if (this->ROMS.getSelected()==NULL) cJSON_AddStringToObject(JSONSubconfig1,"ROM file","");
+				else cJSON_AddStringToObject(JSONSubconfig1,"ROM file",this->ROMS.getSelected());
+				if (this->RAMS.getSelected()==NULL) cJSON_AddStringToObject(JSONSubconfig1,"RAM file","");
+				else cJSON_AddStringToObject(JSONSubconfig1,"RAM file",this->RAMS.getSelected());
+			}
+			JSONSubconfig1=cJSON_AddObjectToObject(JSONConfigOut,"IO");
+			if (JSONSubconfig1!=NULL){
+				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"DIN");
+				if (JSONSubconfig2!=NULL){
+					
+				}
+				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Phone line");
+				if (JSONSubconfig2!=NULL){
+					
+				}
+				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Buzzer");
+				if (JSONSubconfig2!=NULL){
+					if (this->PARAMETERS.io.buzzer.notify_state!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"notification",this->PARAMETERS.io.buzzer.notify_state->load(std::memory_order_relaxed));
+				}
+				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"CRT");
+				if (JSONSubconfig2!=NULL){
+					cJSON_AddBoolToObject(JSONSubconfig2,"rgb",this->PARAMETERS.io.crt.rgb);
+					cJSON_AddNumberToObject(JSONSubconfig2,"width factor",this->PARAMETERS.io.crt.width_factor);
+				}
+				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Other");
+				if (JSONSubconfig2!=NULL){
+					if (this->PARAMETERS.io.other.os_rtc!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"os rtc",this->PARAMETERS.io.other.os_rtc->load(std::memory_order_relaxed));
+				}
+			}
+			char* configString=cJSON_Print(JSONConfigOut);
+			FILE *f=fopen("./config.json","w");
+			fwrite(configString,sizeof(char),strlen(configString),f);
+			fclose(f);
+			cJSON_Delete(JSONConfigOut);
+			
+			//shutdown emulator
+			M12Window* p_M12Window=(M12Window*)glfwGetWindowUserPointer(window);
+			p_M12Window->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
 			//wait emulator response
 			while (this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){}
 			//imgui
@@ -224,7 +293,7 @@ class M12Window{
 			ImGui_ImplGlfw_Shutdown();
 			ImGui::DestroyContext();
 			//emulation screen
-			delete this->p_TS9347out;
+			delete this->p_CRTout;
 			//indicators
 			delete this->keyboardIndicator;
 			//glfw
@@ -261,10 +330,61 @@ class M12Window{
 							this->PARAMETERS.debug.erom.mem_size=EROM_SIZE;
 							break;
 						case VC:
+						{
 							this->PARAMETERS.debug.vram.mem=((TS9347wVRAM*)ms.p)->VRAM;
-							this->p_TS9347out->setIC((TS9347wVRAM*)ms.p);
 							fprintf(stdout,"vram pointer %p\n",this->PARAMETERS.debug.vram.mem);
 							this->PARAMETERS.debug.vram.mem_size=VRAM_SIZE;
+							
+							this->PARAMETERS.debug.vreg.STATUS=&(((TS9347wVRAM*)ms.p)->STATUS);
+							this->PARAMETERS.debug.vreg.COMMAND=&(((TS9347wVRAM*)ms.p)->Rx[0]);
+							this->PARAMETERS.debug.vreg.R1=&(((TS9347wVRAM*)ms.p)->Rx[1]);
+							this->PARAMETERS.debug.vreg.R2=&(((TS9347wVRAM*)ms.p)->Rx[2]);
+							this->PARAMETERS.debug.vreg.R3=&(((TS9347wVRAM*)ms.p)->Rx[3]);
+							this->PARAMETERS.debug.vreg.R4=&(((TS9347wVRAM*)ms.p)->Rx[4]);
+							this->PARAMETERS.debug.vreg.R5=&(((TS9347wVRAM*)ms.p)->Rx[5]);
+							this->PARAMETERS.debug.vreg.R6=&(((TS9347wVRAM*)ms.p)->Rx[6]);
+							this->PARAMETERS.debug.vreg.R7=&(((TS9347wVRAM*)ms.p)->Rx[7]);
+							
+							const char* path="./ressources/TS9347_Texture_Character_Set_Datasheet.bmp";
+							int width, height, nrChannels;
+							unsigned char *data = stbi_load(path, &width, &height, &nrChannels, 1);
+							int nW=width/8;
+							int nH=height/10;
+							int n=288;
+							unsigned char d[n*10]={0};
+							if ((nW*nH)<n) n=nW*nH;
+							if (nH>nW){
+								for (int i=0;i<n;i++){//char i
+									int j=(i%nH)*10*width+(i/nH)*8;//char 0,0 position
+									for (int s=0;s<10;s++){//slice
+										unsigned char sd=0;
+										for (int k=0;k<8;k++){//pixel in slice
+											sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+										}
+										d[i*10+s]=sd;
+									}
+								}
+							}
+							else{
+								for (int i=0;i<n;i++){//char i
+									int j=(i%nW)*8+(i/nW)*10*width;//char 0,0 position
+									for (int s=0;s<10;s++){//slice
+										unsigned char sd=0;
+										for (int k=0;k<8;k++){//pixel in slice
+											sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+										}
+										d[i*10+s]=sd;
+									}
+								}
+							}
+							
+							((TS9347wVRAM*)ms.p)->setROMCharset(d);
+								
+							stbi_image_free(data);
+							break;
+						}
+						case CRT_BUFFER:
+							this->p_CRTout->setBuffer((CRTBuffer*)ms.p);
 							break;
 						case UC:
 						{
@@ -304,6 +424,18 @@ class M12Window{
 						}
 						case CPLD:
 							this->PARAMETERS.io.other.os_rtc=&((MBSL_4000FH5_5*)ms.p)->OS_RTC;
+							
+							//load parameter when accessible
+							{
+								if (this->JSONConfig!=NULL){
+									cJSON* json_o=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"Other");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"os rtc");
+									if (cJSON_IsBool(json_o)){
+										this->PARAMETERS.io.other.os_rtc->store(cJSON_IsTrue(json_o),std::memory_order_relaxed);
+									}
+								}
+							}
 							break;
 						case KEYBOARD:
 							this->keyboardIndicator->setKeyboard((Keyboard*)ms.p);
@@ -340,6 +472,61 @@ class M12Window{
 							printf("Sync emulator to audio sample rate @%iHz\n",this->audioDevice.sampleRate);
 							this->AC.pCLKs->requestSamples(256,256);//TODO: 256->buffer length
 							break;
+						case BUZZER_NOTIFICATION_CONTROL:
+							this->PARAMETERS.io.buzzer.notify_state=(std::atomic_bool*)ms.p;
+							
+							//load parameter when accessible
+							{
+								if (this->JSONConfig!=NULL){
+									cJSON* json_o=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"Buzzer");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"notification");
+									if (cJSON_IsBool(json_o)){
+										this->PARAMETERS.io.buzzer.notify_state->store(cJSON_IsTrue(json_o),std::memory_order_relaxed);
+									}
+								}
+							}
+							break;
+						case DIN5_INTERFACE_LOCAL_WEBSOCKET:
+							this->PARAMETERS.io.peri.peri_lws.p_plugged=&(((DIN5InterfaceLocalWebsocket*)ms.p)->plugged);
+							this->PARAMETERS.io.peri.peri_lws.p_power=&(((DIN5InterfaceLocalWebsocket*)ms.p)->PWR);
+							this->PARAMETERS.io.peri.peri_lws.p_baudrate_in=&(((DIN5InterfaceLocalWebsocket*)ms.p)->baudrate_selection_tx);
+							this->PARAMETERS.io.peri.peri_lws.p_baudrate_out=&(((DIN5InterfaceLocalWebsocket*)ms.p)->baudrate_selection_rx);
+							//load parameter when accessible
+							{
+								if (this->JSONConfig!=NULL){
+									cJSON* json_subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
+									json_subconfig=cJSON_GetObjectItemCaseSensitive(json_subconfig,"DIN");
+									json_subconfig=cJSON_GetObjectItemCaseSensitive(json_subconfig,"Local websocket");
+									
+									cJSON* json_o=cJSON_GetObjectItemCaseSensitive(json_subconfig,"plugged");
+									if (cJSON_IsBool(json_o)) this->PARAMETERS.io.peri.peri_lws.p_plugged->store(cJSON_IsTrue(json_o),std::memory_order_release);
+									json_o=cJSON_GetObjectItemCaseSensitive(json_subconfig,"baudrate in");
+									if (cJSON_IsNumber(json_o)&&json_o->valueint>=0&&json_o->valueint<4) this->PARAMETERS.io.peri.peri_lws.p_baudrate_in->store(json_o->valueint,std::memory_order_release);
+									json_o=cJSON_GetObjectItemCaseSensitive(json_subconfig,"baudrate out");
+									if (cJSON_IsNumber(json_o)&&json_o->valueint>=0&&json_o->valueint<4) this->PARAMETERS.io.peri.peri_lws.p_baudrate_out->store(json_o->valueint,std::memory_order_release);
+								}
+							}
+							break;
+						case EMULATOR_READY:
+							{
+								if (this->JSONConfig!=NULL){
+									cJSON* json_subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"Emulation");
+									cJSON* json_o=cJSON_GetObjectItemCaseSensitive(json_subconfig,"RAM file");
+									bool start=true;
+									if (cJSON_IsString(json_o)){
+										start=start||!(strcmp(json_o->valuestring,"")==0||strcmp(json_o->valuestring,this->RAMS.getSelected())==0);
+									}
+									else start=false;
+									if(this->ROMS.getSelected()==NULL) start=false;
+									json_o=cJSON_GetObjectItemCaseSensitive(json_subconfig,"auto start");
+									if (cJSON_IsBool(json_o)&&cJSON_IsTrue(json_o)&&start){
+										ms.cmd=EMU_ON;
+										this->p_mb_circuit->send(&ms);	
+									}
+								}
+							}
+							break;
 						default:
 							fprintf(stdout,"unknown cmd %i\n",ms.cmd);
 							break;
@@ -360,18 +547,20 @@ class M12Window{
 				ImGui::NewFrame();
 				if (this->PARAMETERS.imgui.show_menu){
 					//ImGui::ShowDemoWindow(&(this->PARAMETERS.imgui.show_menu));
-					mainMenuWindow(&(this->PARAMETERS),this->p_mb_circuit);
+					//mainMenuWindow(&(this->PARAMETERS),this->p_mb_circuit);
+					this->mainMenuWindow();
 				}
 				if (this->PARAMETERS.debug.eram.mem!=NULL&&this->PARAMETERS.debug.eram.show) memoryWindow("RAM externe",&(this->PARAMETERS.debug.eram));
 				if (this->PARAMETERS.debug.erom.mem!=NULL&&this->PARAMETERS.debug.erom.show) memoryWindow("ROM externe",&(this->PARAMETERS.debug.erom));
 				if (this->PARAMETERS.debug.iram.mem!=NULL&&this->PARAMETERS.debug.iram.show) memoryWindow("RAM interne",&(this->PARAMETERS.debug.iram));
 				if (this->PARAMETERS.debug.sfr.show) sfr80C32Window(&(this->PARAMETERS.debug.sfr));
 				if (this->PARAMETERS.debug.vram.mem!=NULL&&this->PARAMETERS.debug.vram.show) memoryWindow("VRAM",&(this->PARAMETERS.debug.vram));
+				if (this->PARAMETERS.debug.vreg.show) regTS9347Window(&(this->PARAMETERS.debug.vreg));
 				this->Notification.notification_window();
 				this->keyboardIndicator->window();
 				
 				//render frame emulator
-				this->p_TS9347out->render();
+				this->p_CRTout->render();
 		 
 				//render frame imgui
 				ImGui::Render();
@@ -383,8 +572,11 @@ class M12Window{
 	private:
 		GLFWwindow* window;
 		Parameters PARAMETERS;
+		const Parameters default_parameters;
+		RAMSelector RAMS=RAMSelector("./profils/");
+		ROMSelector ROMS=ROMSelector("./rom/");
 		NotificationServer Notification;
-		TS9347Renderer* p_TS9347out;
+		CRTRenderer* p_CRTout;
 		KeyboardIndicator* keyboardIndicator;
 		Mailbox* p_mb_circuit;
 		Mailbox* p_mb_video;
@@ -393,6 +585,340 @@ class M12Window{
 		WLOConf wloc;
 		ma_device_config audioDeviceConfig;
 		ma_device audioDevice;
+		cJSON* JSONConfig=NULL;
+		
+		void mainMenuWindow(){
+			ImGui::Begin("Menu",&(this->PARAMETERS.imgui.show_menu),ImGuiWindowFlags_AlwaysAutoResize);
+			ImGui::Text("Appuyez sur F1 pour afficher/cacher le menu");
+			if (ImGui::BeginTabBar("MenuTabBar", ImGuiTabBarFlags_None)){
+				
+				if (ImGui::BeginTabItem("Emulation")){
+					
+					ImGui::SeparatorText("Contrôle de l'émulateur");
+					if(this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){
+						ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0,0.8,0,1));
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(0,1,0,1));
+						ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(0,1,0,1));
+						if(ImGui::Button("(  O)")){
+							thread_message ms;
+							ms.cmd=EMU_OFF;
+							this->p_mb_circuit->send(&ms);
+						}
+						ImGui::PopStyleColor(3);
+						ImGui::SameLine();
+						ImGui::Text("L'émulateur est en marche");
+					}
+					else{
+						ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.8,0,0,1));
+						ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(1,0,0,1));
+						ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(1,0,0,1));
+						if(ImGui::Button("(O  )")){
+							thread_message ms;
+							ms.cmd=EMU_ON;
+							this->p_mb_circuit->send(&ms);
+						}
+						ImGui::PopStyleColor(3);
+						ImGui::SameLine();
+						ImGui::Text("L'émulateur est à l'arrêt");
+					}
+					
+					bool disable_load_memory=this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed);
+					if (disable_load_memory) ImGui::BeginDisabled();
+						
+						ImGui::SeparatorText("Mémoire ROM du minitel");
+						this->ROMS.widget();
+						
+						ImGui::SeparatorText("Profil - Mémoire RAM du minitel");
+						this->RAMS.widget();
+					
+					if (disable_load_memory) ImGui::EndDisabled();
+					
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Entrées/Sorties")){
+					/*static ma_context audio_context=initAudio();
+					static ma_device_info* pPlaybackDeviceInfos;
+					static ma_uint32 playbackDeviceCount;
+					static ma_device_info* pCaptureDeviceInfos;
+					static ma_uint32 captureDeviceCount;*/
+					
+					ImGui::SeparatorText("Clavier");
+					ImGui::Text("L'émulateur est conçu pour un clavier AZERTY avec un pavé numérique (de préférence) et verr num désactivé.");
+					ImGui::Text("Les touches différentes du minitel sont les suivantes:");
+					
+					if (ImGui::BeginTable("keyTable",3,ImGuiTableFlags_Borders|ImGuiTableFlags_SizingStretchSame,ImVec2(0, 0))){
+						ImGui::TableSetupColumn("Clavier", ImGuiTableColumnFlags_None);
+						ImGui::TableSetupColumn("Pavé numérique", ImGuiTableColumnFlags_None);
+						ImGui::TableSetupColumn("Correspondance", ImGuiTableColumnFlags_None);
+						ImGui::TableHeadersRow();
+						
+						const char *key1[17]={"_","Escape","Alt","²","Tab","=","Backspace","F2","F3","F4","F5","F6","F7","F8","F9","*","ù"};
+						const char *key2[17]={"","","","","","","","","","","","","","","","*","/"};
+						const char *key3[17]={"!","Esc","Fnct","\'On/Off\'","Connex/Fin","Mem","\'Haut Parleur\'","Sommaire","Guide","Annulation","Correction","Retour","Suite","Répétition","Envoi","*","#"};
+						for (int i=0;i<17;i++){
+							ImGui::TableNextRow();
+							ImGui::TableSetColumnIndex(0);
+							ImGui::Text(key1[i]);
+							ImGui::TableSetColumnIndex(1);
+							ImGui::Text(key2[i]);
+							ImGui::TableSetColumnIndex(2);
+							ImGui::Text(key3[i]);
+						}
+						
+						ImGui::EndTable();
+					}
+					
+					ImGui::SeparatorText("Prise péri-informatique");
+					
+					if (this->PARAMETERS.io.peri.peri_lws.p_plugged!=NULL){
+						bool lws_plugged=this->PARAMETERS.io.peri.peri_lws.p_plugged->load(std::memory_order_acquire);
+						ImGui::Checkbox("##lws_plugged",&lws_plugged);
+						if (lws_plugged!=this->PARAMETERS.io.peri.peri_lws.p_plugged->load(std::memory_order_acquire)) this->PARAMETERS.io.peri.peri_lws.p_plugged->store(lws_plugged,std::memory_order_release);
+						ImGui::SameLine();
+						if (ImGui::CollapsingHeader("Websocket local")){
+							ImGui::Indent();
+							ImGui::Text("Adresse: ws://localhost:8080");
+							bool lws_pwr=this->PARAMETERS.io.peri.peri_lws.p_power->load(std::memory_order_acquire);
+							ImGui::Text("BaudRate minitel -> websocket:");
+							ImGui::SameLine();
+							if (lws_pwr) ImGui::BeginDisabled();
+							int baud=this->PARAMETERS.io.peri.peri_lws.p_baudrate_out->load(std::memory_order_relaxed);
+							ImGui::Combo("##DIN5InterfaceLocalWebsocket_baudrate_out", &baud, this->PARAMETERS.io.peri.peri_lws.baudrate_name, IM_ARRAYSIZE(this->PARAMETERS.io.peri.peri_lws.baudrate_name));
+							if (baud!=this->PARAMETERS.io.peri.peri_lws.p_baudrate_out->load(std::memory_order_relaxed)) this->PARAMETERS.io.peri.peri_lws.p_baudrate_out->store(baud,std::memory_order_release);
+							if (lws_pwr) ImGui::EndDisabled();
+							
+							ImGui::Text("BaudRate websocket -> minitel:");
+							ImGui::SameLine();
+							if (lws_pwr) ImGui::BeginDisabled();
+							baud=this->PARAMETERS.io.peri.peri_lws.p_baudrate_in->load(std::memory_order_relaxed);
+							ImGui::Combo("##DIN5InterfaceLocalWebsocket_baudrate_in", &baud, this->PARAMETERS.io.peri.peri_lws.baudrate_name, IM_ARRAYSIZE(this->PARAMETERS.io.peri.peri_lws.baudrate_name));
+							if (baud!=this->PARAMETERS.io.peri.peri_lws.p_baudrate_in->load(std::memory_order_relaxed)) this->PARAMETERS.io.peri.peri_lws.p_baudrate_in->store(baud,std::memory_order_release);
+							if (lws_pwr) ImGui::EndDisabled();
+							ImGui::TextDisabled("La vitesse doit être changé côté minitel avec les commandes fnct+P.");
+							ImGui::TextDisabled("Le websocket n'accepte qu'une connexion à la fois.");
+							ImGui::TextDisabled("Le signal PT est considéré comme toujours actif (réseau minitel non implémenté).");
+							ImGui::Unindent();
+						}
+					}
+					//ImGui::Checkbox("Afficher les notifications##peri",&(this->PARAMETERS.io.peri.notify_state));
+					
+					ImGui::SeparatorText("Modem");
+					/*static int modem_io=0;
+					ImGui::RadioButton("Débranché##modem", &modem_io, 0);
+					ImGui::SameLine();
+					ImGui::RadioButton("Socket UNIX##modem", &modem_io, 1);
+					ImGui::SameLine();
+					ImGui::RadioButton("Prise audio##modem", &modem_io, 2);
+					if (modem_io==1){
+						ImGui::Indent();
+						ImGui::Text("Socket:");
+						ImGui::Unindent();
+					}
+					if (modem_io==2){
+						ImGui::Indent();
+						ImGui::Text("Entrée:");
+						static ma_uint32 modem_audio_i=0;
+						static bool modem_i_combo_state_previous=true;
+						bool modem_i_combo_state=ImGui::BeginCombo("##modem_i", (modem_audio_i>=captureDeviceCount)?"":pCaptureDeviceInfos[modem_audio_i].name, 0);
+						if (modem_i_combo_state!=modem_i_combo_state_previous){
+							ma_result result;
+							if (modem_audio_i<captureDeviceCount){
+								ma_device_id id=pCaptureDeviceInfos[modem_audio_i].id;
+								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
+								modem_audio_i=0;
+								for(ma_uint32 i=0;i<captureDeviceCount;i++){
+									if(ma_device_id_equal(&(pCaptureDeviceInfos[i].id),&id)){
+										modem_audio_i=i;
+										break;
+									}
+								}
+							}
+							else{
+								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
+							}
+							if (result != MA_SUCCESS) {
+								printf("Failed to retrieve device information.\n");
+							}
+							modem_i_combo_state_previous=modem_i_combo_state;
+						}
+						if(modem_i_combo_state){
+							for (unsigned int i=0;i<captureDeviceCount;i++) if(i!=modem_audio_i&&ImGui::Selectable(pCaptureDeviceInfos[i].name)) modem_audio_i=i;
+							ImGui::EndCombo();
+						}
+						ImGui::Text("Sortie:");
+						static ma_uint32 modem_audio_o=0;
+						static bool modem_o_combo_state_previous=true;
+						bool modem_o_combo_state=ImGui::BeginCombo("##modem_o", (modem_audio_o>=playbackDeviceCount)?"":pPlaybackDeviceInfos[modem_audio_o].name, 0);
+						if (modem_o_combo_state!=modem_o_combo_state_previous){
+							ma_result result;
+							if (modem_audio_o<playbackDeviceCount){
+								ma_device_id id=pPlaybackDeviceInfos[modem_audio_o].id;
+								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
+								modem_audio_o=0;
+								for(ma_uint32 i=0;i<playbackDeviceCount;i++){
+									if(ma_device_id_equal(&(pPlaybackDeviceInfos[i].id),&id)){
+										modem_audio_o=i;
+										break;
+									}
+								}
+							}
+							else{
+								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
+							}
+							if (result != MA_SUCCESS) {
+								printf("Failed to retrieve device information.\n");
+							}
+							modem_o_combo_state_previous=modem_o_combo_state;
+						}
+						if(modem_o_combo_state){
+							for (unsigned int i=0;i<playbackDeviceCount;i++) if(i!=modem_audio_o&&ImGui::Selectable(pPlaybackDeviceInfos[i].name)) modem_audio_o=i;
+							ImGui::EndCombo();
+						}
+						ImGui::Unindent();
+					}
+					ImGui::Checkbox("Afficher les notifications##modem",&(this->PARAMETERS.io.modem.notify_state));*/
+					
+					ImGui::SeparatorText("Buzzer");
+					/*static int buzzer_o=0;
+					ImGui::RadioButton("Débranché##buzzer", &buzzer_o, 0);
+					ImGui::SameLine();
+					ImGui::RadioButton("Prise audio##buzzer", &buzzer_o, 1);
+					if (buzzer_o==1){
+						ImGui::Indent();
+						ImGui::Text("Sortie:");
+						static ma_uint32 buzzer_audio_o=0;
+						static bool buzzer_o_combo_state_previous=true;
+						bool buzzer_o_combo_state=ImGui::BeginCombo("##buzzer", (buzzer_audio_o>=playbackDeviceCount)?"":pPlaybackDeviceInfos[buzzer_audio_o].name, 0);
+						if (buzzer_o_combo_state!=buzzer_o_combo_state_previous){
+							ma_result result;
+							if (buzzer_audio_o<playbackDeviceCount){
+								ma_device_id id=pPlaybackDeviceInfos[buzzer_audio_o].id;
+								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
+								buzzer_audio_o=0;
+								for(ma_uint32 i=0;i<playbackDeviceCount;i++){
+									if(ma_device_id_equal(&(pPlaybackDeviceInfos[i].id),&id)){
+										buzzer_audio_o=i;
+										break;
+									}
+								}
+							}
+							else{
+								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
+							}
+							if (result != MA_SUCCESS) {
+								printf("Failed to retrieve device information.\n");
+							}
+							buzzer_o_combo_state_previous=buzzer_o_combo_state;
+						}
+						if(buzzer_o_combo_state){
+							for (unsigned int i=0;i<playbackDeviceCount;i++) if(i!=buzzer_audio_o&&ImGui::Selectable(pPlaybackDeviceInfos[i].name)) buzzer_audio_o=i;
+							ImGui::EndCombo();
+						}
+						ImGui::Unindent();
+					}*/
+					if (this->PARAMETERS.io.buzzer.notify_state!=NULL){
+						bool notify=this->PARAMETERS.io.buzzer.notify_state->load(std::memory_order_relaxed);
+						if (ImGui::Checkbox("Afficher les notifications##buzzer",&notify)) this->PARAMETERS.io.buzzer.notify_state->store(notify,std::memory_order_relaxed);
+					}
+					
+					ImGui::SeparatorText("CRT");
+					ImGui::Text("Facteur d'étirement de l'image:");
+					ImGui::Indent();
+					ImGui::SliderFloat("##crt_width", &(this->PARAMETERS.io.crt.width_factor), 0.5, 1.5, "x%.3f");
+					ImGui::SameLine();
+					if(ImGui::Button("Réinitialiser")) this->PARAMETERS.io.crt.width_factor=this->default_parameters.io.crt.width_factor;
+					ImGui::Unindent();
+					ImGui::Checkbox("Sortie vidéo RGB",&(this->PARAMETERS.io.crt.rgb));
+					ImGui::SameLine();
+					ImGui::TextDisabled("(hack)");
+					/*static bool crt_filter=false;
+					ImGui::Checkbox("Filtre vidéo CRT",&crt_filter);*/
+					
+					ImGui::SeparatorText("Divers");
+					if (this->PARAMETERS.io.other.os_rtc!=NULL){
+						static bool os_rtc=this->PARAMETERS.io.other.os_rtc->load(std::memory_order_relaxed);
+						ImGui::Checkbox("Utiliser la date de l'ordinateur pour le RTC",&(os_rtc));
+						this->PARAMETERS.io.other.os_rtc->store(os_rtc,std::memory_order_relaxed);
+						ImGui::SameLine();
+						ImGui::TextDisabled("(hack)");
+						
+					}
+					
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("UI")){
+					ImGui::Text("DPI");
+					ImGui::SameLine();
+					if(ImGui::Button("-##dpi")) ImGui::GetStyle().FontScaleDpi=(ImGui::GetStyle().FontScaleDpi<=1)?1:(ImGui::GetStyle().FontScaleDpi-1);
+					ImGui::SameLine();
+					if(ImGui::Button("+##dpi")) ImGui::GetStyle().FontScaleDpi+=1;
+					ImGui::Checkbox("Rafraichissement d'image dynamique",&(this->PARAMETERS.imgui.idle));
+					
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("Débuggage")){
+					//static bool sbs=false;
+					bool sbs=this->PARAMETERS.p_gState->stepByStep.load(std::memory_order_relaxed);
+					ImGui::SeparatorText("Exécution");
+					ImGui::Checkbox("Pauser l'exécution",&sbs);
+					this->PARAMETERS.p_gState->stepByStep.store(sbs,std::memory_order_relaxed);
+					if (sbs){
+						ImGui::Indent();
+						if(ImGui::Button("Instruction suivante")){
+							thread_message ms;
+							ms.cmd=EMU_NEXT_STEP;
+							p_mb_circuit->send(&ms);
+						}
+						ImGui::Unindent();
+					}
+					
+					ImGui::SeparatorText("Visualisation des espaces mémoires");
+					if (this->PARAMETERS.debug.eram.mem!=NULL){
+						ImGui::Checkbox("Afficher le contenu de la RAM externe",&(this->PARAMETERS.debug.eram.show));
+					}
+					if (this->PARAMETERS.debug.erom.mem!=NULL){
+						ImGui::Checkbox("Afficher le contenu de la ROM externe",&(this->PARAMETERS.debug.erom.show));
+					}
+					if (this->PARAMETERS.debug.iram.mem!=NULL){
+						ImGui::Checkbox("Afficher le contenu de la RAM interne",&(this->PARAMETERS.debug.iram.show));
+					}
+					ImGui::Checkbox("Afficher les registres spéciaux du microcontrôleur",&(this->PARAMETERS.debug.sfr.show));
+					if (this->PARAMETERS.debug.vram.mem!=NULL){
+						ImGui::Checkbox("Afficher le contenu de la RAM vidéo",&(this->PARAMETERS.debug.vram.show));
+					}
+					ImGui::Checkbox("Afficher les registres de la puce vidéo",&(this->PARAMETERS.debug.vreg.show));
+					
+					ImGui::SeparatorText("Statistiques");
+					ImGui::Text("Rafraichissement d'image: %.1f FPS",ImGui::GetIO().Framerate);
+					
+					ImGui::EndTabItem();
+				}
+				if (ImGui::BeginTabItem("À propos")){
+					ImGui::Text(this->PARAMETERS.info.title);
+					ImGui::SeparatorText("Développeurs");
+					ImGui::Text(this->PARAMETERS.info.programmers);
+					ImGui::SeparatorText("Bibliothèques");
+					for (License l:this->PARAMETERS.info.lib_licenses){
+						if (ImGui::TreeNode(l.title)){
+							ImGui::TextUnformatted(l.content);
+							ImGui::TreePop();
+						}
+					}
+					ImGui::SeparatorText("Polices de caractères");
+					for (License l:this->PARAMETERS.info.font_licenses){
+						if (ImGui::TreeNode(l.title)){
+							ImGui::TextUnformatted(l.content);
+							ImGui::TreePop();
+						}
+					}
+					
+					ImGui::EndTabItem();
+				}
+			
+				ImGui::EndTabBar();
+			}
+			ImGui::End();
+		}
 		
 		static void error_callback(int error, const char* description){
 			fprintf(stderr, "Error: %s\n", description);
@@ -407,17 +933,16 @@ class M12Window{
 		//static void char_callback(GLFWwindow* window, unsigned int codepoint){}
 		static void audio_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){
 			//buzzer
+			for (ma_uint32 i=0;i<frameCount;i++) ((float*)pOutput)[i]=0;
 			audioContext* AC=(audioContext*)pDevice->pUserData;
 			if (AC->wloc!=NULL){
 				TS7514_WLO(AC->wloc, pOutput, frameCount);
 			}
 			if (AC->pCLKs!=NULL){
-				AC->pCLKs->requestSamples(frameCount,256);//TODO: 256->buffer length
+				AC->pCLKs->requestSamples(frameCount,512);//TODO: 512->buffer length / windows limitation in shared mode (480)
 			}
 		}
 		static void window_close_callback(GLFWwindow* window){
-			M12Window* p_M12Window=(M12Window*)glfwGetWindowUserPointer(window);
-			p_M12Window->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
 			fprintf(stdout,"Close callback\n");
 			/////////////////////////////////////////////////////
 		}

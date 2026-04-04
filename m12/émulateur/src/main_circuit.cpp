@@ -10,7 +10,8 @@
 #include "circuit/Keyboard.h"
 #include "circuit/clocks.h"
 #include "circuit/L6720.h"
-#include "circuit/DIN5Interface.h"
+#include "circuit/CRTBuffer.h"
+//#include "circuit/DIN5Interface.h"
 
 #include "circuit/debug/IOLogger.h"
 #include "circuit/debug/dbg_80C32.h"
@@ -29,6 +30,17 @@
 
 #include <thread>
 
+#include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
+
+#include <vector>
+
+#include <filesystem>
+
+#define GLAD_GL_IMPLEMENTATION
+#include "glad/glad.h"
+#define GLFW_INCLUDE_NONE
+#include "GLFW/glfw3.h"
+
 void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* p_gState){
 	//create ic
 	SRAM_64k eram;
@@ -45,7 +57,11 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	Keyboard kb;
 	Clocks CLKs;
 	L6720 l6720;
-	SimpleDIN5Interface din5(8080);
+	//SimpleDIN5Interface din5(8080);
+	DIN5InterfaceLocalWebsocket din5lws;
+	CRTBuffer crtb;
+	
+	
 	
 	//construct circuit
 	auto Dbus=[&cpld,&eram,&video,&uc,&iol](unsigned char d){//in ic
@@ -149,7 +165,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	unsigned char P3_uc=0xFF;
 	unsigned char P3_ext=0xFF;
 	//P3 unfinished
-	auto P3bus=[&cpld,&eram,&video,&uc,&iol,&l6720,&wt,&din5,&P3_uc,&P3_ext](unsigned char d){
+	auto P3bus=[&cpld,&eram,&video,&uc,&iol,&l6720,&wt,&din5lws,&P3_uc,&P3_ext](unsigned char d){
 		P3_uc=d;
 		d&=P3_ext;
 		bool nRD=(bool)(d&0x80);
@@ -166,7 +182,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		uc.PXChangeIn(3,d);
 		wt.ENChangeIn((bool)(d&0x04));
 		//bypass L6720 -> buffer
-		din5.RxChangeIn((bool)(d&0x02));
+		din5lws.RxChangeIn((bool)(d&0x02));
 	};
 	uc.subscribeP3(P3bus);
 	
@@ -183,7 +199,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		else P3_ext&=~(1);
 		uc.PXChangeIn(3,P3_uc&P3_ext);
 	};
-	din5.subscribeTx(DIN5Txwire);
+	din5lws.subscribeTx(DIN5Txwire);
 	
 	auto mRxDwire=[&uc,&P3_uc,&P3_ext](bool b){
 		P3_ext&=~(1<<3);
@@ -196,7 +212,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	bool kb_s1=false;
 	bool kb_s2=false;
 	
-	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2,p_mb_video](unsigned char d){
+	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2,&din5lws,p_mb_video](unsigned char d){
 		modem.MCnBCChangeIn((bool)(d&1));
 		modem.MODEMnDTMFChangeIn((bool)(d&2));
 		kb_s1=(bool)(d&4);
@@ -212,6 +228,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			p_mb_video->send(&ms_p_notif);
 		}
 		//0x40->din power - not used in the emulator
+		din5lws.PWRChangeIn((bool)(d&0x40));
 		//0x80->minitel memory access? - not wired
 	};
 	cpld.subscribePIO(CPLDIObus);
@@ -253,8 +270,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	cpld.subscribeSerial(KeyboardSerialIn);
 	
-	auto TS7514CMD=[p_mb_video](unsigned char cmd){
-		if (cmd>=0x38&&cmd<=0x3B){
+	std::atomic_bool notify_buzzer=true;
+	auto TS7514CMD=[p_mb_video,&notify_buzzer](unsigned char cmd){
+		if (cmd>=0x38&&cmd<=0x3B&&notify_buzzer.load(std::memory_order_relaxed)){
 			thread_message ms_p_notif;
 			ms_p_notif.cmd=NOTIFICATION_BUZZER;
 			p_mb_video->send(&ms_p_notif);
@@ -262,9 +280,146 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	modem.subscribeCMD(TS7514CMD);
 	
+	auto CRTVideoIn=[&crtb](unsigned char* v){
+		crtb.VideoChangeIn(v);
+	};
+	video.subscribeVideo(CRTVideoIn);
+	
+	auto VideoSignal=[](){
+		glfwPostEmptyEvent();
+	};
+	crtb.subscribeSignal(VideoSignal);
+	
 	//debug
-	stackMonitor sm=stackMonitor(&uc);
-	/*sm.SPManualyModified=[p_gState,&uc](){
+
+	auto dbgIOIN=[p_gState,&modem,p_mb_video](unsigned char a,unsigned char d){
+		switch (a){
+			case 0x20:
+			case 0x21:
+			case 0x22:
+			case 0x23:
+			case 0x24:
+			case 0x25:
+			case 0x26:
+			case 0x27:
+			case 0x28:
+			case 0x29:
+			case 0x2A:
+			case 0x2B:
+			case 0x2C:
+			case 0x2D:
+			case 0x2E:
+			case 0x2F:
+				//printf("To TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
+				break;
+			case 0x40:
+			case 0x41:
+			case 0x42:
+			case 0x43:
+			case 0x44:
+			case 0x45:
+			{
+				/*const char* type[]={"minute","hour","day","month","year low","year high"};
+				printf("To CPLD RTC %s 0x%02X\n",type[a&0x0F],d);*/
+				break;
+			}
+			case 0x50:
+				//printf("To Keyboard 0x%02X\n",d);
+				break;
+			case 0x51:
+				//printf("To CPLD Status 0x%02X\n",d);
+				break;
+			case 0x70:
+			{
+				/*static unsigned char io=0;
+				if ((bool)((d^io)&(~(1<<3)))){//dont print when watchdog timer kicked
+					io=d&(~(1<<3));
+					printf("To CPLD Pin 0x%02X\n",io);
+				}*/
+				break;
+			}
+			default:
+			{
+				printf("To unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
+				//p_gState->stepByStep.store(true,std::memory_order_relaxed);
+				
+				thread_message ms_p_notif;
+				ms_p_notif.cmd=NOTIFICATION_RED;
+				char* buffer=(char*)calloc(51,sizeof(char));
+				snprintf(buffer,50,"E/S inconnue (0x%02X)<=0x%02X",a,d);
+				ms_p_notif.p=(void*)buffer;
+				p_mb_video->send(&ms_p_notif);
+				break;
+			}
+		}
+	};
+	iol.subscribeIN(dbgIOIN);
+	
+	auto dbgIOOUT=[p_gState,p_mb_video](unsigned char a,unsigned char d){
+		switch (a){
+			case 0x20:
+			case 0x21:
+			case 0x22:
+			case 0x23:
+			case 0x24:
+			case 0x25:
+			case 0x26:
+			case 0x27:
+			case 0x28:
+			case 0x29:
+			case 0x2A:
+			case 0x2B:
+			case 0x2C:
+			case 0x2D:
+			case 0x2E:
+			case 0x2F:
+				//printf("From TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
+				break;
+			case 0x40:
+			case 0x41:
+			case 0x42:
+			case 0x43:
+			case 0x44:
+			case 0x45:
+			{
+				/*const char* type[]={"minute","hour","day","month","year low","year high"};
+				printf("From CPLD RTC %s 0x%02X\n",type[a&0x0F],d);*/
+				break;
+			}
+			case 0x50:
+			{
+				/*static unsigned char data=0xFF;
+				if (d!=data){//deduplicate reading of the same data
+					data=d;
+					printf("From Keyboard 0x%02X\n",d);
+				}*/
+				break;
+			}
+			case 0x51:
+				//printf("From CPLD Status 0x%02X\n",d);
+				break;
+			case 0x70:
+				//printf("From CPLD Pin A: 0x%02X / D: 0x%02X\n",a,d);
+				break;
+			default:
+			{
+				printf("From unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
+				//p_gState->stepByStep.store(true,std::memory_order_relaxed);
+				
+				thread_message ms_p_notif;
+				ms_p_notif.cmd=NOTIFICATION_RED;
+				char* buffer=(char*)calloc(51,sizeof(char));
+				snprintf(buffer,50,"E/S inconnue (0x%02X)=>0x%02X",a,d);
+				ms_p_notif.p=(void*)buffer;
+				p_mb_video->send(&ms_p_notif);
+				break;
+			}
+		}
+	};
+	iol.subscribeOUT(dbgIOOUT);
+	
+	/*stackMonitor sm=stackMonitor(&uc);
+	sm.SPManualyModified=[p_gState,&uc](){
 		printf("SP manualy modified c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])));
 		//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 	};
@@ -292,101 +447,13 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 				printf("address c:%05lX -> c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])),(((unsigned long)uc.PX_out[1]&3)<<16)|(((unsigned short)uc.getRAMByte(sp))<<8)|((unsigned short)uc.getRAMByte(sp-1)));
 			}
 		}
-	};*/
-	
-	auto dbgIOIN=[p_gState,&modem,p_mb_video](unsigned char a,unsigned char d){
-		if ((a&0xF0)==0x20){
-			//printf("To TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
-		}
-		else if ((a&0xF0)==0x40){
-			const char* type[]={"minute","hour","day","month","year low","year high"};
-			printf("To CPLD RTC %s 0x%02X\n",type[a&0x0F],d);
-		}
-		else if (a==0x50){
-			printf("To Keyboard 0x%02X\n",d);
-		}
-		else if (a==0x51){
-			printf("To CPLD Status 0x%02X\n",d);
-		}
-		else if ((a&0xF0)==0x70){
-			static unsigned char io=0;
-			if ((bool)((d^io)&(~(1<<3)))){//dont print when watchdog timer kicked
-				io=d&(~(1<<3));
-				printf("To CPLD Pin 0x%02X\n",io);
-			}
-			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}
-		else{
-			printf("To unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
-			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-			
-			thread_message ms_p_notif;
-			ms_p_notif.cmd=NOTIFICATION_RED;
-			char* buffer=(char*)calloc(51,sizeof(char));
-			snprintf(buffer,50,"E/S inconnue (0x%02X)<=0x%02X",a,d);
-			ms_p_notif.p=(void*)buffer;
-			p_mb_video->send(&ms_p_notif);
-		}
 	};
-	iol.subscribeIN(dbgIOIN);
-	auto dbgIOOUT=[p_gState,p_mb_video](unsigned char a,unsigned char d){
-		if ((a&0xF0)==0x20){
-			//printf("From TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
-		}
-		else if ((a&0xF0)==0x40){
-			const char* type[]={"minute","hour","day","month","year low","year high"};
-			printf("From CPLD RTC %s 0x%02X\n",type[a&0x0F],d);
-		}
-		else if (a==0x50){
-			static unsigned char data=0xFF;
-			if (d!=data){//deduplicate reading of the same data
-				data=d;
-				printf("From Keyboard 0x%02X\n",d);
-			}
-			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}
-		else if (a==0x51){
-			//printf("From CPLD Status 0x%02X\n",d);
-			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}
-		else if ((a&0xF0)==0x70){
-			//printf("From CPLD Pin A: 0x%02X / D: 0x%02X\n",a,d);
-			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}
-		else{
-			printf("From unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
-			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-			
-			thread_message ms_p_notif;
-			ms_p_notif.cmd=NOTIFICATION_RED;
-			char* buffer=(char*)calloc(51,sizeof(char));
-			snprintf(buffer,50,"E/S inconnue (0x%02X)=>0x%02X",a,d);
-			ms_p_notif.p=(void*)buffer;
-			p_mb_video->send(&ms_p_notif);
-		}
-		//if(a!=0x20) r=0xff;
-	};
-	iol.subscribeOUT(dbgIOOUT);
 	uc.debug_signal_alu_before_exec=[p_gState,&uc,&sm](){
 		if (p_gState->stepByStep.load(std::memory_order_relaxed)) print_m12_alu_instruction(&uc);
 		sm.updateState();
-		//unsigned long addr=((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16);
-		/*if (addr==0x10068||addr==0x1C5CC){
-			p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}*/
-		/*if (((unsigned long)uc.PC)-uc.i_length[uc.instruction[0]]+(((unsigned long)uc.PX_out[1]&3)<<16)==0x10074){
-			p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}*/
-		/*if (uc.instruction[0]==0xD2&&uc.instruction[1]==0x99){//SETB TI
-			p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}*/
-		/*if ((uc.instruction[0]==0xE0||uc.instruction[0]==0xF0)&&(!(bool)(uc.PX_out[1]&(1<<5)))){
-			p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}*/
-		//print_m12_alu_instruction(&uc);
-	};
+	};*/
 	
-	din5.debug_connection_change=[p_mb_video](int s){
+	/*din5.debug_connection_change=[p_mb_video](int s){
 		if (s<=0){
 			thread_message ms_p_notif;
 			ms_p_notif.cmd=NOTIFICATION_CYAN;
@@ -403,7 +470,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			ms_p_notif.p=(void*)buffer;
 			p_mb_video->send(&ms_p_notif);
 		}
-	};
+	};*/
 	
 	bool next_step=false;
 	
@@ -507,8 +574,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		}
 	};
 	CLKs.subscribeMailbox(checkMB);
-	auto CLKTick14745600=[&uc,&wt,&modem,&p_gState](){
+	auto CLKTick14745600=[&uc,&wt,&modem,&video,&p_gState](){
 		uc.CLKTickIn();
+		video.CLKTickIn();
 		modem.CLKTickIn();
 		wt.incrementTimer();//(!p_gState->minitelOn.load(std::memory_order_relaxed))||
 		wt.PWRChangeIn(p_gState->minitelOn.load(std::memory_order_relaxed));
@@ -519,8 +587,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		kb.CLKTickIn();
 	};
 	CLKs.subscribe600Hz(CLKTick600);
-	auto CLKTick9600=[&din5](){
-		din5.CLKTickIn();
+	auto CLKTick9600=[&din5lws](){
+		din5lws.CLKTickIn9600Hz();
 	};
 	CLKs.subscribe9600Hz(CLKTick9600);
 	
@@ -536,47 +604,56 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	
 	
-	thread_message ms_p_ram;
-	ms_p_ram.p=(void*)&eram;
-	ms_p_ram.cmd=ERAM;
-	p_mb_video->send(&ms_p_ram);
+	thread_message ms;
 	
-	thread_message ms_p_rom;
-	ms_p_rom.p=(void*)&erom;
-	ms_p_rom.cmd=EROM;
-	p_mb_video->send(&ms_p_rom);
+	ms.p=(void*)&eram;
+	ms.cmd=ERAM;
+	p_mb_video->send(&ms);
 	
-	thread_message ms_p_vc;
-	ms_p_vc.p=(void*)&video;
-	ms_p_vc.cmd=VC;
-	p_mb_video->send(&ms_p_vc);
+	ms.p=(void*)&erom;
+	ms.cmd=EROM;
+	p_mb_video->send(&ms);
 	
-	thread_message ms_p_uc;
-	ms_p_uc.p=(void*)&uc;
-	ms_p_uc.cmd=UC;
-	p_mb_video->send(&ms_p_uc);
+	ms.p=(void*)&video;
+	ms.cmd=VC;
+	p_mb_video->send(&ms);
 	
-	thread_message ms_p_cpld;
-	ms_p_cpld.p=(void*)&cpld;
-	ms_p_cpld.cmd=CPLD;
-	p_mb_video->send(&ms_p_cpld);
+	ms.p=(void*)&uc;
+	ms.cmd=UC;
+	p_mb_video->send(&ms);
 	
-	thread_message ms_p_kb;
-	ms_p_kb.p=(void*)&kb;
-	ms_p_kb.cmd=KEYBOARD;
-	p_mb_video->send(&ms_p_kb);
+	ms.p=(void*)&cpld;
+	ms.cmd=CPLD;
+	p_mb_video->send(&ms);
 	
-	thread_message ms_p_modem;
-	ms_p_modem.p=(void*)&modem;
-	ms_p_modem.cmd=MODEM;
-	p_mb_video->send(&ms_p_modem);
+	ms.p=(void*)&kb;
+	ms.cmd=KEYBOARD;
+	p_mb_video->send(&ms);
 	
-	thread_message ms_p_clock;
-	ms_p_clock.p=(void*)&CLKs;
-	ms_p_clock.cmd=CLOCK;
-	p_mb_video->send(&ms_p_clock);
+	ms.p=(void*)&modem;
+	ms.cmd=MODEM;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&CLKs;
+	ms.cmd=CLOCK;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&notify_buzzer;
+	ms.cmd=BUZZER_NOTIFICATION_CONTROL;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&din5lws;
+	ms.cmd=DIN5_INTERFACE_LOCAL_WEBSOCKET;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&crtb;
+	ms.cmd=CRT_BUFFER;
+	p_mb_video->send(&ms);
 	
 	
+	ms.p=NULL;
+	ms.cmd=EMULATOR_READY;
+	p_mb_video->send(&ms);
 	
 	
 	CLKs.start();
@@ -588,6 +665,4 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	//signal emulation end
 	p_gState->minitelOn.store(false,std::memory_order_relaxed);
-	
-	
 }

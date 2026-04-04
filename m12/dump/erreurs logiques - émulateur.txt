@@ -1,0 +1,8 @@
+Bz6:
+
+démarrage:
+	lecture de l'E/S 0x96 (adresse basse)
+
+mem puis décrocher téléphone puis mem et mem:
+	ne sort pas du menu et supprime la flèche la première fois qu'est appuyé mem après avoir décroché -> effets visuels testés et vérifiés sur le véritable hardware
+	écriture de l'E/S 0xE7 (adresse basse) une fois sorti du menu

@@ -1,28 +1,28 @@
 {
-	"UI": {
-		"show menu": true,
-		"idle": true,
-		"DPI": 1
+	"UI":	{
+		"show menu":	true,
+		"idle":	true,
+		"DPI":	1
 	},
-	"Emulation":{
-		"auto start":false,
-		"ROM file":"",
-		"RAM file":"./profils/aaaa.raw"
+	"Emulation":	{
+		"auto start":	true,
+		"ROM file":	"./rom/Bz6.rom",
+		"RAM file":	""
 	},
-	"IO":{
-		"DIN":{
-			
+	"IO":	{
+		"DIN":	{
 		},
-		"Phone line":{
-			
+		"Phone line":	{
 		},
-		"Audio":{
-
+		"Buzzer":	{
+			"notification":	true
 		},
-		"Video":{
-			"rgb": false,
-			"crt filter": false,
-			"width factor": 0.3333
+		"CRT":	{
+			"rgb":	true,
+			"width factor":	0.66666668653488159
+		},
+		"Other":	{
+			"os rtc":	true
 		}
 	}
 }

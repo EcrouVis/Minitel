@@ -40,24 +40,39 @@ struct imgui80C32SFRView{
 	std::atomic_uchar* TL2=NULL;
 	std::atomic_uchar* TMOD=NULL;
 };
+struct imguiTS9347REGView{
+	bool show=false;
+	std::atomic_uchar* STATUS=NULL;
+	std::atomic_uchar* COMMAND=NULL;
+	std::atomic_uchar* R1=NULL;
+	std::atomic_uchar* R2=NULL;
+	std::atomic_uchar* R3=NULL;
+	std::atomic_uchar* R4=NULL;
+	std::atomic_uchar* R5=NULL;
+	std::atomic_uchar* R6=NULL;
+	std::atomic_uchar* R7=NULL;
+};
 struct P_ImGui{
 	bool show_menu=true;
 	bool idle=true;
-	ImFont* font=NULL;
 };
 struct P_Emulation{
 	int state=-1;
 };
-struct P_FileSystem{
-	const char* erom=NULL;
-	const char* eram=NULL;
-};
 struct P_Keyboard{
 	
+};
+struct P_Peri_Local_Websocket{
+	std::atomic_bool* p_plugged=NULL;
+	std::atomic_bool* p_power=NULL;
+	std::atomic<int>* p_baudrate_in=NULL;
+	std::atomic<int>* p_baudrate_out=NULL;
+	const char* baudrate_name[4] = { "300", "1200", "4800", "9600"};
 };
 struct P_Peri{
 	bool plugged=false;
 	bool notify_state=true;
+	P_Peri_Local_Websocket peri_lws;
 };
 struct P_Modem{
 	bool plugged=false;
@@ -66,7 +81,7 @@ struct P_Modem{
 };
 struct P_Buzzer{
 	int audio_device=-1;
-	bool notify_state=true;
+	std::atomic_bool* notify_state=NULL;
 };
 struct P_CRT{
 	bool rgb=false;
@@ -91,6 +106,7 @@ struct P_Debug{
 	imguiMemoryView erom;
 	imguiMemoryView vram;
 	imgui80C32SFRView sfr;
+	imguiTS9347REGView vreg;
 };
 struct P_Info{
 	const char* title="Minitel 12 Philips";
@@ -111,7 +127,6 @@ struct Parameters{
 	GlobalState* p_gState=NULL;
 	P_ImGui imgui;
 	P_Emulation emu;
-	P_FileSystem fs;
 	P_IO io;
 	P_Debug debug;
 	P_Info info;

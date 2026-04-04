@@ -9,10 +9,10 @@
 class Clocks{
 	public:
 		Clocks(){
-			this->audioMutex=new std::mutex();
+			//this->audioMutex=new std::mutex();
 		}
 		~Clocks(){
-			delete this->audioMutex;
+			//delete this->audioMutex;
 		}
 	
 		void setPauseCondition(std::function<bool()> f){
@@ -42,15 +42,17 @@ class Clocks{
 		}
 		
 		void setAudioSampleRate(unsigned long sr){
-			std::lock_guard<std::mutex> lock(*(this->audioMutex));
+			std::lock_guard<std::mutex> lock(this->audioMutex);
 			this->audio_sample_rate.store(sr,std::memory_order_release);
 			this->audioCV.notify_one();
 		}
 		void requestSamples(unsigned long n,unsigned long nmax=ULONG_MAX){
-			std::lock_guard<std::mutex> lock(*(this->audioMutex));
+			{
+			std::lock_guard<std::mutex> lock(this->audioMutex);
 			this->requestedSamples+=n;
 			if (this->requestedSamples>nmax) this->requestedSamples=nmax;
 			this->audioCV.notify_one();
+			}
 		}
 		
 		void start(){
@@ -67,6 +69,7 @@ class Clocks{
 						//while (std::chrono::steady_clock::now()-new_t<this->dt_sleep_max-this->dt);
 						if (this->dt<this->dt_sleep_max) std::this_thread::sleep_for(this->dt_sleep_max-this->dt);
 						this->last_t=new_t;
+						this->checkMailbox();
 					}
 				}
 				else{//sync to audio
@@ -74,19 +77,22 @@ class Clocks{
 					if (this->audio_div_sync>=this->master_clock_rate){
 						this->audio_div_sync=this->audio_div_sync%this->master_clock_rate;
 						this->audioSample();
+						bool chk_mb=false;
 						{
-							std::unique_lock<std::mutex> lock(*(this->audioMutex));
+							std::unique_lock<std::mutex> lock(this->audioMutex);
 							this->requestedSamples--;
 							if (this->requestedSamples<=0){
 								this->audioCV.wait(lock, [this](){
 									return (this->requestedSamples>0)||(this->audio_sample_rate.load(std::memory_order_relaxed)==0);
 								});//requested samples or switch to clock sync
+								chk_mb=true;//avoid blocking audio thread while checking mailbox
 							}
+						}
+						if (chk_mb){
+							this->checkMailbox();//check less often mailbox
 						}
 					}
 				}
-				
-				this->checkMailbox();
 				
 				if (!this->pause()){
 					this->CLK14745600();
@@ -129,7 +135,7 @@ class Clocks{
 		unsigned long div4800_600=0;
 		unsigned long div4800_600_max=8;
 		
-		std::mutex* audioMutex;
+		std::mutex audioMutex;
 		std::condition_variable audioCV;
 		unsigned long requestedSamples=0;
 		std::atomic<unsigned long> audio_sample_rate=0;

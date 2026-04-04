@@ -121,7 +121,7 @@ unsigned char m80C32::getSFRByteIn(unsigned char address){
 		case this->TMOD:
 			return this->SFR[address&0x7F].load(std::memory_order_relaxed);
 		default:
-			printf("read sfr in %02X\n",address);
+			//printf("read sfr in %02X\n",address);
 			return 0xFF;
 	}
 }
@@ -159,7 +159,7 @@ unsigned char m80C32::getSFRByteOut(unsigned char address){
 		case this->TMOD:
 			return this->SFR[address&0x7F].load(std::memory_order_relaxed);
 		default:
-			printf("read sfr out %02X\n",address);
+			//printf("read sfr out %02X\n",address);
 			return 0xFF;
 	}
 }
@@ -239,7 +239,7 @@ void m80C32::setSFRByte(unsigned char address, unsigned char d){
 			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
 			break;
 		default:
-			printf("write sfr %02X\n",address);
+			//printf("write sfr %02X\n",address);
 			break;
 	}
 }
@@ -929,7 +929,7 @@ void m80C32::nextCycleALU(){
 	
 }
 void m80C32::setACCParity(){
-	const unsigned short p=0b0110100110010110;
+	unsigned short p=0b0110100110010110;
 	unsigned char a=this->getSFRByteIn(this->ACC);
 	p=((p>>(a&0x0F))^(p>>(a>>4)))&0x01;
 	this->setBitIn(this->P,(bool)p);
@@ -939,8 +939,12 @@ void m80C32::execInstruction(){
 	unsigned char a;
 	this->debug_signal_alu_before_exec();
 	switch (this->instruction[0]){
-		default:printf("erreur instruction %02X\n",this->instruction[0]);break;
-		case 0xA5:printf("erreur instruction propriétaire\n");break;//reserved
+		default:
+			//printf("erreur instruction %02X\n",this->instruction[0]);
+			break;
+		case 0xA5:
+			//printf("erreur instruction propriétaire\n");
+			break;//reserved
 		
 		case 0x11:this->ACALL((unsigned short)this->instruction[1]);break;
 		case 0x31:this->ACALL(0x0100|(unsigned short)this->instruction[1]);break;

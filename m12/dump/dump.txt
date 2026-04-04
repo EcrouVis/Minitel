@@ -339,10 +339,15 @@ Changement de vitesse:
 0x0100-0x0180 - tampon mémoire circulaire 2 ?
 0x0400-0x0500 - tampon mémoire circulaire 3 ?
 
-0x072F - taille du mot de passe
+0x0706 bit 0 - état du minitel? (non verrouillé: 0 / verrouillé: 1)
+0x0707 bit 0 - protection des messages reçus par mot de passe? (oui: 0 / non: 1)
+0x072F - taille du mot de passe (10 charactères max)
 0x0730-0x0739 - mot de passe
-0x073A - taille de l'identification serveur
+0x073A - taille de l'identification serveur  (15 charactères max)
 0x073B-0x0749 - identification serveur
+
+??? - structure des mails et du message d'accueil
+0x171C-... - stockage des mails et du message d'accueil (mail: nom de l'émetteur | jour format BCD | mois format BCD | année partie basse format BCD | objet | ligne 1 | ligne 2 | … )
 
 ---------- mémoire interne ----------
 0x28 - copie de l'état des IO du CPLD (sans le bit 6) ?
