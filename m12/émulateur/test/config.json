@@ -5,7 +5,7 @@
 		"DPI":	1
 	},
 	"Emulation":	{
-		"auto start":	true,
+		"auto start":	false,
 		"ROM file":	"./rom/Bz6.rom",
 		"RAM file":	""
 	},
@@ -18,11 +18,11 @@
 			"notification":	true
 		},
 		"CRT":	{
-			"rgb":	true,
+			"rgb":	false,
 			"width factor":	0.66666668653488159
 		},
 		"Other":	{
-			"os rtc":	true
+			"os rtc":	false
 		}
 	}
 }

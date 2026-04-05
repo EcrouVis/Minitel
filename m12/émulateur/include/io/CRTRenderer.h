@@ -37,7 +37,7 @@ class CRTRenderer{
 			
 			this->ScaleID=glGetUniformLocation(this->ProgramID,"scale");
 			
-			glClearColor(0,0,0.4,0);
+			glClearColor(0,0,0,0);
 		}
 		void setBuffer(CRTBuffer* p_buffer){
 			this->p_buffer=p_buffer;
@@ -172,7 +172,7 @@ void main(){\n\
 				this->p_buffer->getVideoFrame(crtbuffer_data);
 				glBindTexture(GL_TEXTURE_2D,this->TextureID);
 				static unsigned char data[(250+2)*(3*40*8+2)*4];
-				const unsigned char l[]={0x00,0b00100100,0b01001001,0b01101101,0b10010010,0b10110110,0b11011011,0xFF};
+				const unsigned char l[]={0,102,179,204,128,153,230,255};
 				if (this->p_PARAMETERS->io.crt.rgb){
 					for (int i=0;i<(250+2)*(3*40*8+2);i++){
 						data[4*i]=crtbuffer_data[i>>1];
@@ -201,7 +201,7 @@ void main(){\n\
 				for (int i=0;i<(250+2)*(3*40*8+2);i++) data[i]=this->p_buffer->VIDEO_OUTPUT[i].load(std::memory_order_acquire);
 				glTexImage2D(GL_TEXTURE_2D,0,GL_RED,3*40*8+2,250+2,0, GL_RED, GL_UNSIGNED_BYTE,data);*/
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_LINEAR);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 			}

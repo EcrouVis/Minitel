@@ -67,11 +67,11 @@ void TS9347wVRAM::CLKTickIn(){
 	unsigned short n_line=this->clk_frame>>7;
 	unsigned char pos_line=(this->clk_frame>>1)&0x3F;
 	
-	if (n_line==21&&pos_line==0){
-		this->STATUS.fetch_or(this->VSYNC_MASK,std::memory_order_relaxed);
+	if (this->clk_frame==0x0A80){
+		if (!this->vsync_mask) this->STATUS.fetch_or(this->VSYNC_MASK,std::memory_order_relaxed);
 		this->sendVideo(this->VIDEO_OUTPUT);
 	}
-	if (n_line==23&&pos_line==0) this->STATUS.fetch_and(~this->VSYNC_MASK,std::memory_order_relaxed);
+	if (this->clk_frame==0x0B80) this->STATUS.fetch_and(~this->VSYNC_MASK,std::memory_order_relaxed);
 	
 	if (this->late_cmd_end){
 		this->late_cmd_end=false;
