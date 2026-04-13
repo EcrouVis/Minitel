@@ -15,7 +15,11 @@
 		"Phone line":	{
 		},
 		"Buzzer":	{
-			"notification":	true
+			"notification":	true,
+			"volume":	1
+		},
+		"Speaker":	{
+			"volume":	1
 		},
 		"CRT":	{
 			"rgb":	false,

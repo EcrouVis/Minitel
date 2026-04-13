@@ -52,6 +52,17 @@ struct imguiTS9347REGView{
 	std::atomic_uchar* R6=NULL;
 	std::atomic_uchar* R7=NULL;
 };
+struct imguiTS7514REGView{
+	bool show=false;
+	std::atomic_uchar* RPROG=NULL;
+	std::atomic_uchar* RDTMF=NULL;
+	std::atomic_uchar* RATE=NULL;
+	std::atomic_uchar* RWLO=NULL;
+	std::atomic_uchar* RPTF=NULL;
+	std::atomic_uchar* RPRF=NULL;
+	std::atomic_uchar* RHDL=NULL;
+	std::atomic_uchar* RPRX=NULL;
+};
 struct P_ImGui{
 	bool show_menu=true;
 	bool idle=true;
@@ -80,8 +91,11 @@ struct P_Modem{
 	bool notify_state=true;
 };
 struct P_Buzzer{
-	int audio_device=-1;
-	std::atomic_bool* notify_state=NULL;
+	float volume=1.;
+	bool notify=true;
+};
+struct P_Speaker{
+	float volume=1.;
 };
 struct P_CRT{
 	bool rgb=false;
@@ -97,6 +111,7 @@ struct P_IO{
 	P_Peri peri;
 	P_Modem modem;
 	P_Buzzer buzzer;
+	P_Speaker speaker;
 	P_CRT crt;
 	P_Other other;
 };
@@ -107,6 +122,7 @@ struct P_Debug{
 	imguiMemoryView vram;
 	imgui80C32SFRView sfr;
 	imguiTS9347REGView vreg;
+	imguiTS7514REGView mreg;
 };
 struct P_Info{
 	const char* title="Minitel 12 Philips";

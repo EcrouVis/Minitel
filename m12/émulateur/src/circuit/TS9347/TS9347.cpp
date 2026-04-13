@@ -75,7 +75,7 @@ void TS9347wVRAM::CLKTickIn(){
 	
 	if (this->late_cmd_end){
 		this->late_cmd_end=false;
-		this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);//before cmd exec -> delay 0.5T
+		this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);//before cmd exec -> delay 0.5T
 	}
 	
 	if (n_line>=62){
@@ -622,7 +622,7 @@ void TS9347wVRAM::loadUDS(){//load UDS + video output
 					slice=slice/2;
 				}
 				unsigned char Z=this->DOR.load(std::memory_order_relaxed);
-				const unsigned char l[]={0x08,0x0A,0x09,0x0B,0x0C,0x0E,0x0D,0x0F};
+				constexpr unsigned char l[]={0x08,0x0A,0x09,0x0B,0x0C,0x0E,0x0D,0x0F};
 				Z=l[(b&0x38)>>3]|((Z&0x80)>>3);
 				c=this->VRAM[this->getSliceRAMIndex(slice,c,Z)];
 				break;
@@ -746,7 +746,7 @@ unsigned char TS9347wVRAM::getY(bool MP){
 void TS9347wVRAM::incrementB(bool MP){
 	unsigned char r=this->Rx[MP?7:5].load(std::memory_order_relaxed);
 	//r+=0x40;
-	const unsigned char l[]={0x80,0xC0,0x40,0x00};
+	constexpr unsigned char l[]={0x80,0xC0,0x40,0x00};
 	r=(l[r>>6])|(r&0x3F);
 	this->Rx[MP?7:5].store(r,std::memory_order_relaxed);
 }
@@ -754,14 +754,14 @@ void TS9347wVRAM::incrementB(bool MP){
 void TS9347wVRAM::addB(bool MP,unsigned char d){
 	unsigned char r=this->Rx[MP?7:5].load(std::memory_order_relaxed);
 	//r+=d<<6;
-	const unsigned char l1[]={0x00,0x02,0x01,0x03};
-	const unsigned char l2[]={0x00,0x80,0x40,0xC0};
+	constexpr unsigned char l1[]={0x00,0x02,0x01,0x03};
+	constexpr unsigned char l2[]={0x00,0x80,0x40,0xC0};
 	r=(l2[((l1[r>>6])+d)&0x03])|(r&0x3F);
 	this->Rx[MP?7:5].store(r,std::memory_order_relaxed);
 }
 
 unsigned char TS9347wVRAM::getB(bool MP){
-	const unsigned char l[]={0x00,0x02,0x01,0x03};
+	constexpr unsigned char l[]={0x00,0x02,0x01,0x03};
 	return l[this->Rx[MP?7:5].load(std::memory_order_relaxed)>>6];
 }
 
@@ -837,7 +837,7 @@ void TS9347wVRAM::executeCommand(){
 						this->CLS();
 						break;
 					default:
-						this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+						this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 						printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 						break;
 				}
@@ -860,7 +860,7 @@ void TS9347wVRAM::executeCommand(){
 				else if ((this->Rx[0].load(std::memory_order_relaxed)&0x0D)==0x05) this->CLS();
 				else{
 					printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
-					this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+					this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 				}
 				break;
 			case 0x70://TSA
@@ -881,7 +881,7 @@ void TS9347wVRAM::executeCommand(){
 						this->VSM();
 						break;
 					default:
-						this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+						this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 						printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 						break;
 				}
@@ -899,7 +899,7 @@ void TS9347wVRAM::executeCommand(){
 				this->MVT();
 				break;
 			default:
-				this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+				this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 				printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 				break;
 		}
@@ -912,7 +912,7 @@ void TS9347wVRAM::NOP(){
 			this->cmd_step=1;
 			break;
 		case 1:
-			this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+			this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 	}
 }
@@ -925,7 +925,7 @@ void TS9347wVRAM::VRM(){
 		case 1:
 			this->vsync_mask=false;
 			if ((this->clk_frame>>7)==21||(this->clk_frame>>7)==22) this->STATUS.fetch_or(this->VSYNC_MASK,std::memory_order_relaxed);
-			this->STATUS.fetch_and(~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
+			this->STATUS.fetch_and((unsigned char)~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
 			break;
 	}
 }
@@ -937,7 +937,7 @@ void TS9347wVRAM::VSM(){
 			break;
 		case 1:
 			this->vsync_mask=true;
-			this->STATUS.fetch_and(~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK|this->VSYNC_MASK),std::memory_order_relaxed);
+			this->STATUS.fetch_and((unsigned char)~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK|this->VSYNC_MASK),std::memory_order_relaxed);
 			break;
 	}
 }
@@ -949,7 +949,7 @@ void TS9347wVRAM::INY(){
 			break;
 		case 2:
 			this->incrementY(true);
-			this->STATUS.fetch_and(~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
+			this->STATUS.fetch_and((unsigned char)~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
 			break;
 	}
 }
@@ -1004,7 +1004,7 @@ void TS9347wVRAM::IND(){
 			}
 			this->STATUS.fetch_and(~(this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
 			
-			if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)) this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+			if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)) this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			this->cmd_step++;
 			break;
 		case 3:
@@ -1043,7 +1043,7 @@ void TS9347wVRAM::MVB(){
 		}
 		
 		case 6:
-			this->STATUS.fetch_and(~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
+			this->STATUS.fetch_and((unsigned char)~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
 			break;
 	}
 }
@@ -1089,7 +1089,7 @@ void TS9347wVRAM::MVD(){
 			break;
 		}	
 		case 10:
-			this->STATUS.fetch_and(~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
+			this->STATUS.fetch_and((unsigned char)~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
 			break;
 	}
 }
@@ -1145,7 +1145,7 @@ void TS9347wVRAM::MVT(){
 			break;
 		}
 		case 14:
-			this->STATUS.fetch_and(~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
+			this->STATUS.fetch_and((unsigned char)~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
 			break;
 	}
 }
@@ -1163,7 +1163,7 @@ void TS9347wVRAM::TBM(){
 			}
 			else{
 				this->VRAM[this->pointer2RAMAddress(true)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
-				this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+				this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			}
 			
 			this->STATUS.fetch_and(~(this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
@@ -1193,7 +1193,7 @@ void TS9347wVRAM::TBA(){
 			}
 			else{
 				this->VRAM[this->pointer2RAMAddress(false)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
-				this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+				this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			}
 			
 			this->STATUS.fetch_and(~(this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
@@ -1222,7 +1222,7 @@ void TS9347wVRAM::KRS(){
 			}
 			else{
 				this->VRAM[this->pointer2RAMAddress(true)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
-				this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+				this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			}
 			
 			this->STATUS.fetch_and(~(this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
@@ -1351,7 +1351,7 @@ void TS9347wVRAM::TSM(){
 				this->STATUS.fetch_or(this->LXm_MASK,std::memory_order_relaxed);
 			}
 			if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)){
-				this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+				this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			}
 			
 			this->cmd_step++;
@@ -1397,7 +1397,7 @@ void TS9347wVRAM::TSA(){
 			else if (this->getX(false)==39){
 				this->STATUS.fetch_or(this->LXa_MASK,std::memory_order_relaxed);
 			}
-			if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)) this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+			if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)) this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			
 			this->cmd_step++;
 			break;
@@ -1482,7 +1482,7 @@ void TS9347wVRAM::TLM(){
 			else if (this->getX(true)==39){
 				this->STATUS.fetch_or(this->LXm_MASK,std::memory_order_relaxed);
 			}
-			if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)) this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+			if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)) this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			
 			this->cmd_step++;
 			break;
@@ -1532,7 +1532,7 @@ void TS9347wVRAM::TLA(){
 			else if (this->getX(false)==39){
 				this->STATUS.fetch_or(this->LXm_MASK,std::memory_order_relaxed);
 			}
-			if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)) this->STATUS.fetch_and(~this->BUSY_MASK,std::memory_order_relaxed);
+			if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)) this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			
 			this->cmd_step++;
 			break;

@@ -74,6 +74,8 @@ class CRTRenderer{
 			}
 		}
 	private:
+		bool current_rgb=false;
+	
 		CRTBuffer* p_buffer=NULL;
 		GLFWwindow* window;
 		Parameters* p_PARAMETERS;
@@ -167,7 +169,8 @@ void main(){\n\
 			glDeleteShader(this->FragmentShaderID);
 		}
 		void updateTexture(){
-			if (this->p_buffer->frameChanged()){
+			if (this->p_buffer->frameChanged()||(this->current_rgb!=this->p_PARAMETERS->io.crt.rgb)){
+				this->current_rgb=this->p_PARAMETERS->io.crt.rgb;
 				static unsigned char crtbuffer_data[VIDEO_FRAME_SIZE];
 				this->p_buffer->getVideoFrame(crtbuffer_data);
 				glBindTexture(GL_TEXTURE_2D,this->TextureID);

@@ -92,7 +92,7 @@ unsigned char m80C32::getRAMByte(unsigned char address){
 	return this->iRAM[address].load(std::memory_order_relaxed);
 }
 unsigned char m80C32::getSFRByteIn(unsigned char address){
-	switch (address){
+	/*switch (address){
 		case this->P0:
 		case this->P1:
 		case this->P2:
@@ -123,10 +123,11 @@ unsigned char m80C32::getSFRByteIn(unsigned char address){
 		default:
 			//printf("read sfr in %02X\n",address);
 			return 0xFF;
-	}
+	}*/
+	return this->SFR[address&0x7F].load(std::memory_order_relaxed);
 }
 unsigned char m80C32::getSFRByteOut(unsigned char address){
-	switch (address){
+	/*switch (address){
 		case this->P0:
 			return this->PX_out[0];
 		case this->P1:
@@ -161,6 +162,18 @@ unsigned char m80C32::getSFRByteOut(unsigned char address){
 		default:
 			//printf("read sfr out %02X\n",address);
 			return 0xFF;
+	}*/
+	switch (address){
+		case this->P0:
+			return this->PX_out[0];
+		case this->P1:
+			return this->PX_out[1];
+		case this->P2:
+			return this->PX_out[2];
+		case this->P3:
+			return this->PX_out[3];
+		default:
+			return this->SFR[address&0x7F].load(std::memory_order_relaxed);
 	}
 }
 unsigned char m80C32::getDirectByteIn(unsigned char address){
@@ -262,8 +275,8 @@ void m80C32::CLKTickIn(){
 	if ((this->period&0x01)==1) return;// f/2->state time
 	
 	unsigned char t2con=this->getSFRByteIn(this->T2CON);
-	unsigned char t2con_mask1=1<<(this->C_nT2&0x07);
-	unsigned char t2con_mask2=(1<<(this->C_nT2&0x07))|(1<<(this->RCLK&0x07))|(1<<(this->TCLK&0x07));
+	constexpr unsigned char t2con_mask1=1<<(this->C_nT2&0x07);
+	constexpr unsigned char t2con_mask2=(1<<(this->C_nT2&0x07))|(1<<(this->RCLK&0x07))|(1<<(this->TCLK&0x07));
 	if ((t2con&t2con_mask1)==0&&(t2con&t2con_mask2)!=0) this->T2Tick();
 	
 	if (this->period<this->periodPerCycle) return;
@@ -275,9 +288,9 @@ void m80C32::CLKTickIn(){
 	
 	this->ResetCountdown();
 	if (this->reset_count!=0){
-		unsigned char pd_mask=1<<this->PD;
-		unsigned char idl_mask=1<<this->IDL;
-		unsigned char power_mode=this->getSFRByteIn(this->PCON)&(pd_mask|idl_mask);
+		constexpr unsigned char pd_mask=1<<this->PD;
+		constexpr unsigned char idl_mask=1<<this->IDL;
+		unsigned char power_mode=this->getSFRByteIn(this->PCON);//&(pd_mask|idl_mask);
 		if ((power_mode&pd_mask)==0){
 			if ((power_mode&idl_mask)==0){
 				this->nextCycleALU();
@@ -841,7 +854,7 @@ void m80C32::checkInterrupts(){
 			unsigned char mask=1<<i;
 			if ((this->interrupt_level&mask)!=0) break;
 			if ((interrupt_signal&mask)!=0){
-				this->i_cycle_n=this->i_cycle[0x12];
+				//this->i_cycle_n=this->i_cycle[0x12];
 				this->instruction[0]=0x12;
 				this->instruction[1]=0x00;
 				switch (i){
@@ -872,7 +885,7 @@ void m80C32::checkInterrupts(){
 						this->instruction[2]=0x2B;
 						break;
 				}
-				this->i_part_n=3;
+				this->i_part_n=this->i_length[0x12];//3;
 				this->i_cycle_n=0;
 				this->interrupt_level|=mask;
 				this->setSFRByte(this->PCON,this->getSFRByteIn(this->PCON)&(~(1<<this->IDL)));
@@ -922,7 +935,6 @@ void m80C32::nextCycleALU(){
 	this->i_cycle_n++;
 	
 	if (this->i_cycle[this->instruction[0]]-this->i_cycle_n<=0){
-		this->exec_instruction=true;
 		this->execInstruction();
 	}
 	

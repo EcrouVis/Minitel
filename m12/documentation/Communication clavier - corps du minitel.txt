@@ -165,6 +165,8 @@ Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
 	0x2B allumer la led on/off
 	0x33 faire clignoter la led on/off
 
+	0x39 ??? (faire clignoter la led haut parleur? / supposition / pas encore testé)
+
 	0x41, 0x43, 0x45, 0x47 volume du haut parleur (0x41 volume minimal / 0x47 volume maximal)
 	0x49, 0x4B, 0x4D, 0x4F volume de la sonnerie (0x49 volume minimal / 0x4F volume maximal)
 

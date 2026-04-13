@@ -40,7 +40,9 @@
 #define MA_NO_ENCODING
 #include "miniaudio/miniaudio.h"
 
-#include "io/TS7514Audio.h"
+//#include "io/TS7514Audio.h"
+#include "circuit/SpeakerBuffer.h"
+#include "circuit/BuzzerBuffer.h"
 #include "circuit/TS7514.h"
 
 #include "FileAccess.h"
@@ -49,8 +51,9 @@
 #include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
 
 struct audioContext{
-	WLOConf* wloc=NULL;
 	Clocks* pCLKs=NULL;
+	SpeakerBuffer* spkb=NULL;
+	BuzzerBuffer* bzb=NULL;
 };
 
 
@@ -157,8 +160,22 @@ class M12Window{
 					//IO
 					subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
 					
+					//Buzzer
+					cJSON* subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"Buzzer");
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"notification");
+					if (cJSON_IsBool(c_param)){
+						this->PARAMETERS.io.buzzer.notify=cJSON_IsTrue(c_param);
+					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"volume");
+					if (cJSON_IsNumber(c_param)) this->PARAMETERS.io.buzzer.volume=c_param->valuedouble;
+					
+					//Speaker
+					subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"Speaker");
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"volume");
+					if (cJSON_IsNumber(c_param)) this->PARAMETERS.io.speaker.volume=c_param->valuedouble;
+					
 					//CRT
-					cJSON* subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"CRT");
+					subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"CRT");
 					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"rgb");
 					if (cJSON_IsBool(c_param)){
 						this->PARAMETERS.io.crt.rgb=cJSON_IsTrue(c_param);
@@ -198,11 +215,10 @@ class M12Window{
 			this->keyboardIndicator=new KeyboardIndicator();
 			
 			this->Notification.notify(4,ImVec4(0,1,1,1));
-	
-			//TS7514_WLO_init(&(this->wloc),48000);
 			
 			//audio
 			//see https://github.com/mackron/miniaudio/discussions/1084
+			//see https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio
 			this->audioDeviceConfig = ma_device_config_init(ma_device_type_playback);
 			
 			this->audioDeviceConfig.playback.format   = ma_format_f32;
@@ -211,9 +227,9 @@ class M12Window{
 			this->audioDeviceConfig.sampleRate        = 0;//48000;
 			
 			this->audioDeviceConfig.dataCallback      = this->audio_data_callback;
-			//this->audioDeviceConfig.noFixedSizedCallback=true;
-			this->audioDeviceConfig.periodSizeInFrames = 480;
-			this->audioDeviceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
+			this->audioDeviceConfig.noFixedSizedCallback=true;
+			this->audioDeviceConfig.periodSizeInFrames = 512;
+			//this->audioDeviceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
 			this->audioDeviceConfig.wasapi.noAutoConvertSRC = true;
 			this->audioDeviceConfig.pUserData         = &(this->AC);
 
@@ -221,9 +237,6 @@ class M12Window{
 				printf("Failed to open playback device.\n");
 				return;
 			}
-			
-			printf("Sample rate: %iHz\n",this->audioDevice.sampleRate);
-			TS7514_WLO_init(&(this->wloc),this->audioDevice.sampleRate);
 
 			printf("Device Name: %s\n", this->audioDevice.playback.name);
 			
@@ -265,7 +278,12 @@ class M12Window{
 				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Buzzer");
 				if (JSONSubconfig2!=NULL){
-					if (this->PARAMETERS.io.buzzer.notify_state!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"notification",this->PARAMETERS.io.buzzer.notify_state->load(std::memory_order_relaxed));
+					cJSON_AddBoolToObject(JSONSubconfig2,"notification",this->PARAMETERS.io.buzzer.notify);
+					cJSON_AddNumberToObject(JSONSubconfig2,"volume",this->PARAMETERS.io.buzzer.volume);
+				}
+				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Speaker");
+				if (JSONSubconfig2!=NULL){
+					cJSON_AddNumberToObject(JSONSubconfig2,"volume",this->PARAMETERS.io.speaker.volume);
 				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"CRT");
 				if (JSONSubconfig2!=NULL){
@@ -303,7 +321,6 @@ class M12Window{
 			this->AC.pCLKs->setAudioSampleRate(0);//doesn't change anything but safer -> decouple emulator clock from audio clock
 			//audio
 			ma_device_uninit(&(this->audioDevice));
-			TS7514_WLO_uninit(&(this->wloc));
 			//RAM and ROM files
 			unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->eram));
 			unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->erom));
@@ -386,6 +403,14 @@ class M12Window{
 						case CRT_BUFFER:
 							this->p_CRTout->setBuffer((CRTBuffer*)ms.p);
 							break;
+						case SPEAKER_BUFFER:
+							this->AC.spkb=(SpeakerBuffer*)ms.p;
+							this->AC.spkb->setVolumeLog(this->PARAMETERS.io.speaker.volume);
+							break;
+						case BUZZER_BUFFER:
+							this->AC.bzb=(BuzzerBuffer*)ms.p;
+							this->AC.bzb->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
+							break;
 						case UC:
 						{
 							m80C32* uc=(m80C32*)ms.p;
@@ -446,7 +471,7 @@ class M12Window{
 							//fprintf(stdout,"notification from thread\n");
 							break;
 						case NOTIFICATION_BUZZER:
-							this->Notification.notify(0,ImVec4(1,0.5,0,1));
+							if (this->PARAMETERS.io.buzzer.notify) this->Notification.notify(0,ImVec4(1,0.5,0,1));
 							break;
 						case NOTIFICATION_REBOOT:
 							this->Notification.notify(1,ImVec4(0,1,1,1));
@@ -461,9 +486,14 @@ class M12Window{
 						case CRT_POWER_ON:break;
 						case CRT_POWER_OFF:break;
 						case MODEM:
-							this->wloc.pRWLO=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RWLO]);
-							this->AC.wloc=&(this->wloc);
-							printf("modem RWLO pointer: %p\n",this->AC.wloc->pRWLO);
+							this->PARAMETERS.debug.mreg.RPROG=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RPROG]);
+							this->PARAMETERS.debug.mreg.RDTMF=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RDTMF]);
+							this->PARAMETERS.debug.mreg.RATE=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RATE]);
+							this->PARAMETERS.debug.mreg.RWLO=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RWLO]);
+							this->PARAMETERS.debug.mreg.RPTF=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RPTF]);
+							this->PARAMETERS.debug.mreg.RPRF=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RPRF]);
+							this->PARAMETERS.debug.mreg.RHDL=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RHDL]);
+							this->PARAMETERS.debug.mreg.RPRX=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RPRX]);
 							break;
 						case CLOCK:
 							this->AC.pCLKs=(Clocks*)ms.p;
@@ -471,21 +501,6 @@ class M12Window{
 							this->AC.pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
 							printf("Sync emulator to audio sample rate @%iHz\n",this->audioDevice.sampleRate);
 							this->AC.pCLKs->requestSamples(256,256);//TODO: 256->buffer length
-							break;
-						case BUZZER_NOTIFICATION_CONTROL:
-							this->PARAMETERS.io.buzzer.notify_state=(std::atomic_bool*)ms.p;
-							
-							//load parameter when accessible
-							{
-								if (this->JSONConfig!=NULL){
-									cJSON* json_o=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
-									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"Buzzer");
-									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"notification");
-									if (cJSON_IsBool(json_o)){
-										this->PARAMETERS.io.buzzer.notify_state->store(cJSON_IsTrue(json_o),std::memory_order_relaxed);
-									}
-								}
-							}
 							break;
 						case DIN5_INTERFACE_LOCAL_WEBSOCKET:
 							this->PARAMETERS.io.peri.peri_lws.p_plugged=&(((DIN5InterfaceLocalWebsocket*)ms.p)->plugged);
@@ -556,6 +571,7 @@ class M12Window{
 				if (this->PARAMETERS.debug.sfr.show) sfr80C32Window(&(this->PARAMETERS.debug.sfr));
 				if (this->PARAMETERS.debug.vram.mem!=NULL&&this->PARAMETERS.debug.vram.show) memoryWindow("VRAM",&(this->PARAMETERS.debug.vram));
 				if (this->PARAMETERS.debug.vreg.show) regTS9347Window(&(this->PARAMETERS.debug.vreg));
+				if (this->PARAMETERS.debug.mreg.show) regTS7514Window(&(this->PARAMETERS.debug.mreg));
 				this->Notification.notification_window();
 				this->keyboardIndicator->window();
 				
@@ -582,7 +598,6 @@ class M12Window{
 		Mailbox* p_mb_video;
 		
 		audioContext AC;
-		WLOConf wloc;
 		ma_device_config audioDeviceConfig;
 		ma_device audioDevice;
 		cJSON* JSONConfig=NULL;
@@ -816,9 +831,20 @@ class M12Window{
 						}
 						ImGui::Unindent();
 					}*/
-					if (this->PARAMETERS.io.buzzer.notify_state!=NULL){
-						bool notify=this->PARAMETERS.io.buzzer.notify_state->load(std::memory_order_relaxed);
-						if (ImGui::Checkbox("Afficher les notifications##buzzer",&notify)) this->PARAMETERS.io.buzzer.notify_state->store(notify,std::memory_order_relaxed);
+					if (this->AC.bzb!=NULL){
+						ImGui::Text("Volume:");
+						ImGui::Indent();
+						if (ImGui::SliderFloat("##buzzer_volume", &(this->PARAMETERS.io.buzzer.volume), 0., 1., "%.3f")) this->AC.bzb->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
+						ImGui::Unindent();
+					}
+					ImGui::Checkbox("Afficher les notifications##buzzer",&(this->PARAMETERS.io.buzzer.notify));
+					
+					ImGui::SeparatorText("Haut parleur");
+					if (this->AC.spkb!=NULL){
+						ImGui::Text("Volume:");
+						ImGui::Indent();
+						if (ImGui::SliderFloat("##speaker_volume", &(this->PARAMETERS.io.speaker.volume), 0., 1., "%.3f")) this->AC.spkb->setVolumeLog(this->PARAMETERS.io.speaker.volume);
+						ImGui::Unindent();
 					}
 					
 					ImGui::SeparatorText("CRT");
@@ -887,6 +913,7 @@ class M12Window{
 						ImGui::Checkbox("Afficher le contenu de la RAM vidéo",&(this->PARAMETERS.debug.vram.show));
 					}
 					ImGui::Checkbox("Afficher les registres de la puce vidéo",&(this->PARAMETERS.debug.vreg.show));
+					ImGui::Checkbox("Afficher les registres du modem",&(this->PARAMETERS.debug.mreg.show));
 					
 					ImGui::SeparatorText("Statistiques");
 					ImGui::Text("Rafraichissement d'image: %.1f FPS",ImGui::GetIO().Framerate);
@@ -932,14 +959,17 @@ class M12Window{
 		}
 		//static void char_callback(GLFWwindow* window, unsigned int codepoint){}
 		static void audio_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){
-			//buzzer
-			for (ma_uint32 i=0;i<frameCount;i++) ((float*)pOutput)[i]=0;
 			audioContext* AC=(audioContext*)pDevice->pUserData;
-			if (AC->wloc!=NULL){
-				TS7514_WLO(AC->wloc, pOutput, frameCount);
-			}
+			
 			if (AC->pCLKs!=NULL){
-				AC->pCLKs->requestSamples(frameCount,512);//TODO: 512->buffer length / windows limitation in shared mode (480)
+				AC->pCLKs->requestSamples(frameCount,1024);//TODO: 512->buffer length / windows limitation in shared mode (480 @48000Hz) /limit max->800 @48000 (screen update @~60fps)
+			}
+			
+			if (AC->spkb!=NULL){
+				AC->spkb->AudioOut((float*)pOutput,frameCount);
+			}
+			if (AC->bzb!=NULL){
+				AC->bzb->AudioOut((float*)pOutput,frameCount);
 			}
 		}
 		static void window_close_callback(GLFWwindow* window){

@@ -8,10 +8,9 @@ const int SFR_SIZE=128;
 
 class m80C32{
 	public:
-		bool exec_instruction=false;
 		
-		//address
 		enum Constants{
+			//address
 			ACC=0xE0,
 			B=0xF0,
 			DPH=0x83,
@@ -37,7 +36,80 @@ class m80C32{
 			TL0=0x8A,
 			TL1=0x8B,
 			TL2=0xCC,
-			TMOD=0x89
+			TMOD=0x89,
+			
+			//bit address
+			EA=0xAF,
+			ET2=0xAD,
+			ES=0xAC,
+			ET1=0xAB,
+			EX1=0xAA,
+			ET0=0xA9,
+			EX0=0xA8,
+			PT2=0xBD,
+			PS=0xBC,
+			PT1=0xBB,
+			PX1=0xBA,
+			PT0=0xB9,
+			PX0=0xB8,
+			T2EX=0x91,
+			T2=0x90,
+			nRD=0xB7,
+			nWR=0xB6,
+			T1=0xB5,
+			T0=0xB4,
+			nINT1=0xB3,
+			nINT0=0xB2,
+			TxD=0xB1,
+			RxD=0xB0,
+			CY=0xD7,
+			AC=0xD6,
+			F0=0xD5,
+			RS1=0xD4,
+			RS0=0xD3,
+			OV=0xD2,
+			P=0xD0,
+			SM0=0x9F,
+			SM1=0x9E,
+			SM2=0x9D,
+			REN=0x9C,
+			TB8=0x9B,
+			RB8=0x9A,
+			TI=0x99,
+			RI=0x98,
+			TF1=0x8F,
+			TR1=0x8E,
+			TF0=0x8D,
+			TR0=0x8C,
+			IE1=0x8B,
+			IT1=0x8A,
+			IE0=0x89,
+			IT0=0x88,
+			TF2=0xCF,
+			EXF2=0xCE,
+			RCLK=0xCD,
+			TCLK=0xCC,
+			EXEN2=0xCB,
+			TR2=0xCA,
+			C_nT2=0xC9,
+			CP_nRL2=0xC8,
+			
+			//num bit
+			//PCON
+			SMOD=7,
+			GF1=3,
+			GF0=2,
+			PD=1,
+			IDL=0,
+			//TMOD
+			GATE_1=7,
+			C_T_1=6,
+			M1_1=5,
+			M0_1=4,
+			GATE_0=3,
+			C_T_0=2,
+			M1_0=1,
+			M0_0=0,
 		};
 	
 		std::atomic_uchar iRAM[IRAM_SIZE];
@@ -105,10 +177,10 @@ class m80C32{
 		std::function<void(void)> debug_signal_alu_before_exec=[](){};
 		std::function<void(void)> debug_signal_alu_after_exec=[](){};
 	
-		const unsigned char periodPerCycle=12;
+		constexpr static unsigned char periodPerCycle=12;
 		
 		//bit address
-		const unsigned char EA=0xAF;
+		/*const unsigned char EA=0xAF;
 		const unsigned char ET2=0xAD;
 		const unsigned char ES=0xAC;
 		const unsigned char ET1=0xAB;
@@ -178,9 +250,9 @@ class m80C32{
 		const unsigned char GATE_0=3;
 		const unsigned char C_T_0=2;
 		const unsigned char M1_0=1;
-		const unsigned char M0_0=0;
+		const unsigned char M0_0=0;*/
 	
-		const unsigned char i_length[256]={
+		constexpr static unsigned char i_length[256]={
 			1,2,3,1,1,2,1,1,1,1,1,1,1,1,1,1,
 			3,2,3,1,1,2,1,1,1,1,1,1,1,1,1,1,
             3,2,1,1,2,2,1,1,1,1,1,1,1,1,1,1,
@@ -198,7 +270,7 @@ class m80C32{
             1,2,1,1,1,2,1,1,1,1,1,1,1,1,1,1,
             1,2,1,1,1,2,1,1,1,1,1,1,1,1,1,1
 			};
-		const unsigned char i_cycle[256]={
+		constexpr static unsigned char i_cycle[256]={
 			1,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,
 			2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,
 			2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,
@@ -337,7 +409,5 @@ class m80C32{
 		void updateTX();
 		
 };
-
-void print_m12_alu_instruction(m80C32* uc);
 
 #endif

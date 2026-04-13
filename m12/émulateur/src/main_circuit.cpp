@@ -11,10 +11,13 @@
 #include "circuit/clocks.h"
 #include "circuit/L6720.h"
 #include "circuit/CRTBuffer.h"
+#include "circuit/SpeakerBuffer.h"
+#include "circuit/BuzzerBuffer.h"
 //#include "circuit/DIN5Interface.h"
 
 #include "circuit/debug/IOLogger.h"
 #include "circuit/debug/dbg_80C32.h"
+#include "circuit/debug/decomp_m12_rom.h"
 
 #include "FileAccess.h"
 
@@ -60,6 +63,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	//SimpleDIN5Interface din5(8080);
 	DIN5InterfaceLocalWebsocket din5lws;
 	CRTBuffer crtb;
+	SpeakerBuffer spkb;
+	BuzzerBuffer bzb;
+	
+	RuntimeDecompiler rtd=RuntimeDecompiler(&uc);
 	
 	
 	
@@ -270,9 +277,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	cpld.subscribeSerial(KeyboardSerialIn);
 	
-	std::atomic_bool notify_buzzer=true;
-	auto TS7514CMD=[p_mb_video,&notify_buzzer](unsigned char cmd){
-		if (cmd>=0x38&&cmd<=0x3B&&notify_buzzer.load(std::memory_order_relaxed)){
+	auto TS7514CMD=[p_mb_video](unsigned char cmd){
+		if (cmd>=0x38&&cmd<=0x3B){
 			thread_message ms_p_notif;
 			ms_p_notif.cmd=NOTIFICATION_BUZZER;
 			p_mb_video->send(&ms_p_notif);
@@ -453,6 +459,13 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		sm.updateState();
 	};*/
 	
+	bool pause_emu=false;
+	uc.debug_signal_alu_before_exec=[p_gState,&pause_emu,&rtd](){
+		pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
+		if (p_gState->minitelOn.load(std::memory_order_relaxed)){
+			rtd.update();
+		}
+	};
 	/*din5.debug_connection_change=[p_mb_video](int s){
 		if (s<=0){
 			thread_message ms_p_notif;
@@ -472,22 +485,22 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		}
 	};*/
 	
-	bool next_step=false;
-	
 	auto stopC=[p_gState](){
 		return p_gState->shutdown.load(std::memory_order_relaxed);
 	};
 	CLKs.setStopCondition(stopC);
-	auto pauseC=[p_gState,&next_step,&uc](){
-		bool p=(p_gState->stepByStep.load(std::memory_order_relaxed)&&(uc.exec_instruction||!next_step));
+	auto pauseC=[&pause_emu](){
+		return pause_emu;
+		/*bool p=p_gState->stepByStep.load(std::memory_order_relaxed)&&(uc.exec_instruction||!next_step);
 		if (uc.exec_instruction){
 			uc.exec_instruction=false;
 			next_step=false;
 		}
-		return p;
+		return p;*/
 	};
 	CLKs.setPauseCondition(pauseC);
-	auto checkMB=[p_mb_circuit,&eram,&erom,&uc,&modem,&wt,&cpld,&next_step,&kb,p_gState](){
+	auto checkMB=[p_mb_circuit,&eram,&erom,&uc,&modem,&wt,&cpld,&pause_emu,&kb,p_gState](){
+		pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
 		thread_message ms;
 		static unsigned char erom_cpy[EROM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
 		static unsigned char eram_cpy[ERAM_SIZE];
@@ -557,7 +570,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 					printf("power off\n");
 					break;
 				case EMU_NEXT_STEP:
-					next_step=true;
+					pause_emu=false;
 					break;
 				case KEYBOARD_STATE_UPDATE:
 				{
@@ -574,12 +587,11 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		}
 	};
 	CLKs.subscribeMailbox(checkMB);
-	auto CLKTick14745600=[&uc,&wt,&modem,&video,&p_gState](){
+	auto CLKTick14745600=[&uc,&wt,&modem,&video](){
 		uc.CLKTickIn();
 		video.CLKTickIn();
 		modem.CLKTickIn();
-		wt.incrementTimer();//(!p_gState->minitelOn.load(std::memory_order_relaxed))||
-		wt.PWRChangeIn(p_gState->minitelOn.load(std::memory_order_relaxed));
+		wt.incrementTimer();
 	};
 	CLKs.subscribe14745600Hz(CLKTick14745600);
 	auto CLKTick600=[&kb,&cpld](){
@@ -591,6 +603,17 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		din5lws.CLKTickIn9600Hz();
 	};
 	CLKs.subscribe9600Hz(CLKTick9600);
+	
+	auto CLKAudio=[&spkb,&kb,&bzb,&modem](unsigned long sr){
+		spkb.AudioIn(kb.getSpeakerSample(sr));
+		bzb.AudioIn(modem.getBuzzerSample(sr));
+		static unsigned long srp=0;
+		if (sr!=srp){
+			bzb.setSampleRate(sr);
+			srp=sr;
+		}
+	};
+	CLKs.subscribeAudioSample(CLKAudio);
 	
 	
 	
@@ -638,16 +661,20 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	ms.cmd=CLOCK;
 	p_mb_video->send(&ms);
 	
-	ms.p=(void*)&notify_buzzer;
-	ms.cmd=BUZZER_NOTIFICATION_CONTROL;
-	p_mb_video->send(&ms);
-	
 	ms.p=(void*)&din5lws;
 	ms.cmd=DIN5_INTERFACE_LOCAL_WEBSOCKET;
 	p_mb_video->send(&ms);
 	
 	ms.p=(void*)&crtb;
 	ms.cmd=CRT_BUFFER;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&spkb;
+	ms.cmd=SPEAKER_BUFFER;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&bzb;
+	ms.cmd=BUZZER_BUFFER;
 	p_mb_video->send(&ms);
 	
 	

@@ -23,8 +23,6 @@ class Keyboard{
 		
 		std::atomic_uchar LED_POWER=LED_OFF;
 		std::atomic_uchar LED_SPEAKER=LED_OFF;
-		
-		std::atomic_ushort SPEAKER_STATE=0;//0: speaker on /1: play ringtone (set to 0 by audio/this thread) /2&3: speaker volume /4&5: ringtone volume /6: restart ringtone (set to 0 by audio thread) /8&9&10: ringtone
 	
 		void CLKTickIn(){
 			if (this->S_out_step>0||this->SBUF_out_queue.size()!=0){
@@ -105,6 +103,7 @@ class Keyboard{
 				this->phone_status&=~0x10;
 				this->sendStatus();
 			}
+			
 		}
 		void KeyboardChangeIn(keyboard_message* kb_m){
 			if (kb_m->focus){
@@ -228,6 +227,13 @@ class Keyboard{
 			}
 			this->S_in=b;
 		}
+		
+		float getSpeakerSample(unsigned long sampleRate){
+			float s;
+			s=this->getRingtoneSample(sampleRate);
+			//TODO
+			return s;
+		}
 	private:
 		unsigned char phone_status=0x61;
 	
@@ -246,6 +252,37 @@ class Keyboard{
 		unsigned char cmd_p2;
 		
 		bool ringtone_activated=false;
+		
+		unsigned int ringtone_tick=0;
+		unsigned char ringtone_note=16;
+		unsigned int ringtone_phase_tick=0;
+		
+		unsigned char ringtone=0;
+		unsigned char ringtone_volume=0;
+		
+		constexpr static unsigned int REd_4=622;
+		constexpr static unsigned int MI_4=659;
+		constexpr static unsigned int FA_4=698;
+		constexpr static unsigned int SOL_4=784;
+		constexpr static unsigned int SOLd_4=831;
+		constexpr static unsigned int LAd_4=932;
+		constexpr static unsigned int SI_4=988;
+		constexpr static unsigned int DO_5=1047;
+		constexpr static unsigned int DOd_5=1109;
+		constexpr static unsigned int MI_5=1319;
+		constexpr static unsigned int SOLd_5=1661;
+		constexpr static unsigned int NO_NOTE=0;
+		
+		constexpr static unsigned int ringtones[5][16]={//1 note->1/12s
+			{MI_5,SOLd_5,MI_5,SOLd_5,MI_5,SOLd_5,MI_5,SOLd_5,MI_5,SOLd_5,MI_5,SOLd_5,MI_5,SOLd_5,MI_5,SOLd_5},
+			{REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4,REd_4},
+			{MI_4,SOLd_4,MI_4,SOLd_4,MI_4,SOLd_4,MI_4,SOLd_4,MI_4,SOLd_4,MI_4,SOLd_4,MI_4,SOLd_4,MI_4,SOLd_4},
+			{SI_4,SOLd_4,SOLd_4,FA_4,SI_4,SOLd_4,SOLd_4,FA_4,SI_4,SOLd_4,SOLd_4,FA_4,SI_4,SOLd_4,SOLd_4,FA_4},
+			{REd_4,REd_4,SOL_4,LAd_4,DOd_5,DOd_5,DOd_5,LAd_4,  DO_5,DO_5,  DO_5,FA_4,SOLd_4,FA_4,SOLd_4,FA_4}
+		};
+		
+		bool speaker_on=false;
+		unsigned char speaker_volume=0;
 		
 		void commandReceived(){
 			if (this->command_part){
@@ -271,7 +308,7 @@ class Keyboard{
 			this->SBUF_out_queue.push(this->phone_status);
 		}
 		void executeCommand(){
-			printf("keyboard serial in %02X%02X\n",this->cmd_p1,this->cmd_p2);
+			//printf("keyboard serial in %02X%02X\n",this->cmd_p1,this->cmd_p2);
 			if ((bool)(this->cmd_p1&0x04)){//commande
 				switch (this->cmd_p2){
 					case 0x01:
@@ -290,11 +327,11 @@ class Keyboard{
 						break;
 					case 0x05:
 						printf("speaker activated\n");
-						this->SPEAKER_STATE.fetch_or(0x0001,std::memory_order_release);
+						this->speaker_on=true;
 						break;
 					case 0x07:
 						printf("speaker deactivated\n");
-						this->SPEAKER_STATE.fetch_and(~0x0001,std::memory_order_release);
+						this->speaker_on=false;
 						break;
 					case 0x09:
 						printf("ringtone activated\n");
@@ -331,61 +368,67 @@ class Keyboard{
 					case 0x33:this->LED_POWER.store(LED_BLINK,std::memory_order_release);printf("blink on/off led\n");break;
 					
 					case 0x41:
-						printf("set speaker volume 1\n");
-						this->SPEAKER_STATE.fetch_and(~0x000C,std::memory_order_release);
+						//printf("set speaker volume 1\n");
+						this->speaker_volume=0;
 						break;
 					case 0x43:
-						printf("set speaker volume 2\n");
-						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x000C))|0x0004,std::memory_order_release);
+						//printf("set speaker volume 2\n");
+						this->speaker_volume=1;
 						break;
 					case 0x45:
-						printf("set speaker volume 3\n");
-						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x000C))|0x0008,std::memory_order_release);
+						//printf("set speaker volume 3\n");
+						this->speaker_volume=2;
 						break;
 					case 0x47:
-						printf("set speaker volume 4\n");
-						this->SPEAKER_STATE.fetch_or(0x000C,std::memory_order_release);
+						//printf("set speaker volume 4\n");
+						this->speaker_volume=3;
 						break;
 					case 0x49:
-						printf("set ringtone volume 1\n");
-						this->SPEAKER_STATE.fetch_and(~0x0030,std::memory_order_release);
+						//printf("set ringtone volume 1\n");
+						this->ringtone_volume=0;
 						break;
 					case 0x4B:
-						printf("set ringtone volume 2\n");
-						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0030))|0x0010,std::memory_order_release);
+						//printf("set ringtone volume 2\n");
+						this->ringtone_volume=1;
 						break;
 					case 0x4D:
-						printf("set ringtone volume 3\n");
-						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0030))|0x0020,std::memory_order_release);
+						//printf("set ringtone volume 3\n");
+						this->ringtone_volume=2;
 						break;
 					case 0x4F:
-						printf("set ringtone volume 4\n");
-						this->SPEAKER_STATE.fetch_or(0x0030,std::memory_order_release);
+						//printf("set ringtone volume 4\n");
+						this->ringtone_volume=3;
 						break;
 					
 					case 0x81:
-						printf("set ringtone 1\n");
-						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(0<<8),std::memory_order_release);
+						//printf("set ringtone 1\n");
+						this->ringtone_note=16;
+						this->ringtone=0;
 						break;
 					case 0x83:
-						printf("set ringtone 2\n");
-						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(1<<8),std::memory_order_release);
+						//printf("set ringtone 2\n");
+						this->ringtone_note=16;
+						this->ringtone=1;
 						break;
 					case 0x85:
-						printf("set ringtone 3\n");
-						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(2<<8),std::memory_order_release);
+						//printf("set ringtone 3\n");
+						this->ringtone_note=16;
+						this->ringtone=2;
 						break;
 					case 0x87:
-						printf("set ringtone 4\n");
-						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(3<<8),std::memory_order_release);
+						//printf("set ringtone 4\n");
+						this->ringtone_note=16;
+						this->ringtone=3;
 						break;
 					case 0x89:
-						printf("set ringtone 5\n");
-						this->SPEAKER_STATE.store((this->SPEAKER_STATE.load(std::memory_order_relaxed)&(~0x0700))|(4<<8),std::memory_order_release);
+						//printf("set ringtone 5\n");
+						this->ringtone_note=16;
+						this->ringtone=4;
 						break;
 					case 0x8B:
-						printf("play ringtone\n");
-						this->SPEAKER_STATE.fetch_or(0x0042,std::memory_order_release);
+						//printf("play ringtone\n");
+						this->ringtone_note=0;
+						this->ringtone_tick=0;
 						break;
 					
 					default:printf("Unknown cmd %02X%02X\n",this->cmd_p1,this->cmd_p2);break;
@@ -412,6 +455,26 @@ class Keyboard{
 					this->SBUF_out_queue.push(0x61);
 				}
 			}*/
+		}
+		
+		float getRingtoneSample(unsigned long sampleRate){
+			if (this->ringtone_note<16){//ringtone generation
+				this->ringtone_tick+=12;
+				this->ringtone_phase_tick+=this->ringtones[this->ringtone][this->ringtone_note];
+				if (this->ringtone_phase_tick>=sampleRate) this->ringtone_phase_tick-=sampleRate;
+				if (this->ringtone_tick>=sampleRate){
+					this->ringtone_tick-=sampleRate;
+					this->ringtone_note++;
+				}
+				float a=1.-std::exp(-((float)this->ringtone_note+((float)this->ringtone_tick)/((float)sampleRate))/(12.*0.06));
+				constexpr float v[4]={0.0316227766,0.1,0.316227766,1};//guess TODO
+				return ((this->ringtone_phase_tick*4>sampleRate)?-1.:1.)*v[this->ringtone_volume]*a;
+			}
+			return 0.;
+		}
+		float getPhoneLineSample(){
+			constexpr float v[4]={0.0316227766,0.1,0.316227766,1};//guess TODO
+			return v[this->speaker_volume]*0;//TODO
 		}
 };
 

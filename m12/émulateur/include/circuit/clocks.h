@@ -1,7 +1,7 @@
 #ifndef CLOCKS_H
 #define CLOCKS_H
 #include <functional>
-#include <chrono>
+//#include <chrono>
 #include <thread>
 #include <mutex>
 #include <limits>
@@ -37,29 +37,38 @@ class Clocks{
 		void subscribeMailbox(std::function<void()> f){
 			this->checkMailbox=f;
 		}
-		void subscribeAudioSample(std::function<void()> f){
+		void subscribeAudioSample(std::function<void(unsigned long)> f){
 			this->audioSample=f;
 		}
 		
-		void setAudioSampleRate(unsigned long sr){
-			std::lock_guard<std::mutex> lock(this->audioMutex);
+		void setAudioSampleRate(unsigned long sr){//cannot 
 			this->audio_sample_rate.store(sr,std::memory_order_release);
-			this->audioCV.notify_one();
 		}
 		void requestSamples(unsigned long n,unsigned long nmax=ULONG_MAX){
 			{
-			std::lock_guard<std::mutex> lock(this->audioMutex);
+			std::unique_lock<std::mutex> lock(this->audioMutex);
 			this->requestedSamples+=n;
 			if (this->requestedSamples>nmax) this->requestedSamples=nmax;
+			lock.unlock();
 			this->audioCV.notify_one();
 			}
 		}
 		
 		void start(){
-			this->last_t=std::chrono::steady_clock::now();
-			while (!this->stop()){
+			bool stop=false;
+			//this->last_t=std::chrono::steady_clock::now();
+			
+			{
+				std::unique_lock<std::mutex> lock(this->audioMutex);
+				if (this->requestedSamples<=0){
+					this->audioCV.wait(lock, [this](){
+						return this->requestedSamples>0;
+					});
+				}
+			}
+			while (!stop){
 				
-				if (this->audio_sample_rate.load(std::memory_order_relaxed)==0){//clock
+				/*//clock
 					this->div_sync++;
 					if (this->div_sync>=this->div_sync_max){
 						this->div_sync=0;
@@ -70,27 +79,28 @@ class Clocks{
 						if (this->dt<this->dt_sleep_max) std::this_thread::sleep_for(this->dt_sleep_max-this->dt);
 						this->last_t=new_t;
 						this->checkMailbox();
+						stop=this->stop();
+						//pause=this->pause();
+					}*/
+				//sync to audio
+				this->audio_div_sync+=this->audio_sample_rate.load(std::memory_order_relaxed);
+				if (this->audio_div_sync>=this->master_clock_rate){
+					this->audio_div_sync=this->audio_div_sync%this->master_clock_rate;
+					this->audioSample(this->audio_sample_rate.load(std::memory_order_relaxed));
+					bool chk_mb=false;
+					{
+						std::unique_lock<std::mutex> lock(this->audioMutex);
+						this->requestedSamples--;
+						if (this->requestedSamples<=0){
+							this->audioCV.wait(lock, [this](){
+								return this->requestedSamples>0;
+							});//requested samples or switch to clock sync
+							chk_mb=true;//avoid blocking audio thread while checking mailbox
+						}
 					}
-				}
-				else{//sync to audio
-					this->audio_div_sync+=this->audio_sample_rate.load(std::memory_order_relaxed);
-					if (this->audio_div_sync>=this->master_clock_rate){
-						this->audio_div_sync=this->audio_div_sync%this->master_clock_rate;
-						this->audioSample();
-						bool chk_mb=false;
-						{
-							std::unique_lock<std::mutex> lock(this->audioMutex);
-							this->requestedSamples--;
-							if (this->requestedSamples<=0){
-								this->audioCV.wait(lock, [this](){
-									return (this->requestedSamples>0)||(this->audio_sample_rate.load(std::memory_order_relaxed)==0);
-								});//requested samples or switch to clock sync
-								chk_mb=true;//avoid blocking audio thread while checking mailbox
-							}
-						}
-						if (chk_mb){
-							this->checkMailbox();//check less often mailbox
-						}
+					if (chk_mb){
+						this->checkMailbox();//check less often mailbox
+						stop=this->stop();
 					}
 				}
 				
@@ -126,26 +136,26 @@ class Clocks{
 		std::function<void()> CLK4800=[](){};
 		std::function<void()> CLK9600=[](){};
 		std::function<void()> checkMailbox=[](){};
-		std::function<void()> audioSample=[](){};
+		std::function<void(unsigned long)> audioSample=[](unsigned long sr){};
 		
 		unsigned long div9600=0;
-		unsigned long div9600_max=1536;
+		constexpr static unsigned long div9600_max=1536;
 		unsigned long div9600_4800=0;
-		unsigned long div9600_4800_max=2;
+		constexpr static unsigned long div9600_4800_max=2;
 		unsigned long div4800_600=0;
-		unsigned long div4800_600_max=8;
+		constexpr static unsigned long div4800_600_max=8;
 		
 		std::mutex audioMutex;
 		std::condition_variable audioCV;
 		unsigned long requestedSamples=0;
 		std::atomic<unsigned long> audio_sample_rate=0;
-		const unsigned long master_clock_rate=14745600;
+		constexpr static unsigned long master_clock_rate=14745600;
 		unsigned long audio_div_sync=0;
 		
-		unsigned long div_sync=0;
+		/*unsigned long div_sync=0;
 		unsigned long div_sync_max=524288;
 		std::chrono::time_point<std::chrono::steady_clock> last_t;
 		std::chrono::duration<double> dt;
-		const std::chrono::duration<double> dt_sleep_max=std::chrono::microseconds(32000000/900);
+		const std::chrono::duration<double> dt_sleep_max=std::chrono::microseconds(32000000/900);*/
 };
 #endif

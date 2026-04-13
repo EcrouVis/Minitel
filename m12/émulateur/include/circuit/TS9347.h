@@ -49,15 +49,15 @@ class TS9347wVRAM{
 		bool RnW;//write low
 		bool nCS;//chip select
 		
-		const unsigned char BUSY_MASK=0b10000000;
-		const unsigned char Al_MASK=0b01000000;
-		const unsigned char LXm_MASK=0b00100000;
-		const unsigned char LXa_MASK=0b00010000;
-		const unsigned char VSYNC_MASK=0b00000100;
-		const unsigned char RESET_MASK=0b01111000;
+		constexpr static unsigned char BUSY_MASK=0b10000000;
+		constexpr static unsigned char Al_MASK=0b01000000;
+		constexpr static unsigned char LXm_MASK=0b00100000;
+		constexpr static unsigned char LXa_MASK=0b00010000;
+		constexpr static unsigned char VSYNC_MASK=0b00000100;
+		constexpr static unsigned char RESET_MASK=0b01111000;
 		
-		const unsigned char RnW_MASK=0b00001000;
-		const unsigned char INC_MASK=0b00000001;
+		constexpr static unsigned char RnW_MASK=0b00001000;
+		constexpr static unsigned char INC_MASK=0b00000001;
 		
 		bool VS_MASK_FLAG=false;
 		
@@ -65,12 +65,12 @@ class TS9347wVRAM{
 		
 		bool shift_slice=false;//double length
 		
-		unsigned char getMarginABGR();
-		static int getVideoIndex(const unsigned int line, const unsigned char column, bool mode40=true);
+		inline unsigned char getMarginABGR();
+		static inline int getVideoIndex(const unsigned int line, const unsigned char column, bool mode40=true);
 		void setVideoOtputABGR(int index,unsigned char abgr);
 		static int getSliceRAMIndex(unsigned char slice, unsigned char C, unsigned char Z);
 		unsigned char getRowFromY(unsigned char Y);
-		unsigned char getDisplayDistrict();
+		inline unsigned char getDisplayDistrict();
 		void loadRowBuffer();
 		void loadUDS();
 		
@@ -78,13 +78,13 @@ class TS9347wVRAM{
 		bool isBusy();
 		bool requestExecution();
 		bool incrementX(bool MP);
-		unsigned char getX(bool MP);
+		inline unsigned char getX(bool MP);
 		void incrementY(bool MP);
-		unsigned char getY(bool MP);
+		inline unsigned char getY(bool MP);
 		void incrementB(bool MP);
 		void addB(bool MP,unsigned char d);
-		unsigned char getB(bool MP);
-		unsigned char getD(bool MP);
+		inline unsigned char getB(bool MP);
+		inline unsigned char getD(bool MP);
 		int pointer2RAMAddress(bool MP);
 		void executeCommand();
 		void NOP();

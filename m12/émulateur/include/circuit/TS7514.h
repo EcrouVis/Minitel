@@ -29,13 +29,13 @@ class TS7514{
 		
 		
 		void Reset(){
-			this->REG[this->RPROG].store(0,std::memory_order_release);
-			this->REG[this->RATE].store(0x0F,std::memory_order_release);
-			this->REG[this->RWLO].store(0x0C,std::memory_order_release);
-			this->REG[this->RPRF].store(0x01,std::memory_order_release);
-			this->REG[this->RPTF].store(0x00,std::memory_order_release);
-			this->REG[this->RHDL].store(0x00,std::memory_order_release);
-			this->REG[this->RPRX].store(0x00,std::memory_order_release);
+			this->REG[this->RPROG].store(0,std::memory_order_relaxed);
+			this->REG[this->RATE].store(0x0F,std::memory_order_relaxed);
+			this->REG[this->RWLO].store(0x0C,std::memory_order_relaxed);
+			this->REG[this->RPRF].store(0x01,std::memory_order_relaxed);
+			this->REG[this->RPTF].store(0x00,std::memory_order_relaxed);
+			this->REG[this->RHDL].store(0x00,std::memory_order_relaxed);
+			this->REG[this->RPRX].store(0x00,std::memory_order_relaxed);
 		}
 		
 		void MODEMnDTMFChangeIn(bool b){
@@ -123,6 +123,26 @@ class TS7514{
 			}
 		}
 		
+		float getBuzzerSample(unsigned long sampleRate){
+			float s=0;
+			switch (this->REG[this->RWLO].load(std::memory_order_relaxed)&0x0C){
+				case 0x00://TODO
+					break;
+				case 0x04://TODO
+					break;
+				case 0x08:
+				{
+					constexpr float A[4]={1.,0.316227766,0.1,0.028183829};
+					s=(this->buzzer_clock_tick*2>sampleRate?-1.:1.)*A[this->REG[this->RWLO].load(std::memory_order_relaxed)&0x03];
+					this->buzzer_clock_tick=(this->buzzer_clock_tick+2982)%sampleRate;
+					break;
+				}
+				//case 0x0C:
+				//	break;
+			}
+			return s;
+		}
+		
 	private:
 		unsigned char input_register;
 		bool MODEMnDTMF=true;
@@ -138,6 +158,7 @@ class TS7514{
 		unsigned short Tx_dout;
 		unsigned short Rx_dout;
 		
+		unsigned int buzzer_clock_tick=0;
 		unsigned char clk_div=0;
 		const unsigned char clk_div_max=12;
 		
@@ -155,29 +176,18 @@ class TS7514{
 						 ((rprog&3)==1&&(this->input_register&0x80)==0)||
 						 ((rprog&3)==2&&(this->input_register&0x80)==0x80)
 						)&&((rprog&0x08)==0);
-			printf("TS7514 CMD 0x%02X ",this->input_register);
+			//printf("TS7514 CMD 0x%02X ",this->input_register);
 			if (n_reg==this->RPROG||cmd_ok){
-				this->REG[n_reg].store(this->input_register&0x0F,std::memory_order_release);
-				/*switch(n_reg){
-					case 3:
-						if ((this->REG[3]&0x0C)==0x08){
-							const float Amp[4]={1.,0.316227766,0.1,0.0316227766};
-							buzzer_amplitude.store(Amp[this->REG[3]&0x03],std::memory_order_release);
-						}
-						else{
-							buzzer_amplitude.store(0.,std::memory_order_release);
-						}
-						break;
-				}*/
+				this->REG[n_reg].store(this->input_register&0x0F,std::memory_order_relaxed);
 				this->updateTx();
 				this->updateRx();
-				printf("OK\n");
+				//printf("OK\n");
 				this->sendCMD(this->input_register);
 				
 			}
-			else{
+			/*else{
 				printf("NOK\n");
-			}
+			}*/
 		}
 		
 		void updateTx(){

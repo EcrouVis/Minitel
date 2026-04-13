@@ -158,4 +158,25 @@ void regTS9347Window(imguiTS9347REGView* regView){
 	}
 	ImGui::End();
 }
+void regTS7514Window(imguiTS7514REGView* regView){
+	
+	ImGui::Begin("Registres du modem TS7514",&(regView->show),0);
+	
+	char b[]=": 0x\0\0\0";
+	unsigned char v_reg;
+	
+	const char* n_reg[]={"RPROG","RDTMF","RATE","RWLO","RPTF","RPRF","RHDL","RPRX"};
+	std::atomic_uchar* p_reg[]={regView->RPROG,regView->RDTMF,regView->RATE,regView->RWLO,regView->RPTF,regView->RPRF,regView->RHDL,regView->RPRX};
+	for (unsigned int i=0;i<sizeof(n_reg)/sizeof(*n_reg);i++){
+		ImGui::Text(n_reg[i]);
+		if (p_reg[i]!=NULL){
+			ImGui::SameLine();
+			v_reg=p_reg[i]->load(std::memory_order_relaxed);
+			b[4]=nibble_table[v_reg>>4];
+			b[5]=nibble_table[v_reg&0x0F];
+			ImGui::Text(b);
+		}
+	}
+	ImGui::End();
+}
 #endif
