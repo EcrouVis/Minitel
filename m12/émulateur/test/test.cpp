@@ -1,7 +1,7 @@
 #include <thread>
 #include "m12_threads.h"
 #include <stdlib.h>
-#include <pthread.h>
+//#include <pthread.h>
 #include <cstdio>
 
 #include <ixwebsocket/IXNetSystem.h>

@@ -9,9 +9,10 @@ class RuntimeDecompiler{
 		RuntimeDecompiler(m80C32* uc){
 			this->uc=uc;
 			FILE* f=fopen("./rom_map.bin","rb");
-			fseek(f,0,SEEK_SET);
-			fread( this->rom_map, 1, EROM_SIZE, f );
-			fclose(f);
+			if (f!=NULL){
+				fread( this->rom_map, 1, EROM_SIZE, f );
+				fclose(f);
+			}
 			for (int i=0;i<4;i++){
 				this->rom_map[(i<<16)]|=this->ADDRESS_INTERRUPT;
 				this->rom_map[(i<<16)|0x03]|=this->ADDRESS_INTERRUPT;
@@ -24,9 +25,10 @@ class RuntimeDecompiler{
 		}
 		~RuntimeDecompiler(){
 			FILE* f=fopen("./rom_map.bin","wb");
-			fseek(f,0,SEEK_SET);
-			fwrite( this->rom_map, 1, EROM_SIZE, f );
-			fclose(f);
+			if (f!=NULL){
+				fwrite( this->rom_map, 1, EROM_SIZE, f );
+				fclose(f);
+			}
 		}
 		void update(){
 			unsigned long addr;

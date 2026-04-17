@@ -10,6 +10,11 @@ class ROMSelector{
 		ROMSelector(const char* dir){
 			this->setDir(dir);
 		}
+		~ROMSelector(){
+			if (this->searchDir!=NULL) free((void*)this->searchDir);
+			if (this->ROMSelected!=NULL) free((void*)this->ROMSelected);
+			std::for_each(this->ROMCandidate.begin(), this->ROMCandidate.end(), [](char* f) { free(f); });
+		}
 		void setDir(const char* dir){
 			if (this->searchDir!=NULL) free(this->searchDir);
 			this->searchDir=(char*)malloc(strlen(dir)+1);
@@ -110,6 +115,11 @@ class RAMSelector{
 	public:
 		RAMSelector(const char* dir){
 			this->setDir(dir);
+		}
+		~RAMSelector(){
+			if (this->searchDir!=NULL) free((void*)this->searchDir);
+			if (this->RAMSelected!=NULL) free((void*)this->RAMSelected);
+			std::for_each(this->RAMCandidate.begin(), this->RAMCandidate.end(), [](char* f) { free(f); });
 		}
 		void setDir(const char* dir){
 			if (this->searchDir!=NULL) free(this->searchDir);
@@ -266,7 +276,7 @@ class RAMSelector{
 			std::filesystem::path p=this->searchDir;
 			p/=profile;
 			p+=this->ext[0];
-			char* fpath=(char*)malloc(strlen(p.string().c_str()));
+			char* fpath=(char*)malloc(strlen(p.string().c_str())+1);
 			strcpy(fpath,p.string().c_str());
 			fpath[strlen(p.string().c_str())]=0;
 			
@@ -275,7 +285,7 @@ class RAMSelector{
 			ofs.write("",1);
 			ofs.close();
 			
-			free(this->RAMSelected);
+			if (this->RAMSelected!=NULL) free(this->RAMSelected);
 			this->RAMSelected=fpath;
 			//callback
 			this->selectionCallback(this->RAMSelected);

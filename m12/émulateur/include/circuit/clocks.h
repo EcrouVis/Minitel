@@ -1,10 +1,10 @@
 #ifndef CLOCKS_H
 #define CLOCKS_H
 #include <functional>
-//#include <chrono>
+#include <chrono>
 #include <thread>
 #include <mutex>
-#include <limits>
+#include <climits>
 #include <condition_variable>
 class Clocks{
 	public:
@@ -55,7 +55,6 @@ class Clocks{
 		}
 		
 		void start(){
-			bool stop=false;
 			//this->last_t=std::chrono::steady_clock::now();
 			
 			{
@@ -66,7 +65,7 @@ class Clocks{
 					});
 				}
 			}
-			while (!stop){
+			while (true){
 				
 				/*//clock
 					this->div_sync++;
@@ -92,7 +91,7 @@ class Clocks{
 						std::unique_lock<std::mutex> lock(this->audioMutex);
 						this->requestedSamples--;
 						if (this->requestedSamples<=0){
-							this->audioCV.wait(lock, [this](){
+							this->audioCV.wait_for(lock, std::chrono::milliseconds(500), [this](){
 								return this->requestedSamples>0;
 							});//requested samples or switch to clock sync
 							chk_mb=true;//avoid blocking audio thread while checking mailbox
@@ -100,7 +99,7 @@ class Clocks{
 					}
 					if (chk_mb){
 						this->checkMailbox();//check less often mailbox
-						stop=this->stop();
+						if (this->stop()) return;
 					}
 				}
 				

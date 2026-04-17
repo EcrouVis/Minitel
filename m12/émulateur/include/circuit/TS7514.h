@@ -3,8 +3,6 @@
 #include <functional>
 #include <cstdio>
 #include <atomic>
-#define MA_NO_DECODING
-#define MA_NO_ENCODING
 #include "miniaudio/miniaudio.h"
 #include "circuit/PhoneLine.h"
 
@@ -103,19 +101,6 @@ class TS7514{
 			this->sendCMD=f;
 		}
 		
-		void CLKTickIn(){//14745600Hz
-			this->clk_div++;
-			if (this->clk_div<this->clk_div_max) return;
-			this->clk_div=0;
-			//1228800Hz
-			/*float fATxI;
-			if (TS7514_ATxI_Resample_1228800_48000(this->ATxI,&fATxI)){
-				//48000Hz -> update IO
-				//printf("%f \n",fATxI);
-				
-			}*/
-		}
-		
 		void RA2ChangeIn(unsigned short s){
 			if (s!=this->Rx_dout){
 				this->Rx_dout=s;
@@ -159,8 +144,6 @@ class TS7514{
 		unsigned short Rx_dout;
 		
 		unsigned int buzzer_clock_tick=0;
-		unsigned char clk_div=0;
-		const unsigned char clk_div_max=12;
 		
 		std::function<void(bool)> sendRxD=[](bool b){};
 		std::function<void(bool)> sendWLO=[](bool b){};

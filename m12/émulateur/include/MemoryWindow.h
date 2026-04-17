@@ -106,7 +106,7 @@ void memoryWindow(const char* w_title,imguiMemoryView* memView){
 					}
 				}
 				ImGui::TableSetColumnIndex(17);
-				ImGui::Text(ld);
+				ImGui::Text("%s",ld);
 			}
 		}
 		

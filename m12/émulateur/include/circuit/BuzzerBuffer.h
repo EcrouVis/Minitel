@@ -8,7 +8,7 @@
 class BuzzerBuffer: public AudioBufferOut{
 	public:
 		//emulation thread
-		BuzzerBuffer(){
+		BuzzerBuffer():AudioBufferOut(){
 			this->lpf_config = ma_lpf_config_init(ma_format_f32, 1, 48000, 3000, 1);
 			ma_lpf_init(&(this->lpf_config), NULL, &(this->filter));
 		}

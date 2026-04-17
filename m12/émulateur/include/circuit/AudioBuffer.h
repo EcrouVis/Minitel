@@ -4,8 +4,6 @@
 #include <atomic>
 #include <cmath>
 
-#define MA_NO_DECODING
-#define MA_NO_ENCODING
 #include "miniaudio/miniaudio.h"
 
 class AudioBufferOut{

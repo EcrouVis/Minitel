@@ -11,6 +11,16 @@ struct imgui_notification{
 } ;
 class NotificationServer{
 	public:
+		~NotificationServer(){
+			imgui_notification* tmp=this->notification_list;
+			imgui_notification* tmp2=NULL;
+			while (tmp!=NULL){
+				tmp2=tmp;
+				tmp=tmp->older;
+				if (tmp2->free_message) free((void*)tmp2->message);
+				delete tmp2;
+			}
+		}
 		void notify(const char* message,bool free_message=false,ImVec4 color=ImVec4(1.,1.,1.,1.)){
 			imgui_notification* notif=new imgui_notification;
 			notif->message=message;

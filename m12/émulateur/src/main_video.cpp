@@ -36,8 +36,6 @@
 
 #include "cJSON/cJSON.h"
 
-#define MA_NO_DECODING
-#define MA_NO_ENCODING
 #include "miniaudio/miniaudio.h"
 
 //#include "io/TS7514Audio.h"
@@ -86,6 +84,7 @@ class M12Window{
 			glfwSetKeyCallback(this->window, this->key_callback);
 			//glfwSetCharCallback(this->window, this->char_callback);
 			glfwSetWindowCloseCallback(this->window, this->window_close_callback);
+			glfwSetErrorCallback(this->window_error_callback);
 		 
 			glfwMakeContextCurrent(this->window);
 			gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
@@ -97,7 +96,7 @@ class M12Window{
 			ImGuiIO& io=ImGui::GetIO();
 			io.IniFilename=NULL;
 			
-			ImGui_ImplGlfw_InitForOpenGL(window,true);
+			ImGui_ImplGlfw_InitForOpenGL(this->window,true);
 			ImGui_ImplOpenGL3_Init();
 		 
 			//emulator display
@@ -299,13 +298,23 @@ class M12Window{
 			FILE *f=fopen("./config.json","w");
 			fwrite(configString,sizeof(char),strlen(configString),f);
 			fclose(f);
+			free((void*)configString);
 			cJSON_Delete(JSONConfigOut);
 			
+			//audio
+			ma_device_uninit(&(this->audioDevice));//uninit audio before stoping -> don't read deleted buffer
 			//shutdown emulator
-			M12Window* p_M12Window=(M12Window*)glfwGetWindowUserPointer(window);
-			p_M12Window->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
-			//wait emulator response
+			//M12Window* p_M12Window=(M12Window*)glfwGetWindowUserPointer(window);
+			this->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
+			//this->AC.pCLKs->requestSamples(1);
+			
+			//wait emulator response / emulator will timeout then read this->PARAMETERS.p_gState->shutdown and exit
 			while (this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){}
+			
+			//RAM and ROM files
+			unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->eram));
+			unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->erom));
+			
 			//imgui
 			ImGui_ImplOpenGL3_Shutdown();
 			ImGui_ImplGlfw_Shutdown();
@@ -317,13 +326,6 @@ class M12Window{
 			//glfw
 			glfwDestroyWindow(this->window);
 			glfwTerminate();
-			//clock sync
-			this->AC.pCLKs->setAudioSampleRate(0);//doesn't change anything but safer -> decouple emulator clock from audio clock
-			//audio
-			ma_device_uninit(&(this->audioDevice));
-			//RAM and ROM files
-			unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->eram));
-			unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->erom));
 		}
 		void Loop(){
 			//check messages
@@ -546,11 +548,8 @@ class M12Window{
 							fprintf(stdout,"unknown cmd %i\n",ms.cmd);
 							break;
 					}
-					glfwPostEmptyEvent();
 				}
 				
-				if (this->PARAMETERS.imgui.idle) glfwWaitEventsTimeout(0.05);
-				else glfwPollEvents();
 				int width, height;
 				glfwGetFramebufferSize(this->window, &width, &height);
 				glClear(GL_COLOR_BUFFER_BIT);
@@ -583,6 +582,8 @@ class M12Window{
 				ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		 
 				glfwSwapBuffers(this->window);
+				if (this->PARAMETERS.imgui.idle) glfwWaitEventsTimeout(0.05);
+				else glfwPollEvents();
 			}
 		}
 	private:
@@ -975,6 +976,9 @@ class M12Window{
 		static void window_close_callback(GLFWwindow* window){
 			fprintf(stdout,"Close callback\n");
 			/////////////////////////////////////////////////////
+		}
+		static void window_error_callback(int error, const char* description){
+			fprintf(stderr, "Error: %s\n", description);
 		}
 };
 

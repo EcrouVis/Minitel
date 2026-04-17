@@ -587,11 +587,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		}
 	};
 	CLKs.subscribeMailbox(checkMB);
-	auto CLKTick14745600=[&uc,&wt,&modem,&video](){
+	auto CLKTick14745600=[&uc,&video](){
 		uc.CLKTickIn();
 		video.CLKTickIn();
-		modem.CLKTickIn();
-		wt.incrementTimer();
 	};
 	CLKs.subscribe14745600Hz(CLKTick14745600);
 	auto CLKTick600=[&kb,&cpld](){
@@ -599,8 +597,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		kb.CLKTickIn();
 	};
 	CLKs.subscribe600Hz(CLKTick600);
-	auto CLKTick9600=[&din5lws](){
+	auto CLKTick9600=[&din5lws,&wt](){
 		din5lws.CLKTickIn9600Hz();
+		wt.incrementTimer();
 	};
 	CLKs.subscribe9600Hz(CLKTick9600);
 	
