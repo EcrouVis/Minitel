@@ -17,8 +17,11 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image_write.h"
 
 #include <filesystem>
+#include <ctime>
 #include <cstdlib>
 
 #include <vector>
@@ -46,7 +49,7 @@
 #include "FileAccess.h"
 #include "FileSelector.h"
 
-#include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
+//#include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
 
 struct audioContext{
 	Clocks* pCLKs=NULL;
@@ -336,22 +339,17 @@ class M12Window{
 					switch(ms.cmd){
 						case ERAM:
 							this->PARAMETERS.debug.eram.mem=((SRAM_64k*)ms.p)->RAM;
-							fprintf(stdout,"eram pointer %p\n",this->PARAMETERS.debug.eram.mem);
 							this->PARAMETERS.debug.eram.op=&(((SRAM_64k*)ms.p)->last_memory_operation);
-							fprintf(stdout,"eram address pointer %p\n",this->PARAMETERS.debug.eram.op);
 							this->PARAMETERS.debug.eram.mem_size=ERAM_SIZE;
 							break;
 						case EROM:
 							this->PARAMETERS.debug.erom.mem=((ROM_256k*)ms.p)->eROM;
-							fprintf(stdout,"erom pointer %p\n",this->PARAMETERS.debug.erom.mem);
 							this->PARAMETERS.debug.erom.op=&(((ROM_256k*)ms.p)->last_memory_operation);
-							fprintf(stdout,"erom address pointer %p\n",this->PARAMETERS.debug.erom.op);
 							this->PARAMETERS.debug.erom.mem_size=EROM_SIZE;
 							break;
 						case VC:
 						{
 							this->PARAMETERS.debug.vram.mem=((TS9347wVRAM*)ms.p)->VRAM;
-							fprintf(stdout,"vram pointer %p\n",this->PARAMETERS.debug.vram.mem);
 							this->PARAMETERS.debug.vram.mem_size=VRAM_SIZE;
 							
 							this->PARAMETERS.debug.vreg.STATUS=&(((TS9347wVRAM*)ms.p)->STATUS);
@@ -363,6 +361,11 @@ class M12Window{
 							this->PARAMETERS.debug.vreg.R5=&(((TS9347wVRAM*)ms.p)->Rx[5]);
 							this->PARAMETERS.debug.vreg.R6=&(((TS9347wVRAM*)ms.p)->Rx[6]);
 							this->PARAMETERS.debug.vreg.R7=&(((TS9347wVRAM*)ms.p)->Rx[7]);
+							this->PARAMETERS.debug.vreg.DOR=&(((TS9347wVRAM*)ms.p)->DOR);
+							this->PARAMETERS.debug.vreg.ROR=&(((TS9347wVRAM*)ms.p)->ROR);
+							this->PARAMETERS.debug.vreg.TGS=&(((TS9347wVRAM*)ms.p)->TGS);
+							this->PARAMETERS.debug.vreg.PAT=&(((TS9347wVRAM*)ms.p)->PAT);
+							this->PARAMETERS.debug.vreg.MAT=&(((TS9347wVRAM*)ms.p)->MAT);
 							
 							const char* path="./ressources/TS9347_Texture_Character_Set_Datasheet.bmp";
 							int width, height, nrChannels;
@@ -417,9 +420,7 @@ class M12Window{
 						{
 							m80C32* uc=(m80C32*)ms.p;
 							this->PARAMETERS.debug.iram.mem=uc->iRAM;
-							fprintf(stdout,"iram pointer %p\n",this->PARAMETERS.debug.iram.mem);
 							this->PARAMETERS.debug.iram.op=&(uc->last_memory_operation);
-							fprintf(stdout,"iram address pointer %p\n",this->PARAMETERS.debug.iram.op);
 							this->PARAMETERS.debug.iram.mem_size=IRAM_SIZE;
 							this->PARAMETERS.debug.sfr.ACC=&(uc->SFR[uc->ACC&0x7F]);
 							this->PARAMETERS.debug.sfr.B=&(uc->SFR[uc->B&0x7F]);
@@ -499,31 +500,9 @@ class M12Window{
 							break;
 						case CLOCK:
 							this->AC.pCLKs=(Clocks*)ms.p;
-							printf("Clocks pointer: %p\n",this->AC.pCLKs);
 							this->AC.pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
 							printf("Sync emulator to audio sample rate @%iHz\n",this->audioDevice.sampleRate);
 							this->AC.pCLKs->requestSamples(256,256);//TODO: 256->buffer length
-							break;
-						case DIN5_INTERFACE_LOCAL_WEBSOCKET:
-							this->PARAMETERS.io.peri.peri_lws.p_plugged=&(((DIN5InterfaceLocalWebsocket*)ms.p)->plugged);
-							this->PARAMETERS.io.peri.peri_lws.p_power=&(((DIN5InterfaceLocalWebsocket*)ms.p)->PWR);
-							this->PARAMETERS.io.peri.peri_lws.p_baudrate_in=&(((DIN5InterfaceLocalWebsocket*)ms.p)->baudrate_selection_tx);
-							this->PARAMETERS.io.peri.peri_lws.p_baudrate_out=&(((DIN5InterfaceLocalWebsocket*)ms.p)->baudrate_selection_rx);
-							//load parameter when accessible
-							{
-								if (this->JSONConfig!=NULL){
-									cJSON* json_subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
-									json_subconfig=cJSON_GetObjectItemCaseSensitive(json_subconfig,"DIN");
-									json_subconfig=cJSON_GetObjectItemCaseSensitive(json_subconfig,"Local websocket");
-									
-									cJSON* json_o=cJSON_GetObjectItemCaseSensitive(json_subconfig,"plugged");
-									if (cJSON_IsBool(json_o)) this->PARAMETERS.io.peri.peri_lws.p_plugged->store(cJSON_IsTrue(json_o),std::memory_order_release);
-									json_o=cJSON_GetObjectItemCaseSensitive(json_subconfig,"baudrate in");
-									if (cJSON_IsNumber(json_o)&&json_o->valueint>=0&&json_o->valueint<4) this->PARAMETERS.io.peri.peri_lws.p_baudrate_in->store(json_o->valueint,std::memory_order_release);
-									json_o=cJSON_GetObjectItemCaseSensitive(json_subconfig,"baudrate out");
-									if (cJSON_IsNumber(json_o)&&json_o->valueint>=0&&json_o->valueint<4) this->PARAMETERS.io.peri.peri_lws.p_baudrate_out->store(json_o->valueint,std::memory_order_release);
-								}
-							}
 							break;
 						case EMULATOR_READY:
 							{
@@ -559,11 +538,8 @@ class M12Window{
 				ImGui_ImplOpenGL3_NewFrame();
 				ImGui_ImplGlfw_NewFrame();
 				ImGui::NewFrame();
-				if (this->PARAMETERS.imgui.show_menu){
-					//ImGui::ShowDemoWindow(&(this->PARAMETERS.imgui.show_menu));
-					//mainMenuWindow(&(this->PARAMETERS),this->p_mb_circuit);
-					this->mainMenuWindow();
-				}
+				//ImGui::ShowDemoWindow(NULL);
+				if (this->PARAMETERS.imgui.show_menu) this->mainMenuWindow();
 				if (this->PARAMETERS.debug.eram.mem!=NULL&&this->PARAMETERS.debug.eram.show) memoryWindow("RAM externe",&(this->PARAMETERS.debug.eram));
 				if (this->PARAMETERS.debug.erom.mem!=NULL&&this->PARAMETERS.debug.erom.show) memoryWindow("ROM externe",&(this->PARAMETERS.debug.erom));
 				if (this->PARAMETERS.debug.iram.mem!=NULL&&this->PARAMETERS.debug.iram.show) memoryWindow("RAM interne",&(this->PARAMETERS.debug.iram));
@@ -604,7 +580,13 @@ class M12Window{
 		cJSON* JSONConfig=NULL;
 		
 		void mainMenuWindow(){
-			ImGui::Begin("Menu",&(this->PARAMETERS.imgui.show_menu),ImGuiWindowFlags_AlwaysAutoResize);
+			ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+			ImGui::SetNextWindowPos(center, ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+			ImVec2 menuSize=ImGui::GetMainViewport()->Size;
+			menuSize[0]*=0.8;
+			menuSize[1]*=0.8;
+			ImGui::SetNextWindowSize(menuSize, ImGuiCond_Always);
+			ImGui::Begin("Menu",&(this->PARAMETERS.imgui.show_menu),ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove);
 			ImGui::Text("Appuyez sur F1 pour afficher/cacher le menu");
 			if (ImGui::BeginTabBar("MenuTabBar", ImGuiTabBarFlags_None)){
 				
@@ -683,38 +665,18 @@ class M12Window{
 						
 						ImGui::EndTable();
 					}
+					ImGui::Text("F1 permet d'afficher ce menu.");
+					ImGui::Text("F10 permet de faire une capture d'écran.");
 					
 					ImGui::SeparatorText("Prise péri-informatique");
 					
-					if (this->PARAMETERS.io.peri.peri_lws.p_plugged!=NULL){
-						bool lws_plugged=this->PARAMETERS.io.peri.peri_lws.p_plugged->load(std::memory_order_acquire);
-						ImGui::Checkbox("##lws_plugged",&lws_plugged);
-						if (lws_plugged!=this->PARAMETERS.io.peri.peri_lws.p_plugged->load(std::memory_order_acquire)) this->PARAMETERS.io.peri.peri_lws.p_plugged->store(lws_plugged,std::memory_order_release);
-						ImGui::SameLine();
-						if (ImGui::CollapsingHeader("Websocket local")){
-							ImGui::Indent();
-							ImGui::Text("Adresse: ws://localhost:8080");
-							bool lws_pwr=this->PARAMETERS.io.peri.peri_lws.p_power->load(std::memory_order_acquire);
-							ImGui::Text("BaudRate minitel -> websocket:");
-							ImGui::SameLine();
-							if (lws_pwr) ImGui::BeginDisabled();
-							int baud=this->PARAMETERS.io.peri.peri_lws.p_baudrate_out->load(std::memory_order_relaxed);
-							ImGui::Combo("##DIN5InterfaceLocalWebsocket_baudrate_out", &baud, this->PARAMETERS.io.peri.peri_lws.baudrate_name, IM_ARRAYSIZE(this->PARAMETERS.io.peri.peri_lws.baudrate_name));
-							if (baud!=this->PARAMETERS.io.peri.peri_lws.p_baudrate_out->load(std::memory_order_relaxed)) this->PARAMETERS.io.peri.peri_lws.p_baudrate_out->store(baud,std::memory_order_release);
-							if (lws_pwr) ImGui::EndDisabled();
-							
-							ImGui::Text("BaudRate websocket -> minitel:");
-							ImGui::SameLine();
-							if (lws_pwr) ImGui::BeginDisabled();
-							baud=this->PARAMETERS.io.peri.peri_lws.p_baudrate_in->load(std::memory_order_relaxed);
-							ImGui::Combo("##DIN5InterfaceLocalWebsocket_baudrate_in", &baud, this->PARAMETERS.io.peri.peri_lws.baudrate_name, IM_ARRAYSIZE(this->PARAMETERS.io.peri.peri_lws.baudrate_name));
-							if (baud!=this->PARAMETERS.io.peri.peri_lws.p_baudrate_in->load(std::memory_order_relaxed)) this->PARAMETERS.io.peri.peri_lws.p_baudrate_in->store(baud,std::memory_order_release);
-							if (lws_pwr) ImGui::EndDisabled();
-							ImGui::TextDisabled("La vitesse doit être changé côté minitel avec les commandes fnct+P.");
-							ImGui::TextDisabled("Le websocket n'accepte qu'une connexion à la fois.");
-							ImGui::TextDisabled("Le signal PT est considéré comme toujours actif (réseau minitel non implémenté).");
-							ImGui::Unindent();
-						}
+					if (ImGui::CollapsingHeader("Connexion Websocket")){
+						ImGui::Indent();
+						ImGui::Text("Accès au service: Shift+Connexion/Fin W");
+						ImGui::Text("Arrêt du service: Shift+Connexion/Fin x2");
+						ImGui::TextDisabled("Certaines associations de paramètres peuvent ne pas être interprétés par le minitel.");
+						ImGui::TextDisabled("Les Websockets sécurisés (wss) sont aussi pris en charge.");
+						ImGui::Unindent();
 					}
 					//ImGui::Checkbox("Afficher les notifications##peri",&(this->PARAMETERS.io.peri.notify_state));
 					
@@ -948,6 +910,34 @@ class M12Window{
 			ImGui::End();
 		}
 		
+		void takeScreenshot(){
+			constexpr char dir[]="./captures d'écran/";
+			if (!std::filesystem::is_directory(dir)) std::filesystem::create_directories(dir);
+			time_t timestamp=time(NULL);
+			struct tm* pTime=localtime(&timestamp);
+			char filename[80];
+			strftime(filename,80,"minitel_%F_%H_%M_%S.png",pTime);
+			char* path=(char*)malloc(sizeof(dir)+strlen(filename)+1);
+			strcpy(path,dir);
+			strcat(path,filename);
+			
+			int width, height;
+			glfwGetFramebufferSize(this->window, &width, &height);
+			unsigned char* pixels=(unsigned char*)malloc(3*width*height*sizeof(unsigned char));
+			glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+			stbi_flip_vertically_on_write(1);
+			stbi_write_png(path, width, height, 3, pixels, 3*width);
+			free(pixels);
+			
+			constexpr char screenshot[]="Capture d'écran enregistrée dans le fichier:\n";
+			char* notif=(char*)malloc(sizeof(screenshot)+strlen(path)+1);
+			strcpy(notif,screenshot);
+			strcat(notif,path);
+			this->Notification.notify(notif,true,ImVec4(0,1,1,1));
+			
+			free(path);
+		}
+		
 		static void error_callback(int error, const char* description){
 			fprintf(stderr, "Error: %s\n", description);
 		}
@@ -955,6 +945,7 @@ class M12Window{
 			M12Window* p_M12Window=(M12Window*)glfwGetWindowUserPointer(window);
 			//if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, GLFW_TRUE);
 			if (key==GLFW_KEY_F1&&action==GLFW_PRESS) p_M12Window->PARAMETERS.imgui.show_menu=!p_M12Window->PARAMETERS.imgui.show_menu;
+			if (key==GLFW_KEY_F10&&action==GLFW_PRESS) p_M12Window->takeScreenshot();
 			ImGuiIO& io=ImGui::GetIO();
 			KeyboardInput(p_M12Window->p_mb_circuit,!io.WantCaptureKeyboard,scancode,action,mods);
 		}

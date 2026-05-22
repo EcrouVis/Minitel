@@ -51,6 +51,11 @@ struct imguiTS9347REGView{
 	std::atomic_uchar* R5=NULL;
 	std::atomic_uchar* R6=NULL;
 	std::atomic_uchar* R7=NULL;
+	std::atomic_uchar* DOR=NULL;
+	std::atomic_uchar* ROR=NULL;
+	std::atomic_uchar* TGS=NULL;
+	std::atomic_uchar* PAT=NULL;
+	std::atomic_uchar* MAT=NULL;
 };
 struct imguiTS7514REGView{
 	bool show=false;
@@ -81,9 +86,9 @@ struct P_Peri_Local_Websocket{
 	const char* baudrate_name[4] = { "300", "1200", "4800", "9600"};
 };
 struct P_Peri{
-	bool plugged=false;
+	//bool plugged=false;
 	bool notify_state=true;
-	P_Peri_Local_Websocket peri_lws;
+	//P_Peri_Local_Websocket peri_lws;
 };
 struct P_Modem{
 	bool plugged=false;
@@ -127,12 +132,13 @@ struct P_Debug{
 struct P_Info{
 	const char* title="Minitel 12 Philips";
 	const char* programmers="Yves Landemarre";
-	License lib_licenses[5]={
+	License lib_licenses[6]={
 		{lib_imgui,license_imgui},
 		{lib_glfw,license_glfw},
 		{lib_miniaudio,license_miniaudio},
 		{lib_cjson,license_cjson},
-		{lib_ixwebsocket,license_ixwebsocket}
+		{lib_ixwebsocket,license_ixwebsocket},
+		{lib_libressl,license_libressl}
 	};
 	License font_licenses[2]={
 		{font_proggyclean,license_proggyclean},

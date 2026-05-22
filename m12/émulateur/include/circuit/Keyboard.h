@@ -402,33 +402,32 @@ class Keyboard{
 					
 					case 0x81:
 						//printf("set ringtone 1\n");
-						this->ringtone_note=16;
+						this->stopRingtone();
 						this->ringtone=0;
 						break;
 					case 0x83:
 						//printf("set ringtone 2\n");
-						this->ringtone_note=16;
+						this->stopRingtone();
 						this->ringtone=1;
 						break;
 					case 0x85:
 						//printf("set ringtone 3\n");
-						this->ringtone_note=16;
+						this->stopRingtone();
 						this->ringtone=2;
 						break;
 					case 0x87:
 						//printf("set ringtone 4\n");
-						this->ringtone_note=16;
+						this->stopRingtone();
 						this->ringtone=3;
 						break;
 					case 0x89:
 						//printf("set ringtone 5\n");
-						this->ringtone_note=16;
+						this->stopRingtone();
 						this->ringtone=4;
 						break;
 					case 0x8B:
 						//printf("play ringtone\n");
-						this->ringtone_note=0;
-						this->ringtone_tick=0;
+						this->playRingtone();
 						break;
 					
 					default:printf("Unknown cmd %02X%02X\n",this->cmd_p1,this->cmd_p2);break;
@@ -475,6 +474,13 @@ class Keyboard{
 		float getPhoneLineSample(){
 			constexpr float v[4]={0.0316227766,0.1,0.316227766,1};//guess TODO
 			return v[this->speaker_volume]*0;//TODO
+		}
+		void playRingtone(){
+			this->ringtone_note=0;
+			this->ringtone_tick=0;
+		}
+		void stopRingtone(){
+			this->ringtone_note=16;
 		}
 };
 

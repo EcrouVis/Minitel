@@ -176,6 +176,7 @@ Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
 Remise à zéro du téléphone? (microcontrôleur -> clavier):
 	Mise à 0 prolongée du signal (temps supérieur à un message en UART soit >~33.3ms)
 	Le clavier renvoie l'état par défaut (?) avec le bit 7 mis à 1 quand il détecte que le signal est revenu à 1.
+	Si on suit la logique du STUM2 dans la section prise périinformatique c'est une séquence break pour permettre aux périphériques de se resynchroniser.
 
 En cours:
 	La sortie audio du combiné téléphonique semble activé quand la ligne téléphonique est fermée

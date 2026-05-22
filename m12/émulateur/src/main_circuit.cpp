@@ -33,7 +33,8 @@
 
 #include <thread>
 
-#include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
+//#include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
+#include "circuit/DIN5/MinitelNetwork.h"
 
 #include <vector>
 
@@ -60,13 +61,14 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	Keyboard kb;
 	Clocks CLKs;
 	L6720 l6720;
-	//SimpleDIN5Interface din5(8080);
-	DIN5InterfaceLocalWebsocket din5lws;
+	SimplifiedMinitelNetwork smn;
+	SimplifiedMinitelNetworkAppLocalWebsocket smnalw;
+	smn.registerApp(&smnalw);
 	CRTBuffer crtb;
 	SpeakerBuffer spkb;
 	BuzzerBuffer bzb;
 	
-	RuntimeDecompiler rtd=RuntimeDecompiler(&uc);
+	RuntimeDecompiler rtd(&uc);
 	
 	
 	
@@ -76,14 +78,14 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		cpld.DChangeIn(d);
 		eram.DChangeIn(d);
 		video.DChangeIn(d);
-		uc.PXChangeIn(0,d);
+		uc.PXChangeIn(uc.P0,d);
 		iol.DChangeIn(d);
 	};
-	uc.subscribeP0(Dbus);//out ic
-	cpld.subscribeD(Dbus);
-	eram.subscribeD(Dbus);
-	erom.subscribeD(Dbus);
-	video.subscribeD(Dbus);
+	uc.subscribeP0(std::cref(Dbus));//out ic
+	cpld.subscribeD(std::cref(Dbus));
+	eram.subscribeD(std::cref(Dbus));
+	erom.subscribeD(std::cref(Dbus));
+	video.subscribeD(std::cref(Dbus));
 	
 	auto ALbus=[&eram,&erom](unsigned char d){
 		//printf("ALbus %#02X\n",d);
@@ -97,7 +99,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		//printf("AHbus %#02X\n",d);
 		eram.AHChangeIn(d);
 		erom.AHChangeIn(d);
-		uc.PXChangeIn(2,d);
+		uc.PXChangeIn(uc.P2,d);
 	};
 	uc.subscribeP2(AHbus);
 	
@@ -119,7 +121,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		iol.ALEChangeIn(b);
 		video.ASChangeIn(b);
 	};
-	uc.subscribeALE(ALEwire);
+	uc.subscribeALE(std::cref(ALEwire));
 	
 	auto A16wire=[&erom](bool b){
 		/*printf("A16wire ");
@@ -152,14 +154,14 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		video.nCSChangeIn(nCSVideo);
 		cpld.nCSChangeIn(nCSVideo);
 		iol.nCSChangeIn(nCSVideo);
-		uc.PXChangeIn(1,d);
+		uc.PXChangeIn(uc.P1,d);
 	};
-	uc.subscribeP1(P1bus);
+	uc.subscribeP1(std::cref(P1bus));
 	
 	auto nDCDwire=[&uc,&P1_uc,&P1_ext](bool b){
 		P1_ext&=~(1<<6);
 		P1_ext|=(b?(1<<6):0);
-		uc.PXChangeIn(1,P1_ext&P1_uc);
+		uc.PXChangeIn(uc.P1,P1_ext&P1_uc);
 		//uc.PXYChangeIn(1,6,b);
 	};
 	modem.subscribenDCD(nDCDwire);
@@ -172,7 +174,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	unsigned char P3_uc=0xFF;
 	unsigned char P3_ext=0xFF;
 	//P3 unfinished
-	auto P3bus=[&cpld,&eram,&video,&uc,&iol,&l6720,&wt,&din5lws,&P3_uc,&P3_ext](unsigned char d){
+	auto P3bus=[&cpld,&eram,&video,&uc,&iol,&l6720,&wt,&smn,&P3_uc,&P3_ext](unsigned char d){
 		P3_uc=d;
 		d&=P3_ext;
 		bool nRD=(bool)(d&0x80);
@@ -186,32 +188,39 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		cpld.nOEChangeIn(nRD);
 		iol.nOEChangeIn(nRD);
 		l6720.PTSChangeIn((bool)(d&(1<<4)));
-		uc.PXChangeIn(3,d);
+		uc.PXChangeIn(uc.P3,d);
 		wt.ENChangeIn((bool)(d&0x04));
+		smn.RxChangeIn((bool)(d&0x02));
 		//bypass L6720 -> buffer
-		din5lws.RxChangeIn((bool)(d&0x02));
 	};
-	uc.subscribeP3(P3bus);
+	uc.subscribeP3(std::cref(P3bus));
 	
 	auto PTEwire=[&uc,&P3_uc,&P3_ext](bool b){
 		if (b) P3_ext|=1<<5;
 		else P3_ext&=~(1<<5);
-		uc.PXChangeIn(3,P3_uc&P3_ext);
+		uc.PXChangeIn(uc.P3,P3_uc&P3_ext);
 	};
 	l6720.subscribePTE(PTEwire);
+	
+	auto PT=[&l6720,&smn](bool b){
+		l6720.PTChangeIn(b);
+		smn.PTChangeIn(b);
+	};
+	smn.subscribePT(PT);
+	l6720.subscribePT(PT);
 	
 	//bypass L6720 -> buffer
 	auto DIN5Txwire=[&uc,&P3_uc,&P3_ext](bool b){
 		if (b) P3_ext|=1;
 		else P3_ext&=~(1);
-		uc.PXChangeIn(3,P3_uc&P3_ext);
+		uc.PXChangeIn(uc.P3,P3_uc&P3_ext);
 	};
-	din5lws.subscribeTx(DIN5Txwire);
+	smn.subscribeTx(DIN5Txwire);
 	
 	auto mRxDwire=[&uc,&P3_uc,&P3_ext](bool b){
 		P3_ext&=~(1<<3);
 		P3_ext|=(b?(1<<3):0);
-		uc.PXChangeIn(3,P3_ext&P3_uc);
+		uc.PXChangeIn(uc.P3,P3_ext&P3_uc);
 		//uc.PXYChangeIn(3,3,b);
 	};
 	modem.subscribeRxD(mRxDwire);
@@ -219,7 +228,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	bool kb_s1=false;
 	bool kb_s2=false;
 	
-	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2,&din5lws,p_mb_video](unsigned char d){
+	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2,&smn,p_mb_video](unsigned char d){
 		modem.MCnBCChangeIn((bool)(d&1));
 		modem.MODEMnDTMFChangeIn((bool)(d&2));
 		kb_s1=(bool)(d&4);
@@ -235,10 +244,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			p_mb_video->send(&ms_p_notif);
 		}
 		//0x40->din power - not used in the emulator
-		din5lws.PWRChangeIn((bool)(d&0x40));
+		smn.PWRChangeIn((bool)(d&0x40));
 		//0x80->minitel memory access? - not wired
 	};
-	cpld.subscribePIO(CPLDIObus);
+	cpld.subscribePIO(std::cref(CPLDIObus));
 	
 	auto RSTwire=[&uc,p_mb_video](bool b){
 		uc.ResetChangeIn(b);
@@ -262,7 +271,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	auto WWTwire=[&uc,&P3_uc,&P3_ext](bool b){
 		P3_ext&=~0x04;
 		P3_ext|=(b?0x04:0);
-		uc.PXChangeIn(3,P3_ext&P3_uc);
+		uc.PXChangeIn(uc.P3,P3_ext&P3_uc);
 	};
 	wt.subscribenWRST(WWTwire);
 	
@@ -462,9 +471,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	bool pause_emu=false;
 	uc.debug_signal_alu_before_exec=[p_gState,&pause_emu,&rtd](){
 		pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
-		if (p_gState->minitelOn.load(std::memory_order_relaxed)){
+		/*if (p_gState->minitelOn.load(std::memory_order_relaxed)){
 			rtd.update();
-		}
+		}*/
 	};
 	/*din5.debug_connection_change=[p_mb_video](int s){
 		if (s<=0){
@@ -587,18 +596,19 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		}
 	};
 	CLKs.subscribeMailbox(checkMB);
-	auto CLKTick14745600=[&uc,&video](){
+	auto CLKTick14745600=[&uc,&video,&modem](){
 		uc.CLKTickIn();
 		video.CLKTickIn();
+		modem.CLKTickIn();//to resample ATxI input
 	};
-	CLKs.subscribe14745600Hz(CLKTick14745600);
+	CLKs.subscribe14745600Hz(std::cref(CLKTick14745600));
 	auto CLKTick600=[&kb,&cpld](){
 		cpld.CLKTickIn();
 		kb.CLKTickIn();
 	};
 	CLKs.subscribe600Hz(CLKTick600);
-	auto CLKTick9600=[&din5lws,&wt](){
-		din5lws.CLKTickIn9600Hz();
+	auto CLKTick9600=[&smn,&wt](){
+		smn.CLKTickIn9600Hz();
 		wt.incrementTimer();
 	};
 	CLKs.subscribe9600Hz(CLKTick9600);
@@ -658,10 +668,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	ms.p=(void*)&CLKs;
 	ms.cmd=CLOCK;
-	p_mb_video->send(&ms);
-	
-	ms.p=(void*)&din5lws;
-	ms.cmd=DIN5_INTERFACE_LOCAL_WEBSOCKET;
 	p_mb_video->send(&ms);
 	
 	ms.p=(void*)&crtb;

@@ -236,45 +236,12 @@ unsigned char m80C32::getR(unsigned char r){
 /*
 =============== IO ===============
 */
-void m80C32::CLKTickIn(){
-	this->fixedSerialClockTick();
-	
-	this->period++;
-	if ((this->period&0x01)==1) return;// f/2->state time
-	
-	unsigned char t2con=this->getSFRByteIn(this->T2CON);
-	constexpr unsigned char t2con_mask1=1<<(this->C_nT2&0x07);
-	constexpr unsigned char t2con_mask2=(1<<(this->C_nT2&0x07))|(1<<(this->RCLK&0x07))|(1<<(this->TCLK&0x07));
-	if ((t2con&t2con_mask1)==0&&(t2con&t2con_mask2)!=0) this->T2Tick();
-	
-	if (this->period<this->periodPerCycle) return;
-	this->period=0;
-	if ((t2con&t2con_mask2)==0) this->T2Tick();
-	unsigned char tmod=this->getSFRByteIn(this->TMOD);
-	if (!(bool)(tmod&(1<<this->C_T_0))) this->T0Tick();
-	if (!(bool)(tmod&(1<<this->C_T_1))) this->T1Tick();
-	
-	this->ResetCountdown();
-	if (this->reset_count!=0){
-		constexpr unsigned char pd_mask=1<<this->PD;
-		constexpr unsigned char idl_mask=1<<this->IDL;
-		unsigned char power_mode=this->getSFRByteIn(this->PCON);//&(pd_mask|idl_mask);
-		if ((power_mode&pd_mask)==0){
-			if ((power_mode&idl_mask)==0){
-				this->nextCycleALU();
-			}
-		}
-		if (this->i_cycle_n==0){
-			this->checkInterrupts();
-		}
-	}
-}
 void m80C32::ResetChangeIn(bool level){
 	this->reset_level=level;
 }
 void m80C32::PXChangeIn(unsigned char x,unsigned char d){
-	const unsigned char ax[4]={this->P0,this->P1,this->P2,this->P3};
-	x=ax[x];
+	//const unsigned char ax[4]={this->P0,this->P1,this->P2,this->P3};
+	//x=ax[x];
 	unsigned char v=this->getSFRByteIn(x);//this->SFR[x&0x7F];
 	this->SFR[x&0x7F].store(d,std::memory_order_relaxed);//don't trigger infinite loop + don't write to TX_out
 	this->checkPortChangeConsequences(x,v^d);
@@ -819,7 +786,48 @@ void m80C32::checkInterrupts(){
 		bool int_high=((this->interrupt_level&ip)!=0);
 		if (int_high) interrupt_signal&=ip;
 		
-		for(int i=0;i<8;i++){
+		if (interrupt_signal!=0){
+			unsigned char i=__builtin_ctz(interrupt_signal);
+			if (this->interrupt_level==0||i<__builtin_ctz(this->interrupt_level)){
+				
+				this->instruction[0]=0x12;
+				this->instruction[1]=0x00;
+				switch (i){
+					case 0:
+						if (this->getBitIn(this->IT0)){
+							this->setBitIn(this->IE0,false);//clear when falling edge
+						}
+						this->instruction[2]=0x03;
+						break;
+					case 1:
+						this->setBitIn(this->TF0,false);
+						this->instruction[2]=0x0B;
+						break;
+					case 2:
+						if (this->getBitIn(this->IT1)){
+							this->setBitIn(this->IE1,false);
+						}
+						this->instruction[2]=0x13;
+						break;
+					case 3:
+						this->setBitIn(this->TF1,false);
+						this->instruction[2]=0x1B;
+						break;
+					case 4:
+						this->instruction[2]=0x23;
+						break;
+					case 5:
+						this->instruction[2]=0x2B;
+						break;
+				}
+				this->i_part_n=this->i_length[0x12];//3;
+				this->i_cycle_n=0;
+				this->interrupt_level|=1<<i;
+				this->setSFRByte(this->PCON,this->getSFRByteIn(this->PCON)&(~(1<<this->IDL)));
+			}
+		}
+		
+		/*for(int i=0;i<8;i++){
 			unsigned char mask=1<<i;
 			if ((this->interrupt_level&mask)!=0) break;
 			if ((interrupt_signal&mask)!=0){
@@ -861,7 +869,7 @@ void m80C32::checkInterrupts(){
 				//printf("interrupt!!!\n");
 				break;
 			}
-		}
+		}*/
 	}
 	this->interrupt_change=false;
 }

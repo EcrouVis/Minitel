@@ -69,7 +69,7 @@ class TS9347wVRAM{
 		static inline int getVideoIndex(const unsigned int line, const unsigned char column, bool mode40=true);
 		void setVideoOtputABGR(int index,unsigned char abgr);
 		static int getSliceRAMIndex(unsigned char slice, unsigned char C, unsigned char Z);
-		unsigned char getRowFromY(unsigned char Y);
+		unsigned char getYFromRow(unsigned char Y);
 		inline unsigned char getDisplayDistrict();
 		void loadRowBuffer();
 		void loadUDS();
@@ -106,4 +106,134 @@ class TS9347wVRAM{
 		void TLA();
 		void CLL();
 };
+
+
+
+
+//inline member functions / called only in one place inside the hot path
+
+__attribute__((always_inline)) inline void TS9347wVRAM::CLKTickIn(){
+	this->main_clk_div++;
+	if (this->main_clk_div<6) return;
+	this->main_clk_div=0;
+	
+	this->clk_frame++;
+	if (this->clk_frame>=39936){//312*(40+24)*2
+		this->clk_frame=0;
+		this->n_frame++;
+		if (this->n_frame>=50) {
+			this->n_frame=0;
+		}
+	}
+	unsigned short n_line=this->clk_frame>>7;
+	unsigned char pos_line=(this->clk_frame>>1)&0x3F;
+	
+	if (this->clk_frame==0x0A80){
+		if (!this->vsync_mask) this->STATUS.fetch_or(this->VSYNC_MASK,std::memory_order_relaxed);
+		this->sendVideo(this->VIDEO_OUTPUT);
+	}
+	if (this->clk_frame==0x0B80) this->STATUS.fetch_and(~this->VSYNC_MASK,std::memory_order_relaxed);
+	
+	if (this->late_cmd_end){
+		this->late_cmd_end=false;
+		this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);//before cmd exec -> delay 0.5T
+	}
+	
+	if (n_line>=62){
+		switch ((unsigned char)(n_line-62)){
+			case 9:
+			case 19:
+			case 29:
+			case 39:
+			case 49:
+			case 59:
+			case 69:
+			case 79:
+			case 89:
+			case 99:
+			case 109:
+			case 119:
+			case 129:
+			case 139:
+			case 149:
+			case 159:
+			case 169:
+			case 179:
+			case 189:
+			case 199:
+			case 209:
+			case 219:
+			case 229:
+			case 239:
+			case 249:
+				if (pos_line<40){
+					//UDS LD
+					if((bool)(this->clk_frame&1)){
+						this->loadRowBuffer();
+						if (this->Rx[0].load(std::memory_order_relaxed)==0x95||this->Rx[0].load(std::memory_order_relaxed)==0x99) this->executeCommand();//VSM/VRM
+					}
+					else this->loadUDS();
+				}
+				else{
+					//LD LD
+					this->loadRowBuffer();
+					if((bool)(this->clk_frame&1)){
+						if (this->Rx[0].load(std::memory_order_relaxed)==0x95||this->Rx[0].load(std::memory_order_relaxed)==0x99) this->executeCommand();//VSM/VRM
+					}
+				}
+				break;
+			case 0:
+			case 10:
+			case 20:
+			case 30:
+			case 40:
+			case 50:
+			case 60:
+			case 70:
+			case 80:
+			case 90:
+			case 100:
+			case 110:
+			case 120:
+			case 130:
+			case 140:
+			case 150:
+			case 160:
+			case 170:
+			case 180:
+			case 190:
+			case 200:
+			case 210:
+			case 220:
+			case 230:
+			case 240:
+				if (pos_line<40){
+					//UDS LD
+					if((bool)(this->clk_frame&1)){
+						this->loadRowBuffer();
+						if (this->Rx[0].load(std::memory_order_relaxed)==0x95||this->Rx[0].load(std::memory_order_relaxed)==0x99) this->executeCommand();//VSM/VRM
+					}
+					else this->loadUDS();
+				}
+				else{
+					//uP
+					if((bool)(this->clk_frame&1)) this->executeCommand();
+				}
+				break;
+			default:
+				if((bool)(this->clk_frame&1)) this->executeCommand();
+				else if (pos_line<40){
+					this->loadUDS();
+				}
+				break;
+		}
+	}
+	else{
+		//uP
+		if((bool)(this->clk_frame&1)) this->executeCommand();
+	}
+}
+
+
+
 #endif

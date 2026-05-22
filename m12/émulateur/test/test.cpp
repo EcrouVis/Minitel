@@ -3,6 +3,7 @@
 #include <stdlib.h>
 //#include <pthread.h>
 #include <cstdio>
+#include <locale.h>
 
 #include <ixwebsocket/IXNetSystem.h>
 
@@ -12,6 +13,9 @@
 }*/
 
 int main(void){
+	setlocale(LC_ALL, "fr_FR.UTF-8");
+	setlocale(LC_NUMERIC, "en_US.UTF-8");
+	
 	GlobalState gState;
 	Mailbox mb_circuit;
 	//Mailbox mb_audio;

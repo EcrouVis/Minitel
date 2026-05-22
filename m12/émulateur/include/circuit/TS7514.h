@@ -125,7 +125,25 @@ class TS7514{
 				//case 0x0C:
 				//	break;
 			}
+			s+=this->getATxISample();//test TODO: remove
 			return s;
+		}
+		
+		float getATxISample(){//TODO: optimize with SSE instruction
+			float result=0;
+			for (int i=0;i<this->resample_buffer_atxi_length;i++){
+				result+=this->resample_filter[this->resample_buffer_atxi_length-this->resample_buffer_atxi_pointer_in+i]*(this->resample_buffer_atxi[i]?1:-1);
+			}
+			return result;
+		}
+		
+		void CLKTickIn(){
+			this->resample_clk_div++;
+			if (this->resample_clk_div>=12){
+				this->resample_buffer_atxi[this->resample_buffer_atxi_pointer_in]=this->ATxI;
+				this->resample_buffer_atxi_pointer_in++;
+				if (this->resample_buffer_atxi_pointer_in>=this->resample_buffer_atxi_length)this->resample_buffer_atxi_pointer_in=0;
+			}
 		}
 		
 	private:
@@ -150,6 +168,16 @@ class TS7514{
 		std::function<void(bool)> sendnDCD=[](bool b){};
 		
 		std::function<void(unsigned char)> sendCMD=[](unsigned char b){};
+		
+		unsigned char resample_clk_div=0;
+		int resample_buffer_atxi_pointer_in=0;
+		bool resample_buffer_atxi[327];//TODO: align for SSE speed up
+		float resample_filter[327*2];//filter repeated 2 times for simplicity
+		constexpr static int resample_buffer_atxi_length=327;
+		//we only need 3400Hz in bandwidth
+		//assuming 44100Hz is the minimum sampling rate
+		//the largest transition bandwidth is 18650Hz -> we should aim 15000Hz to be sure
+		//M=327 should do the job and the cutoff frequency should be ~11000Hz
 		
 		void writeRegister(){
 			unsigned char n_reg=(this->input_register>>4)&0x07;

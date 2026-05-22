@@ -144,8 +144,8 @@ void regTS9347Window(imguiTS9347REGView* regView){
 	char b[]=": 0x\0\0\0";
 	unsigned char v_reg;
 	
-	const char* n_reg[]={"STATUS","COMMAND","R1","R2","R3","R4","R5","R6","R7"};
-	std::atomic_uchar* p_reg[]={regView->STATUS,regView->COMMAND,regView->R1,regView->R2,regView->R3,regView->R4,regView->R5,regView->R6,regView->R7};
+	const char* n_reg[]={"STATUS","COMMAND","R1","R2","R3","R4","R5","R6","R7","DOR","ROR","TGS","PAT","MAT"};
+	std::atomic_uchar* p_reg[]={regView->STATUS,regView->COMMAND,regView->R1,regView->R2,regView->R3,regView->R4,regView->R5,regView->R6,regView->R7,regView->DOR,regView->ROR,regView->TGS,regView->PAT,regView->MAT};
 	for (unsigned int i=0;i<sizeof(n_reg)/sizeof(*n_reg);i++){
 		ImGui::Text(n_reg[i]);
 		if (p_reg[i]!=NULL){

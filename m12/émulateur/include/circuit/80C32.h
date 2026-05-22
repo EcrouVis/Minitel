@@ -410,4 +410,43 @@ class m80C32{
 		
 };
 
+
+
+
+//inline member functions / called only in one place inside the hot path
+
+__attribute__((always_inline)) inline void m80C32::CLKTickIn(){
+	this->fixedSerialClockTick();
+	
+	this->period++;
+	if ((this->period&0x01)==1) return;// f/2->state time
+	
+	unsigned char t2con=this->getSFRByteIn(this->T2CON);
+	constexpr unsigned char t2con_mask1=1<<(this->C_nT2&0x07);
+	constexpr unsigned char t2con_mask2=(1<<(this->C_nT2&0x07))|(1<<(this->RCLK&0x07))|(1<<(this->TCLK&0x07));
+	if ((t2con&t2con_mask1)==0&&(t2con&t2con_mask2)!=0) this->T2Tick();
+	
+	if (this->period<this->periodPerCycle) return;
+	this->period=0;
+	if ((t2con&t2con_mask2)==0) this->T2Tick();
+	unsigned char tmod=this->getSFRByteIn(this->TMOD);
+	if (!(bool)(tmod&(1<<this->C_T_0))) this->T0Tick();
+	if (!(bool)(tmod&(1<<this->C_T_1))) this->T1Tick();
+	
+	this->ResetCountdown();
+	if (this->reset_count!=0){
+		constexpr unsigned char pd_mask=1<<this->PD;
+		constexpr unsigned char idl_mask=1<<this->IDL;
+		unsigned char power_mode=this->getSFRByteIn(this->PCON);//&(pd_mask|idl_mask);
+		if ((power_mode&pd_mask)==0){
+			if ((power_mode&idl_mask)==0){
+				this->nextCycleALU();
+			}
+		}
+		if (this->i_cycle_n==0){
+			this->checkInterrupts();
+		}
+	}
+}
+
 #endif

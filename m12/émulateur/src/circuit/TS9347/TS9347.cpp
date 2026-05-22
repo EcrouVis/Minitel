@@ -51,86 +51,6 @@ void TS9347wVRAM::RnWChangeIn(bool b){
 	}
 }
 
-void TS9347wVRAM::CLKTickIn(){
-	this->main_clk_div++;
-	if (this->main_clk_div<6) return;
-	this->main_clk_div=0;
-	
-	this->clk_frame++;
-	if (this->clk_frame>=39936){//312*(40+24)*2
-		this->clk_frame=0;
-		this->n_frame++;
-		if (this->n_frame>=50) {
-			this->n_frame=0;
-		}
-	}
-	unsigned short n_line=this->clk_frame>>7;
-	unsigned char pos_line=(this->clk_frame>>1)&0x3F;
-	
-	if (this->clk_frame==0x0A80){
-		if (!this->vsync_mask) this->STATUS.fetch_or(this->VSYNC_MASK,std::memory_order_relaxed);
-		this->sendVideo(this->VIDEO_OUTPUT);
-	}
-	if (this->clk_frame==0x0B80) this->STATUS.fetch_and(~this->VSYNC_MASK,std::memory_order_relaxed);
-	
-	if (this->late_cmd_end){
-		this->late_cmd_end=false;
-		this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);//before cmd exec -> delay 0.5T
-	}
-	
-	if (n_line>=62){
-		switch (n_line%10){
-			case 1:
-				if (pos_line<40){
-					//UDS LD
-					if((bool)(this->clk_frame&1)){
-						this->loadRowBuffer();
-						if (this->Rx[0].load(std::memory_order_relaxed)==0x95||this->Rx[0].load(std::memory_order_relaxed)==0x99) this->executeCommand();//VSM/VRM
-					}
-					else this->loadUDS();
-				}
-				else{
-					//LD LD
-					if((bool)(this->clk_frame&1)){
-						this->loadRowBuffer();
-						if (this->Rx[0].load(std::memory_order_relaxed)==0x95||this->Rx[0].load(std::memory_order_relaxed)==0x99) this->executeCommand();//VSM/VRM
-					}
-					else this->loadRowBuffer();
-				}
-				break;
-			case 2:
-				if (pos_line<40){
-					//UDS LD
-					if((bool)(this->clk_frame&1)){
-						this->loadRowBuffer();
-						if (this->Rx[0].load(std::memory_order_relaxed)==0x95||this->Rx[0].load(std::memory_order_relaxed)==0x99) this->executeCommand();//VSM/VRM
-					}
-					else this->loadUDS();
-				}
-				else{
-					//uP
-					if((bool)(this->clk_frame&1)) this->executeCommand();
-				}
-				break;
-			default:
-				if (pos_line<40){
-					//UDS uP
-					if((bool)(this->clk_frame&1)) this->executeCommand();
-					else this->loadUDS();
-				}
-				else{
-					//uP
-					if((bool)(this->clk_frame&1)) this->executeCommand();
-				}
-				break;
-		}
-	}
-	else{
-		//uP
-		if((bool)(this->clk_frame&1)) this->executeCommand();
-	}
-}
-
 void TS9347wVRAM::subscribeD(std::function<void(unsigned char)> f){this->sendD=f;}
 
 void TS9347wVRAM::subscribeVideo(std::function<void(unsigned char*)> f){this->sendVideo=f;}
@@ -199,22 +119,15 @@ int TS9347wVRAM::getSliceRAMIndex(unsigned char slice, unsigned char C, unsigned
 	return A;
 }
 
-unsigned char TS9347wVRAM::getRowFromY(unsigned char Y){
-	switch (Y){
-		case 0:
-		case 2:
-		case 4:
-		case 6:
-			return ((bool)(this->TGS.load(std::memory_order_relaxed)&1))?24:0;
-		case 1:
-		case 3:
-		case 5:
-		case 7:
-			return -1;
-		default:
-			Y=(Y-(this->ROR.load(std::memory_order_relaxed)&0x1F))%24;
-			return ((bool)(this->TGS.load(std::memory_order_relaxed)&1))?Y:Y+1;
+unsigned char TS9347wVRAM::getYFromRow(unsigned char row){
+	row+=(this->TGS.load(std::memory_order_relaxed)&1)-1;//service row -> 24 or 255 (overflow)
+	if (row>=24) row=0;
+	else{
+		if ((bool)(this->MAT.load(std::memory_order_relaxed)&0x80)) row=row>>1;//double height
+		row+=this->ROR.load(std::memory_order_relaxed)&0x1F;//TODO: search behavior of YOR
+		row=(row>31)?row-24:row;
 	}
+	return row;
 }
 
 unsigned char TS9347wVRAM::getDisplayDistrict(){
@@ -237,13 +150,21 @@ void TS9347wVRAM::loadRowBuffer(){
 	if (column<40){
 		//unsigned char row=((this->clk_frame+64*2-(62<<7))/(640*2))%25;
 		unsigned char row=((this->clk_frame>>7)-61)/10;
-		row+=(this->TGS.load(std::memory_order_relaxed)&1);//service row position
+		/*row+=(this->TGS.load(std::memory_order_relaxed)&1);//service row position
 		row=(row)%25;
 		if (row!=0){
 			row=(row+(this->ROR.load(std::memory_order_relaxed)&0x1F)-8)%25;
 			row+=7;
 			if ((bool)(this->MAT.load(std::memory_order_relaxed)&0x80)) row=(row+1)>>1;//double height
-		}
+		}*/
+		/*row+=(this->TGS.load(std::memory_order_relaxed)&1)-1;//service row -> 24 or 255 (overflow)
+		if (row>=24) row=0;
+		else{
+			if ((bool)(this->MAT.load(std::memory_order_relaxed)&0x80)) row=row>>1;//double height
+			row+=this->ROR.load(std::memory_order_relaxed)&0x1F;//TODO: search behavior of YOR
+			row=(row>31)?row-24:row;
+		}*/
+		row=this->getYFromRow(row);
 		//calculate ram address
 		int A=(this->DOR.load(std::memory_order_relaxed)&0x80)<<7;//Z
 		A|=(this->ROR.load(std::memory_order_relaxed)&0x80)<<6;
@@ -368,10 +289,17 @@ void TS9347wVRAM::loadRowBuffer(){
 void TS9347wVRAM::loadUDS(){//load UDS + video output
 	unsigned char column=(this->clk_frame>>1)&0x3F;
 	unsigned int line=(this->clk_frame>>7)-62;
-	unsigned char slice=line%10;
+	unsigned char slice=line;
+	/*unsigned char slice=line%10;
 	if (((line/10)+(this->TGS.load(std::memory_order_relaxed)&1))%25!=0){
 		if ((bool)(this->MAT.load(std::memory_order_relaxed)&0x80)) slice=((line>>1)+5-(this->TGS.load(std::memory_order_relaxed)&1)*5)%10;//double height
+	}*/
+	if ((bool)(this->MAT.load(std::memory_order_relaxed)&0x80)){//double height
+		slice=line>>1;
+		slice+=((bool)(this->TGS.load(std::memory_order_relaxed)&1))?0:5;//service row low
 	}
+	slice=slice%10;
+	
 	
 	//margin
 	if (column==0){
@@ -399,29 +327,16 @@ void TS9347wVRAM::loadUDS(){//load UDS + video output
 		}
 	}
 	//margin extension
-	if (((bool)(this->TGS.load(std::memory_order_relaxed)&1))?(line>=240):(line<10)){//service row
-		if (!(bool)(this->PAT.load(std::memory_order_relaxed)&1)){//margin
-			//unsigned char c=this->getMarginColor();
-			unsigned char c=this->getMarginABGR();
-			int j=getVideoIndex(line,column);
-			for (int i=0;i<24;i++){
-				//this->VIDEO_OUTPUT[j+i].store(c,std::memory_order_relaxed);
-				this->setVideoOtputABGR(j+i,c);
-			}
-			return;
+	bool margin_ext;
+	if (((bool)(this->TGS.load(std::memory_order_relaxed)&1))?(line>=240):(line<10)) margin_ext=!(bool)(this->PAT.load(std::memory_order_relaxed)&1);
+	else margin_ext=!(bool)(this->PAT.load(std::memory_order_relaxed)&2);
+	if (margin_ext){
+		unsigned char c=this->getMarginABGR();
+		int j=getVideoIndex(line,column);
+		for (int i=0;i<24;i++){
+			this->setVideoOtputABGR(j+i,c);
 		}
-	}
-	else{
-		if (!(bool)(this->PAT.load(std::memory_order_relaxed)&2)){//margin
-			//unsigned char c=this->getMarginColor();
-			unsigned char c=this->getMarginABGR();
-			int j=getVideoIndex(line,column);
-			for (int i=0;i<24;i++){
-				//this->VIDEO_OUTPUT[j+i].store(c,std::memory_order_relaxed);
-				this->setVideoOtputABGR(j+i,c);
-			}
-			return;
-		}
+		return;
 	}
 	//output slice
 	if ((bool)(this->TGS.load(std::memory_order_relaxed)&0x80)){//80 char long/short
@@ -459,7 +374,7 @@ void TS9347wVRAM::loadUDS(){//load UDS + video output
 			//load cursor attributes
 			bool comp=false;
 			if ((bool)(this->MAT.load(std::memory_order_relaxed)&0x40)){//cursor enabled
-				if (this->getX(true)==column&&((this->getB(true)&1)==i)&&this->getRowFromY(this->getY(true))==line/10&&this->getD(true)==this->getDisplayDistrict()){//on the cursor
+				if (this->getX(true)==column&&((this->getB(true)&1)==i)&&this->getY(true)==this->getYFromRow(line/10)&&this->getD(true)==this->getDisplayDistrict()){//on the cursor
 					if (this->n_frame<25||(!(bool)(this->MAT.load(std::memory_order_relaxed)&0x20))){
 						a^=(this->MAT.load(std::memory_order_relaxed)&0x10)<<1;//U
 						comp=!(bool)(this->MAT.load(std::memory_order_relaxed)&0x10);
@@ -486,25 +401,15 @@ void TS9347wVRAM::loadUDS(){//load UDS + video output
 			}
 			//insert
 			if (insert||((bool)(this->PAT.load(std::memory_order_relaxed)&0x20))){
-				int k=this->getVideoIndex(line,2*column+i,false);
-				for (int j=0;j<6;j++){
-					bool fg=c&1;
-					c=c>>1;
-					//this->VIDEO_OUTPUT[k+2*j].store((fg?mc:sc),std::memory_order_relaxed);
-					this->setVideoOtputABGR(k+2*j,(fg?mc:sc)|0x08);
-					//this->VIDEO_OUTPUT[k+2*j+1].store((fg?mc:sc),std::memory_order_relaxed);
-					this->setVideoOtputABGR(k+2*j+1,(fg?mc:sc)|0x08);
-				}
+				mc|=0x08;
+				sc|=0x08;
 			}
-			else{//insert->black
-				int k=this->getVideoIndex(line,2*column+i,false);
-				for (int j=0;j<6;j++){
-					//this->VIDEO_OUTPUT[k+j].store(0,std::memory_order_relaxed);
-					bool fg=c&1;
-					c=c>>1;
-					this->setVideoOtputABGR(k+2*j,fg?mc:sc);
-					this->setVideoOtputABGR(k+2*j+1,fg?mc:sc);
-				}
+			int k=this->getVideoIndex(line,2*column+i,false);
+			for (int j=0;j<6;j++){
+				bool fg=(c>>j)&1;
+				//c=c>>1;
+				this->setVideoOtputABGR(k+2*j,fg?mc:sc);
+				this->setVideoOtputABGR(k+2*j+1,fg?mc:sc);
 			}
 		}
 	}
@@ -640,7 +545,7 @@ void TS9347wVRAM::loadUDS(){//load UDS + video output
 		else this->shift_slice=false;
 		//cursor
 		if ((bool)(this->MAT.load(std::memory_order_relaxed)&0x40)){//cursor enabled
-			if (this->getX(true)==column&&this->getRowFromY(this->getY(true))==line/10&&this->getD(true)==this->getDisplayDistrict()){//on the cursor
+			if (this->getX(true)==column&&this->getY(true)==this->getYFromRow(line/10)&&this->getD(true)==this->getDisplayDistrict()){//on the cursor
 				if (this->n_frame<25||(!(bool)(this->MAT.load(std::memory_order_relaxed)&0x20))){
 					U^=(this->MAT.load(std::memory_order_relaxed)&0x10)<<1;//U
 					comp=!(bool)(this->MAT.load(std::memory_order_relaxed)&0x10);
@@ -699,11 +604,7 @@ void TS9347wVRAM::loadUDS(){//load UDS + video output
 		//video output
 		int j=this->getVideoIndex(line,column,true);
 		for (int i=0;i<8;i++){
-			unsigned char clr=((c&1)?mc:sc);
-			c=c>>1;
-			//this->VIDEO_OUTPUT[j+3*i].store(clr,std::memory_order_relaxed);
-			//this->VIDEO_OUTPUT[j+3*i+1].store(clr,std::memory_order_relaxed);
-			//this->VIDEO_OUTPUT[j+3*i+2].store(clr,std::memory_order_relaxed);
+			unsigned char clr=(((c>>i)&1)?mc:sc);
 			this->setVideoOtputABGR(j+3*i,clr);
 			this->setVideoOtputABGR(j+3*i+1,clr);
 			this->setVideoOtputABGR(j+3*i+2,clr);
