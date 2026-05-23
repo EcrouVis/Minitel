@@ -74,7 +74,10 @@ class RuntimeDecompiler{
 					addr=(((unsigned long)this->uc->PX_out[1]&3)<<16)|((unsigned long)((((unsigned short)this->uc->getRAMByte(this->uc->getSFRByteIn(this->uc->SP)))<<8)+((unsigned short)this->uc->getRAMByte(this->uc->getSFRByteIn(this->uc->SP)-1))));
 					if (!(this->ram_address_tracker[this->uc->getSFRByteIn(this->uc->SP)]&&this->ram_address_tracker[this->uc->getSFRByteIn(this->uc->SP)-1])) this->rom_map[addr]|=this->ADDRESS_CALL_INDIRECT;
 					break;
-					
+				case 0x73://JMP indirect
+					addr=(((unsigned long)this->uc->PX_out[1]&3)<<16)|((unsigned long)((((unsigned short)this->uc->getSFRByteIn(uc->DPH))<<8)+((unsigned short)this->uc->getSFRByteIn(uc->DPL))+((unsigned short)this->uc->getSFRByteIn(this->uc->ACC))));
+					this->rom_map[addr]|=this->ADDRESS_JMP_INDIRECT;
+					break;
 				case 0x83://MOVC
 					addr=(((unsigned long)this->uc->PX_out[1]&3)<<16)|((unsigned long)(this->uc->PC+this->uc->getSFRByteIn(this->uc->ACC)));
 					this->rom_map[addr]|=this->DATA;
@@ -94,6 +97,7 @@ class RuntimeDecompiler{
 		constexpr static unsigned char ADDRESS_RET=0x08;
 		constexpr static unsigned char ADDRESS_INTERRUPT=0x10;
 		constexpr static unsigned char ADDRESS_CALL_INDIRECT=0x20;
+		constexpr static unsigned char ADDRESS_JMP_INDIRECT=0x40;
 		constexpr static unsigned char DATA=0x80;
 		
 		bool ram_address_tracker[256]={false};//track if memory is address data to know when there is instructions like PUSH, PUSH then RET

@@ -283,6 +283,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		
 		virtual void CLKCallback() final override{
 			if (this->currentState==this->CONNECTED) this->CONNECTEDPollCMD();
+			if (this->currentState==this->UNINIT_MODULE) this->UNINIT_MODULEPollCMD();
 		}
 		
 		~SimplifiedMinitelNetworkAppLocalWebsocket(){
@@ -499,9 +500,16 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		
 		void RESTINGReceiveCMD(unsigned char d){
 			if (this->PTin){
+				resync:
 				this->CMDBuffer.push_back(d);
 				unsigned char s=this->isModuleWakeCMD();//TODO: resync
-				if (s==this->NOT_CMD) this->CMDBuffer.clear();
+				if (s==this->NOT_CMD){
+					if (this->CMDBuffer.size()>1){
+						this->CMDBuffer.clear();
+						goto resync;
+					}
+					else this->CMDBuffer.clear();
+				}
 				else if (s==this->CMD_FINISHED){
 					this->INIT_MODULESendCMD();
 				}
@@ -522,6 +530,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		}
 		
 		void INIT_MODULEReceiveCMD(unsigned char d){
+			resync:
 			this->CMDBuffer.push_back(d);
 			unsigned char s=this->NOT_CMD;
 			switch (this->subState){
@@ -534,11 +543,14 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					break;
 				case 1:
 					s=this->isPRO2CMD();
-					if (s==this->NOT_CMD) this->CMDBuffer.clear();
-					else if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x75){
+					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x75){
 						this->PARAMETERSSendCMD();
 					}
 					break;
+			}
+			if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
+				this->CMDBuffer.clear();
+				goto resync;
 			}
 			if (s==this->NOT_CMD||s==this->CMD_FINISHED) this->CMDBuffer.clear();
 		}
@@ -552,6 +564,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		}
 		
 		void PARAMETERSReceiveCMD(unsigned char d){
+			resync:
 			this->CMDBuffer.push_back(d);
 			unsigned char s=this->isModuleRestCMD();
 			if (s==this->NOT_CMD){
@@ -561,6 +574,10 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					if (s==this->NOT_CMD){
 						s=this->isSS2();
 						if (s==this->NOT_CMD){
+							if (this->CMDBuffer.size()>1){
+								this->CMDBuffer.clear();
+								goto resync;
+							}
 							if (this->parameters.currentLine!=0){
 								if (this->CMDBuffer.size()==1&&this->CMDBuffer[0]==0x20) this->cycleParameterOption(this->parameters.currentLine);
 								else this->print(bell,sizeof(bell)/sizeof(bell[0]));
@@ -649,6 +666,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		}
 		
 		void UNINIT_MODULEReceiveCMD(unsigned char d){
+			resync:
 			this->CMDBuffer.push_back(d);
 			unsigned char s=this->NOT_CMD;
 			if(this->subState==0){
@@ -658,14 +676,30 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					this->UNINIT_MODULESendCMD();
 				}
 			}
+			if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
+				this->CMDBuffer.clear();
+				goto resync;
+			}
 			if (s==this->NOT_CMD||s==this->CMD_FINISHED) this->CMDBuffer.clear();
 		}
 		
 		void UNINIT_MODULETxQueueEmpty(){
 			if(this->subState==1){
-				this->PTout=true;
-				this->currentState=this->RESTING;
-				this->subState=0;
+				this->stop_delay_cnt=0;
+				this->subState=2;
+			}
+		}
+		
+		constexpr static unsigned short stop_delay_50ms=480;
+		unsigned short stop_delay_cnt=0;
+		void UNINIT_MODULEPollCMD(){//wait 50ms as described in the STURM / not waiting could stop clear cmd in the middle of the screen + directory screen could be glitched (for the M12 we emulate)
+			if (this->subState==2){
+				this->stop_delay_cnt++;
+				if (this->stop_delay_cnt>=this->stop_delay_50ms){
+					this->PTout=true;
+					this->currentState=this->RESTING;
+					this->subState=0;
+				}
 			}
 		}
 		
@@ -721,14 +755,13 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 						this->qTx.push(0x14);
 					}
 					this->qTx.push(0x0C);
-					this->subState=0;
-					this->currentState=this->CONNECTED;
 					this->CONNECTEDSendCMD();
 					break;
 			}
 		}
 		
 		void CONFIGUREReceiveCMD(unsigned char d){
+			resync:
 			this->CMDBuffer.push_back(d);
 			unsigned char s=this->NOT_CMD;
 			switch(this->subState){
@@ -792,6 +825,10 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					}
 					break;
 					
+			}
+			if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
+				this->CMDBuffer.clear();
+				goto resync;
 			}
 			if (s==this->NOT_CMD||s==this->CMD_FINISHED) this->CMDBuffer.clear();
 					
@@ -858,7 +895,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 						this->qTx.swap(empty);//empty the queue
 					}
 					this->qRx.clear();
-					this->CMDBuffer.clear();//fix while cmd resync not implemented
 					this->qTx.push(0x1B);this->qTx.push(0x3A);this->qTx.push(0x6B);this->qTx.push(0x7F);
 					break;
 				case 4:
@@ -899,22 +935,31 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 						if (this->parameters.parity) this->qRx.push_back(d);
 						d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 						if (!this->parameters.parity) this->qRx.push_back(d);
-						
+						resync1:
 						this->CMDBuffer.push_back(d);
 						s=this->isModuleRestCMD();
 						if (s==this->CMD_FINISHED){
 							this->subState=7;
 							closeWS=true;
 						}
+						if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
+							this->CMDBuffer.clear();
+							goto resync1;
+						}
 						break;
 					case 3:
 					case 5:
 					case 7:
 						d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
+						resync2:
 						this->CMDBuffer.push_back(d);
 						s=this->isPRO2CMD();
-						if (s==this->NOT_CMD) this->CMDBuffer.clear();
-						else if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x75){
+						if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
+							this->CMDBuffer.clear();
+							printf("resync!\n");
+							goto resync2;
+						}
+						if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x75){
 							this->subState++;
 							this->CONNECTEDSendCMD();
 						}
