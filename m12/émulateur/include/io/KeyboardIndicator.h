@@ -20,7 +20,10 @@ class KeyboardIndicator{
 			if (this->p_keyboard==NULL) return;
 			
 			ImGui::SetNextWindowBgAlpha(0.75f);
-			ImGui::SetNextWindowPos(ImVec2(ImGui::GetMainViewport()->Size.x-50,10));//TODO: compute position
+			ImVec2 pos=ImGui::GetMainViewport()->Size;
+			pos[0]-=10;
+			pos[1]=10;
+			ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(1, 0));
 			ImGui::Begin("keyboard leds",NULL,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoNav);
 			double t=glfwGetTime();
 			double n;

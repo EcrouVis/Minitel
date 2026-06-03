@@ -16,20 +16,13 @@ class IOLogger{
 		}
 		void nOEChangeIn(bool b){
 			if(b&&(!this->nOE)&&(!this->nCS)) {
-				//(*this->sendD)(r);
 				this->sendOUT(this->address,this->data);
-				/*if (this->address==0x96){
-				int a;
-				std::cin>>a;
-				}*/
 			}
 			this->nOE=b;
 		}
 		void nWEChangeIn(bool b){
 			if(b&&(!this->nWE)&&(!this->nCS)){
 				this->sendIN(this->address,this->data);
-				/*int a;
-				std::cin>>a;*/
 			}
 			this->nWE=b;
 		}
@@ -51,6 +44,5 @@ class IOLogger{
 		unsigned char data=0;
 		std::function<void(unsigned char,unsigned char)> sendIN=[](unsigned char a,unsigned char d){};
 		std::function<void(unsigned char,unsigned char)> sendOUT=[](unsigned char a,unsigned char d){};
-		//void (*sendD)(unsigned char);
 };
 #endif

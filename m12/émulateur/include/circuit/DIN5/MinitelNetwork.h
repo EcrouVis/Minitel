@@ -1,5 +1,5 @@
-#ifndef MINIT_MODULEELNETWORK_H
-#define MINIT_MODULEELNETWORK_H
+#ifndef MINITEL_MODULENETWORK_H
+#define MINITEL_MODULENETWORK_H
 #include <cstdio>
 #include <queue>
 #include <mutex>
@@ -369,6 +369,21 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		}
 		
 		unsigned char isModuleRestCMD(){
+			constexpr unsigned char CMD[2]={0x13,0x49};
+			if (this->CMDBuffer.size()<sizeof(CMD)/sizeof(CMD[0])){
+				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
+					return this->CMD_ONGOING;
+				}
+			}
+			else if (this->CMDBuffer.size()==sizeof(CMD)/sizeof(CMD[0])){
+				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
+					return this->CMD_FINISHED;
+				}
+			}
+			return this->NOT_CMD;
+		}
+		
+		unsigned char isModuleForceRestCMD(){
 			constexpr unsigned char CMD[4]={0x13,0x49,0x13,0x49};
 			if (this->CMDBuffer.size()<sizeof(CMD)/sizeof(CMD[0])){
 				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
@@ -937,7 +952,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 						if (!this->parameters.parity) this->qRx.push_back(d);
 						resync1:
 						this->CMDBuffer.push_back(d);
-						s=this->isModuleRestCMD();
+						s=this->isModuleForceRestCMD();
 						if (s==this->CMD_FINISHED){
 							this->subState=7;
 							closeWS=true;

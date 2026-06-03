@@ -43,9 +43,14 @@ Transfert d'état des touches (clavier -> microcontrôleur):
 		M 0x3B
 		: 0x3D
     flèche droite 0x3F
-
+      non utilisé 0x41
+      non utilisé 0x43
    appel annuaire 0x45
-
+      non utilisé 0x47
+      non utilisé 0x49
+      non utilisé 0x4B
+      non utilisé 0x4D
+      non utilisé 0x4F
 		ç 0x51
 		à 0x53
 	   on/off 0x55

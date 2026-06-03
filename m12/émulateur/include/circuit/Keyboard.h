@@ -199,6 +199,10 @@ class Keyboard{
 						case 65:this->queueKey(0x73,keyPressed);break;//F7=Suite
 						case 66:this->queueKey(0x65,keyPressed);break;//F8=Répétition
 						case 67:this->queueKey(0x63,keyPressed);break;//F9=Envoi
+						
+						//test TODO: remove:
+						case 0x53:if (keyPressed){this->playRingtone();}this->phone_status&=0xFB;this->phone_status|=(keyPressed?0x04:0);this->sendStatus();break;//numpad .
+						default:printf("key pressed: %02X\n",kb_m->scancode);break;
 					}
 				}
 			}
@@ -357,7 +361,7 @@ class Keyboard{
 						printf("microphone deactivated\n");
 						break;
 						
-					case 0x17:this->sendStatus();break;
+					case 0x17:this->sendStatus();printf("request phone status %02X\n",this->phone_status);break;
 					
 					case 0x21:this->LED_SPEAKER.store(LED_OFF,std::memory_order_release);printf("power off speaker led\n");break;
 					case 0x23:this->LED_POWER.store(LED_OFF,std::memory_order_release);printf("power off on/off led\n");break;
@@ -366,6 +370,14 @@ class Keyboard{
 					case 0x2B:this->LED_POWER.store(LED_ON,std::memory_order_release);printf("power on on/off led\n");break;
 					
 					case 0x33:this->LED_POWER.store(LED_BLINK,std::memory_order_release);printf("blink on/off led\n");break;
+					
+					case 0x39://test TODO: rewrite/remove
+						/*if((this->phone_status&0x48)!=0x08){
+							this->phone_status=(this->phone_status&(~0x48))|0x08;
+							this->sendStatus();
+						}*/
+						printf("!!!!\n");
+						break;
 					
 					case 0x41:
 						//printf("set speaker volume 1\n");

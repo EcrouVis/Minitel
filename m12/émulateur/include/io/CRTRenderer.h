@@ -9,6 +9,8 @@
 
 #include <cstdio>
 #include <cmath>
+#include <chrono>
+#include <cstring>
  
 
 
@@ -18,8 +20,8 @@ class CRTRenderer{
 			this->p_PARAMETERS=p_PARAMETERS;
 			this->window=window;
 			
-			glEnable(GL_BLEND);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
+			//glEnable(GL_BLEND);
+			//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
 			
 			glGenVertexArrays(1,&(this->VertexArrayID));
 			glBindVertexArray(this->VertexArrayID);
@@ -35,6 +37,12 @@ class CRTRenderer{
 			glGenTextures(1,&(this->TextureID));
 			
 			this->ScaleID=glGetUniformLocation(this->ProgramID,"scale");
+			
+			this->BlackLevelID=glGetUniformLocation(this->ProgramID,"blackLevel");
+			
+			this->CurvatureID=glGetUniformLocation(this->ProgramID,"curvature");
+			
+			this->ScanlineID=glGetUniformLocation(this->ProgramID,"scanline");
 			
 			glClearColor(0,0,0,0);
 		}
@@ -64,6 +72,12 @@ class CRTRenderer{
 				}
 				glUniform2fv(this->ScaleID,1,scale);
 				
+				glUniform1f(this->BlackLevelID,this->p_PARAMETERS->io.crt.black_level*0.01);
+				
+				glUniform1f(this->CurvatureID,this->p_PARAMETERS->io.crt.curvature);
+				
+				glUniform1i(this->ScanlineID,this->p_PARAMETERS->io.crt.scanline);
+				
 				glEnableVertexAttribArray(0);
 				glBindBuffer(GL_ARRAY_BUFFER,this->VertexBufferID);
 				glVertexAttribPointer(0,2,GL_FLOAT,GL_FALSE,0,(void*)0);
@@ -92,22 +106,42 @@ class CRTRenderer{
 		const char* VS="\
 #version 330 core\n\
 layout(location=0) in vec2 vertexPosition;\n\
-out vec2 UV;\n\
-uniform vec2 scale;\n\
+out vec2 pos;\n\
 void main(){\n\
 	gl_Position.xy=vertexPosition;\n\
 	gl_Position.zw=vec2(0.,1.);\n\
-	UV=scale*vertexPosition+vec2(0.5,0.5);\n\
+	pos=vertexPosition;\n\
 }\n\
 			";
 		GLuint VertexShaderID;
 		const char* FS="\
 #version 330 core\n\
-in vec2 UV;\n\
+in vec2 pos;\n\
 out vec4 color;\n\
 uniform sampler2D textureSampler;\n\
+uniform float blackLevel;\n\
+uniform vec2 scale;\n\
+uniform float curvature;\n\
+uniform bool scanline;\n\
 void main(){\n\
-	color=texture(textureSampler,UV);\n\
+	vec2 UV=pos;\n\
+	vec2 curve=curvature*UV.yx;\n\
+	UV*=2-sqrt(1-curve*curve);\n\
+	UV*=scale;\n\
+	UV+=vec2(0.5,0.5);\n\
+	if (scanline){\n\
+		float transition=(tanh(mod(UV.x*962.-0.5,1.)-0.5)+1.)/2.;\n\
+		color.rgb=mix(texture(textureSampler,UV-vec2(0.5/962.,0.)).rgb,texture(textureSampler,UV+vec2(0.5/962.,0.)).rgb,transition);\n\
+		float line=mod(UV.y*252.,1.);\n\
+		line-=line*line;\n\
+		line*=4;\n\
+		color.rgb=mix(vec3(blackLevel),color.rgb,line);\n\
+	}\n\
+	else{\n\
+		color.rgb=texture(textureSampler,UV).rgb;\n\
+	}\n\
+	color.rgb=max(color.rgb,vec3(blackLevel));\n\
+	color.a=1.;\n\
 }\n\
 			";
 		GLuint FragmentShaderID;
@@ -115,6 +149,14 @@ void main(){\n\
 		
 		GLuint TextureID;
 		GLuint ScaleID;
+		GLuint BlackLevelID;
+		GLuint CurvatureID;
+		GLuint ScanlineID;
+		
+		unsigned char screenTexture[(250+2)*(3*40*8+2)*3];
+		
+		unsigned char screenTextureDisplay[(250+2)*(3*40*8+2)*3];
+		std::chrono::steady_clock::time_point lastScreenUpdate = std::chrono::steady_clock::now();
 		
 		void loadShaders(){
 			this->VertexShaderID=glCreateShader(GL_VERTEX_SHADER);
@@ -173,35 +215,69 @@ void main(){\n\
 				static unsigned char crtbuffer_data[VIDEO_FRAME_SIZE];
 				this->p_buffer->getVideoFrame(crtbuffer_data);
 				glBindTexture(GL_TEXTURE_2D,this->TextureID);
-				static unsigned char data[(250+2)*(3*40*8+2)*4];
 				const unsigned char l[]={0,102,179,204,128,153,230,255};
 				if (this->p_PARAMETERS->io.crt.rgb){
 					for (int i=0;i<(250+2)*(3*40*8+2);i++){
-						data[4*i]=crtbuffer_data[i>>1];
-						if ((bool)(i&1)) data[4*i]&=0x0F;
-						else data[4*i]=data[4*i]>>4;
+						this->screenTexture[3*i]=crtbuffer_data[i>>1];
+						if ((bool)(i&1)) this->screenTexture[3*i]&=0x0F;
+						else this->screenTexture[3*i]=this->screenTexture[3*i]>>4;
 						// 0000 ABGR
-						data[4*i+3]=(data[4*i]&0x08)?0xFF:0;
-						data[4*i+2]=(data[4*i]&0x04)?0xFF:0;
-						data[4*i+1]=(data[4*i]&0x02)?0xFF:0;
-						data[4*i]=(data[4*i]&0x01)?0xFF:0;
+						if ((bool)(this->screenTexture[3*i]&0x08)){
+							this->screenTexture[3*i+2]=(this->screenTexture[3*i]&0x04)?0xFF:0;
+							this->screenTexture[3*i+1]=(this->screenTexture[3*i]&0x02)?0xFF:0;
+							this->screenTexture[3*i]=(this->screenTexture[3*i]&0x01)?0xFF:0;
+						}
+						else{
+							this->screenTexture[3*i]=0;
+							this->screenTexture[3*i+1]=0;
+							this->screenTexture[3*i+2]=0;
+						}
+						/*this->screenTexture[4*i+3]=(this->screenTexture[4*i]&0x08)?0xFF:0;
+						this->screenTexture[4*i+2]=(this->screenTexture[4*i]&0x04)?0xFF:0;
+						this->screenTexture[4*i+1]=(this->screenTexture[4*i]&0x02)?0xFF:0;
+						this->screenTexture[4*i]=(this->screenTexture[4*i]&0x01)?0xFF:0;*/
 					}
 				}
 				else{
 					for (int i=0;i<(250+2)*(3*40*8+2);i++){
-						data[4*i]=crtbuffer_data[i>>1];
-						if ((bool)(i&1)) data[4*i]&=0x0F;
-						else data[4*i]=data[4*i]>>4;
-						data[4*i+3]=(data[4*i]&0x08)?0xFF:0;
-						data[4*i]=l[data[4*i]&0x07];
-						data[4*i+1]=data[4*i];
-						data[4*i+2]=data[4*i];
+						this->screenTexture[3*i]=crtbuffer_data[i>>1];
+						if ((bool)(i&1)) this->screenTexture[3*i]&=0x0F;
+						else this->screenTexture[3*i]=this->screenTexture[3*i]>>4;
+						if ((bool)(this->screenTexture[3*i]&0x08)){
+							this->screenTexture[3*i]=l[this->screenTexture[3*i]&0x07];
+							this->screenTexture[3*i+1]=this->screenTexture[3*i];
+							this->screenTexture[3*i+2]=this->screenTexture[3*i];
+						}
+						else{
+							this->screenTexture[3*i]=0;
+							this->screenTexture[3*i+1]=0;
+							this->screenTexture[3*i+2]=0;
+						}
+						/*this->screenTexture[4*i+3]=(this->screenTexture[4*i]&0x08)?0xFF:0;
+						this->screenTexture[4*i]=l[this->screenTexture[4*i]&0x07];
+						this->screenTexture[4*i+1]=this->screenTexture[4*i];
+						this->screenTexture[4*i+2]=this->screenTexture[4*i];*/
 					}
 				}
-				glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,3*40*8+2,250+2,0, GL_RGBA, GL_UNSIGNED_BYTE,data);
-				/*unsigned char data[(250+2)*(3*40*8+2)];
-				for (int i=0;i<(250+2)*(3*40*8+2);i++) data[i]=this->p_buffer->VIDEO_OUTPUT[i].load(std::memory_order_acquire);
-				glTexImage2D(GL_TEXTURE_2D,0,GL_RED,3*40*8+2,250+2,0, GL_RED, GL_UNSIGNED_BYTE,data);*/
+				/*glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,3*40*8+2,250+2,0, GL_RGB, GL_UNSIGNED_BYTE,this->screenTexture);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);*/
+			}
+			auto now = std::chrono::steady_clock::now();
+			float dt=std::chrono::duration_cast<std::chrono::duration<float>>(now-this->lastScreenUpdate).count();
+			this->lastScreenUpdate=now;
+			
+			if (memcmp(this->screenTexture,this->screenTextureDisplay,sizeof(this->screenTexture))){
+				float alpha;
+				if (this->p_PARAMETERS->io.crt.decay<1e-14) alpha=0;
+				else alpha=std::exp(-3*dt/this->p_PARAMETERS->io.crt.decay);
+				
+				for (unsigned int i=0;i<sizeof(this->screenTexture)/sizeof(this->screenTexture[0]);i++){
+					this->screenTextureDisplay[i]=std::max((unsigned char)(((float)this->screenTextureDisplay[i])*alpha),this->screenTexture[i]);
+				}
+				glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,3*40*8+2,250+2,0, GL_RGB, GL_UNSIGNED_BYTE,this->screenTextureDisplay);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,GL_NEAREST);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_LINEAR);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);

@@ -22,8 +22,12 @@
 			"volume":	1
 		},
 		"CRT":	{
-			"rgb":	false,
-			"width factor":	0.66666668653488159
+			"width factor":	0.66666668653488159,
+			"black level":	12.5,
+			"curvature":	0.22499999403953552,
+			"decay":	0.3333333432674408,
+			"scanline":	true,
+			"rgb":	false
 		},
 		"Other":	{
 			"os rtc":	false

@@ -178,13 +178,29 @@ class M12Window{
 					
 					//CRT
 					subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"CRT");
-					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"rgb");
-					if (cJSON_IsBool(c_param)){
-						this->PARAMETERS.io.crt.rgb=cJSON_IsTrue(c_param);
-					}
 					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"width factor");
 					if (cJSON_IsNumber(c_param)){
 						this->PARAMETERS.io.crt.width_factor=c_param->valuedouble;
+					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"black level");
+					if (cJSON_IsNumber(c_param)){
+						this->PARAMETERS.io.crt.black_level=c_param->valuedouble;
+					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"curvature");
+					if (cJSON_IsNumber(c_param)){
+						this->PARAMETERS.io.crt.curvature=c_param->valuedouble;
+					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"decay");
+					if (cJSON_IsNumber(c_param)){
+						this->PARAMETERS.io.crt.decay=c_param->valuedouble;
+					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"scanline");
+					if (cJSON_IsBool(c_param)){
+						this->PARAMETERS.io.crt.scanline=cJSON_IsTrue(c_param);
+					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"rgb");
+					if (cJSON_IsBool(c_param)){
+						this->PARAMETERS.io.crt.rgb=cJSON_IsTrue(c_param);
 					}
 					
 					//Other
@@ -289,8 +305,12 @@ class M12Window{
 				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"CRT");
 				if (JSONSubconfig2!=NULL){
-					cJSON_AddBoolToObject(JSONSubconfig2,"rgb",this->PARAMETERS.io.crt.rgb);
 					cJSON_AddNumberToObject(JSONSubconfig2,"width factor",this->PARAMETERS.io.crt.width_factor);
+					cJSON_AddNumberToObject(JSONSubconfig2,"black level",this->PARAMETERS.io.crt.black_level);
+					cJSON_AddNumberToObject(JSONSubconfig2,"curvature",this->PARAMETERS.io.crt.curvature);
+					cJSON_AddNumberToObject(JSONSubconfig2,"decay",this->PARAMETERS.io.crt.decay);
+					cJSON_AddBoolToObject(JSONSubconfig2,"scanline",this->PARAMETERS.io.crt.scanline);
+					cJSON_AddBoolToObject(JSONSubconfig2,"rgb",this->PARAMETERS.io.crt.rgb);
 				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Other");
 				if (JSONSubconfig2!=NULL){
@@ -591,6 +611,7 @@ class M12Window{
 			if (ImGui::BeginTabBar("MenuTabBar", ImGuiTabBarFlags_None)){
 				
 				if (ImGui::BeginTabItem("Emulation")){
+					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
 					ImGui::SeparatorText("Contrôle de l'émulateur");
 					if(this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){
@@ -631,9 +652,12 @@ class M12Window{
 					
 					if (disable_load_memory) ImGui::EndDisabled();
 					
+					ImGui::EndChild();
 					ImGui::EndTabItem();
 				}
 				if (ImGui::BeginTabItem("Entrées/Sorties")){
+					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
+					
 					/*static ma_context audio_context=initAudio();
 					static ma_device_info* pPlaybackDeviceInfos;
 					static ma_uint32 playbackDeviceCount;
@@ -815,13 +839,31 @@ class M12Window{
 					ImGui::Indent();
 					ImGui::SliderFloat("##crt_width", &(this->PARAMETERS.io.crt.width_factor), 0.5, 1.5, "x%.3f");
 					ImGui::SameLine();
-					if(ImGui::Button("Réinitialiser")) this->PARAMETERS.io.crt.width_factor=this->default_parameters.io.crt.width_factor;
+					if(ImGui::Button("Réinitialiser##crt_width")) this->PARAMETERS.io.crt.width_factor=this->default_parameters.io.crt.width_factor;
 					ImGui::Unindent();
+					ImGui::Text("Niveau de luminosité du noir:");
+					ImGui::Indent();
+					ImGui::SliderFloat("##crt_black_level", &(this->PARAMETERS.io.crt.black_level), 0., 20., "%.1f%%");
+					ImGui::SameLine();
+					if(ImGui::Button("Réinitialiser##crt_black_level")) this->PARAMETERS.io.crt.black_level=this->default_parameters.io.crt.black_level;
+					ImGui::Unindent();
+					ImGui::Text("Courbure de l'écran:");
+					ImGui::Indent();
+					ImGui::SliderFloat("##crt_curvature", &(this->PARAMETERS.io.crt.curvature), 0., 0.5, "%.3f");
+					ImGui::SameLine();
+					if(ImGui::Button("Réinitialiser##crt_curvature")) this->PARAMETERS.io.crt.curvature=this->default_parameters.io.crt.curvature;
+					ImGui::Unindent();
+					ImGui::Text("Durée de rétention de l'image:");
+					ImGui::Indent();
+					ImGui::SliderFloat("##crt_decay", &(this->PARAMETERS.io.crt.decay), 0., 1., "%.3fs");
+					ImGui::SameLine();
+					if(ImGui::Button("Réinitialiser##crt_decay")) this->PARAMETERS.io.crt.decay=this->default_parameters.io.crt.decay;
+					ImGui::Unindent();
+					ImGui::Checkbox("Lignes de balayage",&(this->PARAMETERS.io.crt.scanline));
 					ImGui::Checkbox("Sortie vidéo RGB",&(this->PARAMETERS.io.crt.rgb));
 					ImGui::SameLine();
 					ImGui::TextDisabled("(hack)");
-					/*static bool crt_filter=false;
-					ImGui::Checkbox("Filtre vidéo CRT",&crt_filter);*/
+					ImGui::Text("Niveau du noir:");
 					
 					ImGui::SeparatorText("Divers");
 					if (this->PARAMETERS.io.other.os_rtc!=NULL){
@@ -833,9 +875,12 @@ class M12Window{
 						
 					}
 					
+					ImGui::EndChild();
 					ImGui::EndTabItem();
 				}
 				if (ImGui::BeginTabItem("UI")){
+					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
+					
 					ImGui::Text("DPI");
 					ImGui::SameLine();
 					if(ImGui::Button("-##dpi")) ImGui::GetStyle().FontScaleDpi=(ImGui::GetStyle().FontScaleDpi<=1)?1:(ImGui::GetStyle().FontScaleDpi-1);
@@ -843,9 +888,12 @@ class M12Window{
 					if(ImGui::Button("+##dpi")) ImGui::GetStyle().FontScaleDpi+=1;
 					ImGui::Checkbox("Rafraichissement d'image dynamique",&(this->PARAMETERS.imgui.idle));
 					
+					ImGui::EndChild();
 					ImGui::EndTabItem();
 				}
 				if (ImGui::BeginTabItem("Débuggage")){
+					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
+					
 					//static bool sbs=false;
 					bool sbs=this->PARAMETERS.p_gState->stepByStep.load(std::memory_order_relaxed);
 					ImGui::SeparatorText("Exécution");
@@ -881,9 +929,12 @@ class M12Window{
 					ImGui::SeparatorText("Statistiques");
 					ImGui::Text("Rafraichissement d'image: %.1f FPS",ImGui::GetIO().Framerate);
 					
+					ImGui::EndChild();
 					ImGui::EndTabItem();
 				}
 				if (ImGui::BeginTabItem("À propos")){
+					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
+					
 					ImGui::Text(this->PARAMETERS.info.title);
 					ImGui::SeparatorText("Développeurs");
 					ImGui::Text(this->PARAMETERS.info.programmers);
@@ -902,6 +953,7 @@ class M12Window{
 						}
 					}
 					
+					ImGui::EndChild();
 					ImGui::EndTabItem();
 				}
 			

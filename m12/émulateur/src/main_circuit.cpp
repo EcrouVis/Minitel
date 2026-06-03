@@ -74,7 +74,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	//construct circuit
 	auto Dbus=[&cpld,&eram,&video,&uc,&iol](unsigned char d){//in ic
-		//printf("Dbus %#02X\n",d);
 		cpld.DChangeIn(d);
 		eram.DChangeIn(d);
 		video.DChangeIn(d);
@@ -88,15 +87,12 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	video.subscribeD(std::cref(Dbus));
 	
 	auto ALbus=[&eram,&erom](unsigned char d){
-		//printf("ALbus %#02X\n",d);
 		eram.ALChangeIn(d);
 		erom.ALChangeIn(d);
 	};
-	//ALLatch.subscribeOUT(ALbus);
 	cpld.subscribeAL(ALbus);
 	
 	auto AHbus=[&eram,&erom,&uc](unsigned char d){
-		//printf("AHbus %#02X\n",d);
 		eram.AHChangeIn(d);
 		erom.AHChangeIn(d);
 		uc.PXChangeIn(uc.P2,d);
@@ -104,17 +100,11 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	uc.subscribeP2(AHbus);
 	
 	auto nPSENwire=[&erom](bool b){
-		/*printf("nPSENwire ");
-		printf(b?"true":"false");
-		printf("\n");*/
 		erom.nGChangeIn(b);
 	};
 	uc.subscribenPSEN(nPSENwire);
 	
 	auto ALEwire=[&cpld,&A16Latch,&A17Latch,&video,&iol](bool b){
-		/*printf("ALEwire ");
-		printf(b?"true":"false");
-		printf("\n");*/
 		cpld.ALEChangeIn(b);
 		A16Latch.CChangeIn(b);
 		A17Latch.CChangeIn(b);
@@ -124,17 +114,11 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	uc.subscribeALE(std::cref(ALEwire));
 	
 	auto A16wire=[&erom](bool b){
-		/*printf("A16wire ");
-		printf(b?"true":"false");
-		printf("\n");*/
 		erom.A16ChangeIn(b);
 	};
 	A16Latch.subscribeOUT(A16wire);
 	
 	auto A17wire=[&erom](bool b){
-		/*printf("A17wire ");
-		printf(b?"true":"false");
-		printf("\n");*/
 		erom.A17ChangeIn(b);
 	};
 	A17Latch.subscribeOUT(A17wire);
@@ -142,7 +126,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	unsigned char P1_uc=0xFF;
 	unsigned char P1_ext=0xFF;
 	auto P1bus=[&A16Latch,&A17Latch,&cpld,&iol,&modem,&video,&uc,&P1_uc,&P1_ext](unsigned char d){
-		//printf("P1bus %#02X\n",d);
 		P1_uc=d;
 		d&=P1_ext;
 		A16Latch.INChangeIn((bool)(d&1));
@@ -162,7 +145,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		P1_ext&=~(1<<6);
 		P1_ext|=(b?(1<<6):0);
 		uc.PXChangeIn(uc.P1,P1_ext&P1_uc);
-		//uc.PXYChangeIn(1,6,b);
 	};
 	modem.subscribenDCD(nDCDwire);
 	
@@ -187,7 +169,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		video.DSChangeIn(nRD);
 		cpld.nOEChangeIn(nRD);
 		iol.nOEChangeIn(nRD);
-		l6720.PTSChangeIn((bool)(d&(1<<4)));
+		l6720.PTSChangeIn((bool)(d&0x10));
 		uc.PXChangeIn(uc.P3,d);
 		wt.ENChangeIn((bool)(d&0x04));
 		smn.RxChangeIn((bool)(d&0x02));
@@ -221,7 +203,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		P3_ext&=~(1<<3);
 		P3_ext|=(b?(1<<3):0);
 		uc.PXChangeIn(uc.P3,P3_ext&P3_uc);
-		//uc.PXYChangeIn(3,3,b);
 	};
 	modem.subscribeRxD(mRxDwire);
 	
@@ -235,6 +216,13 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		kb.serialChangeIn(kb_s1&&kb_s2);
 		wt.KICKChangeIn((bool)(d&8));
 		//0x10->close modem circuit
+		static bool close_modem=false;
+		if (close_modem!=((bool)(d&0x10))){
+			close_modem=(bool)(d&0x10);
+			modem.RA2ChangeIn(close_modem?0x0400:0);//test
+			if (close_modem) printf("modem connected\n");
+			else printf("modem disconnected\n");
+		}
 		//0x20->crt power
 		static bool crt_power=false;
 		if (crt_power!=((bool)(d&0x20))){
@@ -286,15 +274,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	cpld.subscribeSerial(KeyboardSerialIn);
 	
-	auto TS7514CMD=[p_mb_video](unsigned char cmd){
-		if (cmd>=0x38&&cmd<=0x3B){
-			thread_message ms_p_notif;
-			ms_p_notif.cmd=NOTIFICATION_BUZZER;
-			p_mb_video->send(&ms_p_notif);
-		}
-	};
-	modem.subscribeCMD(TS7514CMD);
-	
 	auto CRTVideoIn=[&crtb](unsigned char* v){
 		crtb.VideoChangeIn(v);
 	};
@@ -305,9 +284,22 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	crtb.subscribeSignal(VideoSignal);
 	
+	auto ATOwire=[](unsigned short d){
+		printf("ATO %04X\n",d);
+	};
+	modem.subscribeATO(ATOwire);
+	
 	//debug
+	
+	modem.debug_cmd=[p_mb_video](unsigned char cmd){
+		if (cmd>=0x38&&cmd<=0x3B){
+			thread_message ms_p_notif;
+			ms_p_notif.cmd=NOTIFICATION_BUZZER;
+			p_mb_video->send(&ms_p_notif);
+		}
+	};
 
-	auto dbgIOIN=[p_gState,&modem,p_mb_video](unsigned char a,unsigned char d){
+	auto dbgIOIN=[p_gState,p_mb_video](unsigned char a,unsigned char d){
 		switch (a){
 			case 0x20:
 			case 0x21:
@@ -469,30 +461,18 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};*/
 	
 	bool pause_emu=false;
-	uc.debug_signal_alu_before_exec=[p_gState,&pause_emu,&rtd](){
+	uc.debug_signal_alu_before_exec=[p_gState,&pause_emu,&rtd,&uc](){
 		pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
 		/*if (p_gState->minitelOn.load(std::memory_order_relaxed)){
 			rtd.update();
 		}*/
+		if (p_gState->stepByStep.load(std::memory_order_relaxed)){
+			printf("I=%02X C=%u ",uc.instruction[0],uc.i_cycle[uc.instruction[0]]);
+			print_m12_alu_instruction(&uc);
+		}
 	};
-	/*din5.debug_connection_change=[p_mb_video](int s){
-		if (s<=0){
-			thread_message ms_p_notif;
-			ms_p_notif.cmd=NOTIFICATION_CYAN;
-			char* buffer=(char*)calloc(30,sizeof(char));
-			snprintf(buffer,29,"Liaison série déconnectée");
-			ms_p_notif.p=(void*)buffer;
-			p_mb_video->send(&ms_p_notif);
-		}
-		else{
-			thread_message ms_p_notif;
-			ms_p_notif.cmd=NOTIFICATION_CYAN;
-			char* buffer=(char*)calloc(37,sizeof(char));
-			snprintf(buffer,36,"Liaison série connectée @%iBaud",s);
-			ms_p_notif.p=(void*)buffer;
-			p_mb_video->send(&ms_p_notif);
-		}
-	};*/
+	
+	//clock
 	
 	auto stopC=[p_gState](){
 		return p_gState->shutdown.load(std::memory_order_relaxed);
@@ -508,6 +488,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		return p;*/
 	};
 	CLKs.setPauseCondition(pauseC);
+	
+	//mailbox
+	
 	auto checkMB=[p_mb_circuit,&eram,&erom,&uc,&modem,&wt,&cpld,&pause_emu,&kb,p_gState](){
 		pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
 		thread_message ms;
@@ -515,48 +498,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		static unsigned char eram_cpy[ERAM_SIZE];
 		while (p_mb_circuit->receive(&ms)){
 			switch(ms.cmd){
-				/*case LOAD_ERAM:
-				{
-					static unsigned char eram_cpy[ERAM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
-					if (ms.p==NULL){
-						std::fill_n(eram_cpy,ERAM_SIZE,0);
-						eram.set((unsigned char*)eram_cpy);
-						printf("erase eram\n");
-					}
-					else{
-						std::ifstream eram_file;
-						eram_file.open((const char*)ms.p,std::ios::in|std::ios::binary);
-						eram_file.read((char*)eram_cpy,ERAM_SIZE);
-						eram_file.close();
-						eram.set((unsigned char*)eram_cpy);
-						printf("load eram ");
-						printf((const char*)ms.p);
-						printf("\n");
-						free(ms.p);
-					}
-					break;
-				}
-				case LOAD_EROM:
-				{
-					static unsigned char erom_cpy[EROM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
-					if(ms.p==NULL){
-						std::fill_n(erom_cpy,EROM_SIZE,0);
-						erom.set((unsigned char*)erom_cpy);
-						printf("erase erom\n");
-					}
-					else{
-						std::ifstream erom_file;
-						erom_file.open((const char*)ms.p,std::ios::in|std::ios::binary);
-						erom_file.read((char*)erom_cpy,EROM_SIZE);
-						erom_file.close();
-						erom.set((unsigned char*)erom_cpy);
-						printf("load erom ");
-						printf((const char*)ms.p);
-						printf("\n");
-						free(ms.p);
-					}
-					break;
-				}*/
 				case EMU_ON:
 					//load rom/ram files
 					readM(p_gState->p_thread_mutex,p_gState->erom,erom_cpy,EROM_SIZE);
@@ -585,7 +526,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 				{
 					keyboard_message* kbm=(keyboard_message*)ms.p;
 					kb.KeyboardChangeIn(kbm);
-					//fprintf(stdout,"keyboard state update\n");
 					delete kbm;
 					break;
 				}
@@ -595,6 +535,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			}
 		}
 	};
+	
+	//clock wirring
+	
 	CLKs.subscribeMailbox(checkMB);
 	auto CLKTick14745600=[&uc,&video,&modem](){
 		uc.CLKTickIn();
@@ -634,7 +577,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	
 	
-	
+	//send pointers to GUI thread
 	
 	thread_message ms;
 	
@@ -687,6 +630,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	ms.cmd=EMULATOR_READY;
 	p_mb_video->send(&ms);
 	
+	//start the emulation
 	
 	CLKs.start();
 	

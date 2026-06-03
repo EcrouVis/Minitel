@@ -104,7 +104,11 @@ struct P_Speaker{
 };
 struct P_CRT{
 	bool rgb=false;
-	float width_factor=2/3.;
+	float width_factor=2./3.;
+	float black_level=12.5;
+	float curvature=0.225;
+	float decay=1./3.;
+	bool scanline=true;
 	const float width=480;
 	const float height=250;
 };

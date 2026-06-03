@@ -1,8 +1,6 @@
 #ifndef PHONELINE_H
 #define PHONELINE_H
 
-const unsigned short line_update_frequency=4800;
-
 const unsigned short line_Closed=0x0001;//0Hz
 const unsigned short line_Ringing=0x0002;//50Hz
 const unsigned short line_v23_75bps_1=0x0004;//390Hz
@@ -18,6 +16,8 @@ const unsigned short line_DTMF_1336Hz=0x0800;
 const unsigned short line_DTMF_1477Hz=0x1000;
 const unsigned short line_DTMF_1633Hz=0x2000;
 const unsigned short line_v23_1200bps_0=0x4000;//2100Hz
+
+const unsigned short line_analog=0x8000;//use float data stream and use demodulation instead of flags
 
 const unsigned short line_DTMF_1=line_DTMF_697Hz|line_DTMF_1209Hz;
 const unsigned short line_DTMF_2=line_DTMF_697Hz|line_DTMF_1336Hz;

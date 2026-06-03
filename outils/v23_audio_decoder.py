@@ -7,18 +7,23 @@ from os import path
 
 
 
-def conv_filter(dt,fech,freq,window=lambda x:1):
-    n=np.ceil(dt*fech)
-    w=window(np.arange(n)/(n-1))
+def conv_filter(bw,fc,fech,freq,window=lambda x:1):
+    n=np.ceil(4*fech/bw)
+    d=np.arange(n)/(n-1)
+    w=window(d)*np.sinc(2*np.pi*fc/fech*(np.arange(n)-n/2))
     w=w*np.exp(1j*2*np.pi*freq*np.arange(n)/fech)
-    return w/n
+    return w/np.sum(np.abs(w))
 flat_top=lambda x:0.21557895-0.41663158*np.cos(2*np.pi*x)+0.277263158*np.cos(4*np.pi*x)-0.083578947*np.cos(6*np.pi*x)+0.006947368*np.cos(8*np.pi*x)
 hann=lambda x:np.sin(np.pi*x)**2
 hamming=lambda x:0.53836-0.46164*np.cos(2*np.pi*x)#semble être la meilleure solution
 
 def compute_transitions(data,bps,fmod,fech):
-    cv1=conv_filter(1/bps,fech,fmod[0],window=hamming)
-    cv2=conv_filter(1/bps,fech,fmod[1],window=hamming)
+    #cv1=conv_filter((fmod[1]-fmod[0])/2,(fmod[1]-fmod[0])/4,fech,fmod[0],window=hamming)
+    cv1=conv_filter((fmod[1]-fmod[0])*2,0,fech,fmod[0],window=hamming)
+    #cv1=conv_filter((fmod[1]-fmod[0]),0,fech,fmod[0],window=flat_top)
+    #cv2=conv_filter((fmod[1]-fmod[0])/2,(fmod[1]-fmod[0])/4,fech,fmod[1],window=hamming)
+    cv2=conv_filter((fmod[1]-fmod[0])*2,0,fech,fmod[1],window=hamming)
+    #cv2=conv_filter((fmod[1]-fmod[0]),0,fech,fmod[1],window=flat_top)
     s1=np.abs(signal.convolve(data,cv1,mode="same"))
     s2=np.abs(signal.convolve(data,cv2,mode="same"))
 

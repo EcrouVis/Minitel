@@ -31,4 +31,4 @@ static const unsigned char request_keyboard_status[]={0x1B,0x3A,0x72,0x59};
 static const unsigned char extended_keyboard[]={0x1B,0x3B,0x69,0x59,0x41};
 static const unsigned char simple_keyboard[]={0x1B,0x3B,0x6A,0x59,0x41};
 
-#endif /* CONNEXION_WEBSOCKET_VDT_H */
+#endif
