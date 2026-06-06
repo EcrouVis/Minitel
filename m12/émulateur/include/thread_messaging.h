@@ -35,6 +35,8 @@ const int EMULATOR_READY=21;
 const int CRT_BUFFER=24;
 const int SPEAKER_BUFFER=25;
 const int BUZZER_BUFFER=26;
+const int PRINTER=27;
+const int PRINT_FINISHED=28;
 
 /*const int DUMP_ERAM=1;
 const int LOAD_ERAM=1<<1;

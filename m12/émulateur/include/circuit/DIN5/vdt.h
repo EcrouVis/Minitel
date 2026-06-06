@@ -16,6 +16,10 @@ static const unsigned char foreground_color_white[]={0x1B,0x47};
 static const unsigned char background_color_white[]={0x1B,0x57};
 static const unsigned char swap_color[]={0x1B,0x5D};
 static const unsigned char revert_swap_color[]={0x1B,0x5C};
+static const unsigned char underline[]={0x1B,0x5A};
+static const unsigned char no_underline[]={0x1B,0x59};
+static const unsigned char mask[]={0x1B,0x58};
+static const unsigned char unmask[]={0x1B,0x5F};
 
 static const unsigned char disable_local_echo[]={0x1B,0x3B,0x60,0x5A,0x51};//automatically reenabled when PT 0->1
 static const unsigned char enable_local_echo[]={0x1B,0x3B,0x61,0x5A,0x51};

@@ -215,6 +215,7 @@ void TS9347wVRAM::loadRowBuffer(){
 							a|=(as&0x70)>>4;
 							
 							b|=0x20;
+							b&=0xEF;//U=0
 							
 							this->ROW_BUFFER[column*3].fetch_or(0x80,std::memory_order_relaxed);//no double height
 						}
@@ -222,8 +223,6 @@ void TS9347wVRAM::loadRowBuffer(){
 							a|=(as&0x40)<<1;//N
 							b|=(as&0x20)>>2;//L
 							b|=(as&0x10)>>3;//H
-							
-							b&=0xEF;//U=0
 							
 							if ((bool)(as&0x10))this->ROW_BUFFER[column*3].fetch_xor(0x80,std::memory_order_relaxed);//C7=0 when double height first half / C7=1 when double height second half
 							else this->ROW_BUFFER[column*3].fetch_or(0x80,std::memory_order_relaxed);//C7=1 when no 
@@ -431,7 +430,7 @@ void TS9347wVRAM::loadUDS(){//load UDS + video output
 		bool comp=false;
 		//slice
 		unsigned char mask=0x0F;
-		if ((bool)(this->TGS.load(std::memory_order_relaxed)&0x40)) mask=0x0B;//40 char short Q0-Q7 and GOE not reachable
+		if ((bool)(this->TGS.load(std::memory_order_relaxed)&0x40)) mask=0x0A;//40 char short Q0-Q7 and GOE not reachable
 		switch ((b>>4)&mask){
 			case 0:
 			case 1://G0

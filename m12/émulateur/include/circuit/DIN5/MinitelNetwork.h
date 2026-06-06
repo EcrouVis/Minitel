@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <queue>
 #include <mutex>
+#include <atomic>
 #include <ixwebsocket/IXWebSocket.h>
 #include "circuit/DIN5/vdt.h"
 #include "encoding.h"
@@ -36,6 +37,7 @@ class SimplifiedMinitelNetwork{// ! slave process not implemented
 				for (SimplifiedMinitelNetworkApp* app: this->Apps){
 					app->PTCallback(b);
 				}
+				if (b) this->baudrate_div=BPS_1200;
 			}
 		}
 		void PWRChangeIn(bool b){
@@ -56,7 +58,7 @@ class SimplifiedMinitelNetwork{// ! slave process not implemented
 			for (SimplifiedMinitelNetworkApp* app: this->Apps){
 				app->CLKCallback();
 			}
-			if (this->PT){
+			if (this->AppSelected==NULL){
 				for (SimplifiedMinitelNetworkApp* app: this->Apps){
 					if(!app->getPTout()){
 						this->AppSelected=app;
@@ -67,9 +69,14 @@ class SimplifiedMinitelNetwork{// ! slave process not implemented
 			}
 			
 			if (this->AppSelected!=NULL&&this->AppSelected->getPTout()){
-				this->sendPT(true);
 				this->AppSelected=NULL;
-				this->baudrate_div=BPS_1200;
+				for (SimplifiedMinitelNetworkApp* app: this->Apps){
+					if(!app->getPTout()){
+						this->AppSelected=app;
+						break;
+					}
+				}
+				if (this->AppSelected==NULL) this->sendPT(true);
 			}
 		}
 		void subscribeTx(std::function<void(bool)> f){
@@ -207,7 +214,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		}
 		virtual void RxCallback(unsigned char d) override final{
 			constexpr unsigned short P=0b0110100110010110;
-			
 			
 			switch (this->currentState){
 				case this->RESTING:
@@ -971,7 +977,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 						s=this->isPRO2CMD();
 						if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
 							this->CMDBuffer.clear();
-							printf("resync!\n");
 							goto resync2;
 						}
 						if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x75){
@@ -1102,10 +1107,8 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 		}
 		
-		char* getURL(){//TODO: sanitize url needed? / URL encoding needed?
+		char* getURL(){//TODO: sanitize url needed
 			char* d=videotex_to_utf8(&(this->parameters.wsBuffer));
-			//char* d2=url_encode(d);
-			//free(d);
 			return d;
 		}
 		
@@ -1124,13 +1127,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		void selectLineStatic(bool s){
 			if (!s) this->print(foreground_color_magenta,sizeof(foreground_color_magenta)/sizeof(foreground_color_magenta[0]));
 			else this->print(foreground_color_white,sizeof(foreground_color_white)/sizeof(foreground_color_white[0]));
-		}
-		void maskLineDynamic(bool s){
-			this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
-			if (s) this->print(background_color_black,sizeof(background_color_black)/sizeof(background_color_black[0]));
-			else this->print(background_color_magenta,sizeof(background_color_magenta)/sizeof(background_color_magenta[0]));
-			this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
-			this->qTx.push(0x20);
 		}
 		void printString(const char* d){
 			for (size_t i=0;i<strlen(d);i++) this->qTx.push(d[i]);
@@ -1153,12 +1149,9 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					this->print(disable_cursor,sizeof(disable_cursor)/sizeof(disable_cursor[0]));
 					this->print(default_upper_case,sizeof(default_upper_case)/sizeof(default_upper_case[0]));
 					this->refreshURLLine(false);
-					//this->moveCursor(3,7);
-					//this->selectLineDynamic(false);
-					//this->moveCursor(4,11);
-					//this->selectLineDynamic(false);
+					
 					this->moveCursor(23,15);
-					this->maskLineDynamic(false);
+					this->printString("\x1B\x45"" ligne pr\x19\x42""ec\x19\x42""edente""\x1B\x5A"" ""\x1B\x5D"" Retour ");
 					break;
 				case 1:
 					this->moveCursor(5,2);
@@ -1192,7 +1185,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					this->moveCursor(12,3);
 					this->selectLineDynamic(false);
 					this->moveCursor(22,17);
-					this->maskLineDynamic(false);
+					this->printString("\x1B\x45"" ligne suivante""\x1B\x5A"" ""\x1B\x5D"" Suite  ");
 					break;
 			}
 			
@@ -1200,15 +1193,12 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			
 			switch (line){
 				case 0:
-					//this->moveCursor(3,7);
-					//this->selectLineDynamic(true);
-					//this->moveCursor(4,11);
-					//this->selectLineDynamic(true);
 					this->moveCursor(23,15);
-					this->maskLineDynamic(true);
+					this->printString("\x18");
+					
 					this->refreshURLLine(true);
 					//this->moveCursor(3,12);
-				this->print(default_lower_case,sizeof(default_lower_case)/sizeof(default_lower_case[0]));
+					this->print(default_lower_case,sizeof(default_lower_case)/sizeof(default_lower_case[0]));
 					this->print(enable_cursor,sizeof(enable_cursor)/sizeof(enable_cursor[0]));
 					break;
 				case 1:
@@ -1243,7 +1233,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					this->moveCursor(12,3);
 					this->selectLineDynamic(true);
 					this->moveCursor(22,17);
-					this->maskLineDynamic(true);
+					this->printString("\x18");
 					break;
 			}
 			this->parameters.currentLine=line;
@@ -1364,22 +1354,16 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			this->printLineSeparator(21);
 			
 			this->moveCursor(22,17);
-			this->maskLineDynamic(false);
-			//this->print(foreground_color_magenta,sizeof(foreground_color_magenta)/sizeof(foreground_color_magenta[0]));
-			this->printString("ligne suivante ");
-			this->print(revert_swap_color,sizeof(revert_swap_color)/sizeof(revert_swap_color[0]));
-			this->printString(" Suite  ");
+			this->printString("\x1B\x45"" ligne suivante""\x1B\x5A"" ""\x1B\x5D"" Suite  ");
 			
 			this->moveCursor(23,15);
-			this->maskLineDynamic(false);
-			//this->print(foreground_color_magenta,sizeof(foreground_color_magenta)/sizeof(foreground_color_magenta[0]));
-			this->printString("ligne pr\x19\x42""ec\x19\x42""edente ");
-			this->print(revert_swap_color,sizeof(revert_swap_color)/sizeof(revert_swap_color[0]));
-			this->printString(" Retour ");
+			this->printString("\x1B\x45"" ligne pr\x19\x42""ec\x19\x42""edente""\x1B\x5A"" ""\x1B\x5D"" Retour ");
 			
 			this->moveCursor(24,23);
 			this->print(foreground_color_magenta,sizeof(foreground_color_magenta)/sizeof(foreground_color_magenta[0]));
-			this->printString("connexion ");
+			this->printString("connexion");
+			this->print(underline,sizeof(underline)/sizeof(underline[0]));
+			this->printString(" ");
 			this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
 			this->printString(" Envoi  ");
 		}
@@ -1602,6 +1586,279 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					break;
 			}
 		}
+};
+
+class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
+	public:
+		std::atomic_bool fr=true;//ASCII or ISO/CEI 646 FR
+		std::atomic_bool activated=true;
+		enum Const{
+			NOT_CMD=0x00,
+			CMD_ONGOING=0x01,
+			CMD_FINISHED=0x02
+		};
+		
+		virtual void PTCallback(bool b) override final{
+			this->PTin=b;
+		}
+		virtual void RxCallback(unsigned char d) override final{
+			constexpr unsigned short P=0b0110100110010110;
+			d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
+			this->CMDBuffer.push_back(d);
+			unsigned char cmd=this->NOT_CMD;
+			
+			resync:
+			if (!this->PTout){
+				if (!(bool)(cmd&this->CMD_FINISHED)){
+					cmd|=this->isPrintCMD();
+					if ((bool)(cmd&this->CMD_FINISHED)){
+						this->printPage();
+					}
+				}
+				if (!(bool)(cmd&this->CMD_FINISHED)){
+					cmd|=this->isILCPrinterCMD()|this->isCDGCMD();
+					if ((bool)(cmd&this->CMD_FINISHED)){
+						this->PTout=true;
+					}
+				}
+			}
+			else{
+				if (!(bool)(cmd&this->CMD_FINISHED)){
+					cmd|=this->isDCPrinterCMD();
+					if (this->activated.load(std::memory_order_relaxed)&&(bool)(cmd&this->CMD_FINISHED)){
+						this->PTout=false;
+						this->TxBuffer.push(0x1B);
+						this->TxBuffer.push(0x21);
+						this->TxBuffer.push(0x39);
+					}
+				}
+			}
+			cmd|=this->isACKCMD()|isISO2022CMD();
+			
+			if (cmd==this->NOT_CMD){
+				if (this->CMDBuffer.size()>1){
+					this->CMDBuffer.clear();
+					this->CMDBuffer.push_back(d);
+					goto resync;
+				}
+				this->CMDBuffer.clear();
+			}
+			if (cmd==this->CMD_FINISHED) this->CMDBuffer.clear();
+			
+			if (!(bool)cmd){
+				if (d==0x0C) this->PrintBuffer.clear();
+				else if (this->fr.load(std::memory_order_relaxed)) this->printISO646FRChar(d);
+				else this->printASCIIChar(d);
+			}
+		}
+		
+		virtual bool TxEmpty() override final{
+			return this->TxBuffer.empty();
+		}
+		
+		virtual unsigned char TxPop() override final{
+			unsigned char d=this->TxBuffer.front();
+			constexpr unsigned short P=0b0110100110010110;
+			d^=((P>>(d&0x0F))^(P>>(d>>4)))<<7;
+			this->TxBuffer.pop();
+			return d;
+		}
+		
+		void subscribePrintFinished(std::function<void(const char*)> f){
+			this->printFinished=f;
+		}
+		
+	private:
+		bool PTin=false;
+		std::vector<unsigned char> CMDBuffer;
+		std::vector<unsigned char> PrintBuffer;
+		std::queue<unsigned char> TxBuffer;
+		std::function<void(const char*)> printFinished=[](const char* p){};
+		
+		unsigned char isACKPrintCMD(){
+			switch (this->CMDBuffer.size()){
+				case 0:break;
+				case 1:
+					if (this->CMDBuffer[0]!=0x13) return this->NOT_CMD;
+					break;
+				case 2:
+					if (this->CMDBuffer[0]!=0x13||this->CMDBuffer[1]!=0x5C) return this->NOT_CMD;
+					else return this->CMD_FINISHED;
+				default:
+					return this->NOT_CMD;
+			}
+			return this->CMD_ONGOING;
+		}
+		
+		unsigned char isDCPrinterCMD(){
+			switch (this->CMDBuffer.size()){
+				case 0:break;
+				case 1:
+					if (this->CMDBuffer[0]!=0x1B) return this->NOT_CMD;
+					break;
+				case 2:
+					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x21) return this->NOT_CMD;
+					break;
+				default:
+					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x21&&this->CMDBuffer[2]==0x38) return this->CMD_FINISHED;
+					return this->NOT_CMD;
+					break;
+			}
+			return this->CMD_ONGOING;
+		}
+		
+		unsigned char isILCPrinterCMD(){
+			switch (this->CMDBuffer.size()){
+				case 0:break;
+				case 1:
+					if (this->CMDBuffer[0]!=0x1B) return this->NOT_CMD;
+					break;
+				case 2:
+					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x21) return this->NOT_CMD;
+					break;
+				default:
+					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x21&&this->CMDBuffer[2]==0x3A) return this->CMD_FINISHED;
+					return this->NOT_CMD;
+					break;
+			}
+			return this->CMD_ONGOING;
+		}
+		
+		unsigned char isCDGCMD(){
+			switch (this->CMDBuffer.size()){
+				case 0:break;
+				case 1:
+					if (this->CMDBuffer[0]!=0x1B) return this->NOT_CMD;
+					break;
+				case 2:
+					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x22) return this->NOT_CMD;
+					break;
+				case 3:
+					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x22&&this->CMDBuffer[2]==0x3C) return this->CMD_FINISHED;
+					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x22||(this->CMDBuffer[2]&0xF0)!=0x20) return this->NOT_CMD;
+					break;
+				default:
+					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x22||(this->CMDBuffer[2]&0xF0)!=0x20||this->CMDBuffer[3]!=0x3C) return this->NOT_CMD;
+					else return this->CMD_FINISHED;
+					break;
+			}
+			return this->CMD_ONGOING;
+		}
+		
+		unsigned char isPrintCMD(){
+			switch (this->CMDBuffer.size()){
+				case 0:break;
+				case 1:
+					if (this->CMDBuffer[0]!=0x1B) return this->NOT_CMD;
+					break;
+				case 2:
+					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x35) return this->NOT_CMD;
+					break;
+				default:
+					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x35&&this->CMDBuffer[2]==0x40) return this->CMD_FINISHED;
+					return this->NOT_CMD;
+					break;
+			}
+			return this->CMD_ONGOING;
+		}
+		
+		unsigned char isACKCMD(){
+			if (this->CMDBuffer.size()<2){
+				if (this->CMDBuffer[0]==0x13){
+					return this->CMD_ONGOING;
+				}
+			}
+			else if (this->CMDBuffer.size()==2){
+				if (this->CMDBuffer[0]==0x13){
+					return this->CMD_FINISHED;
+				}
+			}
+			return this->NOT_CMD;
+		}
+		
+		unsigned char isISO2022CMD(){
+			switch(this->CMDBuffer.size()){
+				case 1:
+					if (this->CMDBuffer[0]==0x1B) return this->CMD_ONGOING;
+					break;
+				case 2:
+					if (this->CMDBuffer[0]==0x1B&&(this->CMDBuffer[1]&0xF0)==0x20) return this->CMD_ONGOING;
+					break;
+				default:
+					if (this->CMDBuffer[0]==0x1B){
+						for (size_t i=1;i<this->CMDBuffer.size()-1;i++){
+							if ((this->CMDBuffer[i]&0xF0)!=0x20) return this->NOT_CMD;
+						}
+						switch (this->CMDBuffer[this->CMDBuffer.size()-1]){
+							case 0x20 ... 0x2F:return this->CMD_ONGOING;
+							case 0x30 ... 0x7E:return this->CMD_FINISHED;
+						}
+					}
+					break;
+			}
+			return this->NOT_CMD;
+		}
+		
+		void printPage(){
+			this->PrintBuffer.push_back(0);
+			this->printFinished((char*)this->PrintBuffer.data());
+		}
+		
+		void printASCIIChar(unsigned char c){
+			this->PrintBuffer.push_back(c);//7bit ASCII is compatible with UTF-8
+		}
+		
+		void printISO646FRChar(unsigned char c){
+			switch (c){
+				case 0x23:
+					this->PrintBuffer.push_back(0xC2);
+					this->PrintBuffer.push_back(0xA3);
+					break;
+				case 0x27:
+					this->PrintBuffer.push_back(0xE2);
+					this->PrintBuffer.push_back(0x80);
+					this->PrintBuffer.push_back(0x99);
+					break;
+				case 0x40:
+					this->PrintBuffer.push_back(0xC3);
+					this->PrintBuffer.push_back(0xA0);
+					break;
+				case 0x5B:
+					this->PrintBuffer.push_back(0xC2);
+					this->PrintBuffer.push_back(0xB0);
+					break;
+				case 0x5C:
+					this->PrintBuffer.push_back(0xC3);
+					this->PrintBuffer.push_back(0xA7);
+					break;
+				case 0x5D:
+					this->PrintBuffer.push_back(0xC2);
+					this->PrintBuffer.push_back(0xA7);
+					break;
+				case 0x60:
+					this->PrintBuffer.push_back(0xC2);
+					this->PrintBuffer.push_back(0xB5);
+					break;
+				case 0x7B:
+					this->PrintBuffer.push_back(0xC3);
+					this->PrintBuffer.push_back(0xA9);
+					break;
+				case 0x7C:
+					this->PrintBuffer.push_back(0xC3);
+					this->PrintBuffer.push_back(0xB9);
+					break;
+				case 0x7D:
+					this->PrintBuffer.push_back(0xC3);
+					this->PrintBuffer.push_back(0xA8);
+					break;
+				case 0x7E:
+					this->PrintBuffer.push_back(0xC2);
+					this->PrintBuffer.push_back(0xA8);
+					break;
+				default:this->PrintBuffer.push_back(c);break;
+			}
+		}
+		
 };
 
 #endif

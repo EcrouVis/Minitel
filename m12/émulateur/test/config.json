@@ -11,6 +11,10 @@
 	},
 	"IO":	{
 		"DIN":	{
+			"Printer":	{
+				"enabled":	true,
+				"fr":	true
+			}
 		},
 		"Phone line":	{
 		},

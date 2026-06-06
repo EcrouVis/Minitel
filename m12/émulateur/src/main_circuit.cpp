@@ -9,7 +9,6 @@
 #include "circuit/WatchdogTimer.h"
 #include "circuit/Keyboard.h"
 #include "circuit/clocks.h"
-#include "circuit/L6720.h"
 #include "circuit/CRTBuffer.h"
 #include "circuit/SpeakerBuffer.h"
 #include "circuit/BuzzerBuffer.h"
@@ -60,10 +59,11 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	WatchdogTimer wt;
 	Keyboard kb;
 	Clocks CLKs;
-	L6720 l6720;
 	SimplifiedMinitelNetwork smn;
 	SimplifiedMinitelNetworkAppLocalWebsocket smnalw;
 	smn.registerApp(&smnalw);
+	SimplifiedMinitelNetworkAppPrinter smnnap;
+	smn.registerApp(&smnnap);
 	CRTBuffer crtb;
 	SpeakerBuffer spkb;
 	BuzzerBuffer bzb;
@@ -155,8 +155,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	unsigned char P3_uc=0xFF;
 	unsigned char P3_ext=0xFF;
+	bool PT_in=true;
 	//P3 unfinished
-	auto P3bus=[&cpld,&eram,&video,&uc,&iol,&l6720,&wt,&smn,&P3_uc,&P3_ext](unsigned char d){
+	auto P3bus=[&cpld,&eram,&video,&uc,&iol,&wt,&smn,&P3_uc,&P3_ext,&PT_in](unsigned char d){
 		P3_uc=d;
 		d&=P3_ext;
 		bool nRD=(bool)(d&0x80);
@@ -169,7 +170,13 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		video.DSChangeIn(nRD);
 		cpld.nOEChangeIn(nRD);
 		iol.nOEChangeIn(nRD);
-		l6720.PTSChangeIn((bool)(d&0x10));
+		
+		//l6720.PTSChangeIn((bool)(d&0x10));
+		P3_ext&=~0x20;
+		P3_ext|=(PT_in&&((bool)(P3_uc&0x10)))?0:0x20;
+		d&=P3_ext;
+		smn.PTChangeIn(!(bool)(d&0x20));
+		
 		uc.PXChangeIn(uc.P3,d);
 		wt.ENChangeIn((bool)(d&0x04));
 		smn.RxChangeIn((bool)(d&0x02));
@@ -177,19 +184,20 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	uc.subscribeP3(std::cref(P3bus));
 	
-	auto PTEwire=[&uc,&P3_uc,&P3_ext](bool b){
-		if (b) P3_ext|=1<<5;
-		else P3_ext&=~(1<<5);
+	auto PTEwire=[&uc,&smn,&P3_uc,&P3_ext,&PT_in](bool b){
+		PT_in=b;
+		
+		P3_ext&=~0x20;
+		P3_ext|=(PT_in&&((bool)(P3_uc&0x10)))?0:0x20;
+		smn.PTChangeIn(b&&(bool)(P3_uc&0x10));
 		uc.PXChangeIn(uc.P3,P3_uc&P3_ext);
 	};
-	l6720.subscribePTE(PTEwire);
+	smn.subscribePT(PTEwire);
 	
-	auto PT=[&l6720,&smn](bool b){
-		l6720.PTChangeIn(b);
-		smn.PTChangeIn(b);
-	};
-	smn.subscribePT(PT);
-	l6720.subscribePT(PT);
+	//bypass L6720 + dissociate PT in and out
+	//PTE is on P3_ext
+	//PTE=!(PTS&&PT_in)
+	//PT_out=PTS&&PT_in
 	
 	//bypass L6720 -> buffer
 	auto DIN5Txwire=[&uc,&P3_uc,&P3_ext](bool b){
@@ -288,6 +296,15 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		printf("ATO %04X\n",d);
 	};
 	modem.subscribeATO(ATOwire);
+	
+	smnnap.subscribePrintFinished([p_mb_video](const char* p){
+		char* pc=(char*)malloc(strlen(p)*sizeof(char)+1);
+		strcpy(pc,p);
+		thread_message ms_p_notif;
+		ms_p_notif.cmd=PRINT_FINISHED;
+		ms_p_notif.p=pc;
+		p_mb_video->send(&ms_p_notif);
+	});
 	
 	//debug
 	
@@ -624,6 +641,11 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	ms.p=(void*)&bzb;
 	ms.cmd=BUZZER_BUFFER;
 	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&smnnap;
+	ms.cmd=PRINTER;
+	p_mb_video->send(&ms);
+	
 	
 	
 	ms.p=NULL;

@@ -106,7 +106,7 @@ class Keyboard{
 			
 		}
 		void KeyboardChangeIn(keyboard_message* kb_m){
-			if (kb_m->focus){
+			if (kb_m->focus||kb_m->action==GLFW_RELEASE){//TODO: improve / ||kb_m->action==GLFW_RELEASE temporary fix to avoid being stuck when ctrl+click on imgui slider
 				if (kb_m->action==GLFW_PRESS||kb_m->action==GLFW_RELEASE){
 					bool keyPressed=(kb_m->action==GLFW_PRESS);
 					switch (kb_m->scancode){

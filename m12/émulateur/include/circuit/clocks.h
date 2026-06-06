@@ -89,12 +89,31 @@ class Clocks{
 					bool chk_mb=false;
 					{
 						std::unique_lock<std::mutex> lock(this->audioMutex);
+						/*
+						because of wait_for there is a case where this->requestedSamples can underflow
+						ex: 
+							pc was in deep sleep and woke up
+							-> program resume running before audio callback is called
+							-> audio callback not called
+							-> this->audioCV.wait_for timeout multiple times
+							-> this->requestedSamples underflow
+							-> mailbox not checked
+							-> emulation feel not responsive
+						fix:
+							if ((bool)this->requestedSamples) this->requestedSamples--;
+							instead of
+							this->requestedSamples--;
+							or
+							if (!(bool)this->requestedSamples) this->requestedSamples++;
+							after this->audioCV.wait_for
+						*/
 						this->requestedSamples--;
-						if (this->requestedSamples<=0){
+						if (this->requestedSamples==0){
 							this->audioCV.wait_for(lock, std::chrono::milliseconds(500), [this](){
 								return this->requestedSamples>0;
 							});//requested samples or switch to clock sync
 							chk_mb=true;//avoid blocking audio thread while checking mailbox
+							if (!(bool)this->requestedSamples) this->requestedSamples++;
 						}
 					}
 					if (chk_mb){

@@ -85,10 +85,17 @@ struct P_Peri_Local_Websocket{
 	std::atomic<int>* p_baudrate_out=NULL;
 	const char* baudrate_name[4] = { "300", "1200", "4800", "9600"};
 };
+struct P_Peri_Printer{
+	std::atomic_bool* p_activated=NULL;
+	std::atomic_bool* p_fr=NULL;
+	bool show=false;
+	char* last_print=NULL;
+};
 struct P_Peri{
 	//bool plugged=false;
 	bool notify_state=true;
 	//P_Peri_Local_Websocket peri_lws;
+	P_Peri_Printer printer;
 };
 struct P_Modem{
 	bool plugged=false;
@@ -111,6 +118,7 @@ struct P_CRT{
 	bool scanline=true;
 	const float width=480;
 	const float height=250;
+	bool display_effects=false;
 };
 struct P_Other{
 	std::atomic_bool* os_rtc=NULL;

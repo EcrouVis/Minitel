@@ -34,6 +34,7 @@
 #include "io/CRTRenderer.h"
 #include "io/KeyboardIndicator.h"
 #include "io/KeyboardInput.h"
+#include "io/PrinterOutput.h"
 #include "circuit/Keyboard.h"
 #include "circuit/clocks.h"
 
@@ -50,6 +51,7 @@
 #include "FileSelector.h"
 
 //#include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
+#include "circuit/DIN5/MinitelNetwork.h"
 
 struct audioContext{
 	Clocks* pCLKs=NULL;
@@ -288,7 +290,11 @@ class M12Window{
 			if (JSONSubconfig1!=NULL){
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"DIN");
 				if (JSONSubconfig2!=NULL){
-					
+					JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig2,"Printer");
+					if (JSONSubconfig2!=NULL){
+						if (this->PARAMETERS.io.peri.printer.p_activated!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"enabled",this->PARAMETERS.io.peri.printer.p_activated->load(std::memory_order_relaxed));
+						if (this->PARAMETERS.io.peri.printer.p_fr!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"fr",this->PARAMETERS.io.peri.printer.p_fr->load(std::memory_order_relaxed));
+					}
 				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Phone line");
 				if (JSONSubconfig2!=NULL){
@@ -346,6 +352,11 @@ class M12Window{
 			delete this->p_CRTout;
 			//indicators
 			delete this->keyboardIndicator;
+			//printer output
+			if (this->PARAMETERS.io.peri.printer.last_print!=NULL){
+				free(this->PARAMETERS.io.peri.printer.last_print);
+				this->PARAMETERS.io.peri.printer.last_print=NULL;
+			}
 			//glfw
 			glfwDestroyWindow(this->window);
 			glfwTerminate();
@@ -436,6 +447,25 @@ class M12Window{
 							this->AC.bzb=(BuzzerBuffer*)ms.p;
 							this->AC.bzb->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
 							break;
+						case PRINTER:
+							this->PARAMETERS.io.peri.printer.p_activated=&(((SimplifiedMinitelNetworkAppPrinter*)ms.p)->activated);
+							this->PARAMETERS.io.peri.printer.p_fr=&(((SimplifiedMinitelNetworkAppPrinter*)ms.p)->fr);
+							{
+								if (this->JSONConfig!=NULL){
+									cJSON* json_o=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"DIN");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"Printer");
+									cJSON* json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"enabled");
+									if (cJSON_IsBool(json_o2)){
+										this->PARAMETERS.io.peri.printer.p_activated->store(cJSON_IsTrue(json_o2),std::memory_order_relaxed);
+									}
+									json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"fr");
+									if (cJSON_IsBool(json_o2)){
+										this->PARAMETERS.io.peri.printer.p_fr->store(cJSON_IsTrue(json_o2),std::memory_order_relaxed);
+									}
+								}
+							}
+							break;
 						case UC:
 						{
 							m80C32* uc=(m80C32*)ms.p;
@@ -506,6 +536,13 @@ class M12Window{
 						case NOTIFICATION_YELLOW:this->Notification.notify((const char*)ms.p,true,ImVec4(1,1,0,1));break;
 						case NOTIFICATION_CYAN:this->Notification.notify((const char*)ms.p,true,ImVec4(0,1,1,1));break;
 						case NOTIFICATION_PURPLE:this->Notification.notify((const char*)ms.p,true,ImVec4(1,0,1,1));break;
+						case PRINT_FINISHED:
+							if (this->PARAMETERS.io.peri.printer.last_print!=NULL){
+								free(this->PARAMETERS.io.peri.printer.last_print);
+							}
+							this->PARAMETERS.io.peri.printer.last_print=(char*)ms.p;
+							this->PARAMETERS.io.peri.printer.show=true;
+							break;
 						case CRT_POWER_ON:break;
 						case CRT_POWER_OFF:break;
 						case MODEM:
@@ -559,6 +596,7 @@ class M12Window{
 				ImGui_ImplGlfw_NewFrame();
 				ImGui::NewFrame();
 				//ImGui::ShowDemoWindow(NULL);
+				if (this->PARAMETERS.io.peri.printer.show) PrinterOutput(this->window,&(this->Notification),&(this->PARAMETERS.io.peri.printer));
 				if (this->PARAMETERS.imgui.show_menu) this->mainMenuWindow();
 				if (this->PARAMETERS.debug.eram.mem!=NULL&&this->PARAMETERS.debug.eram.show) memoryWindow("RAM externe",&(this->PARAMETERS.debug.eram));
 				if (this->PARAMETERS.debug.erom.mem!=NULL&&this->PARAMETERS.debug.erom.show) memoryWindow("ROM externe",&(this->PARAMETERS.debug.erom));
@@ -606,7 +644,9 @@ class M12Window{
 			menuSize[0]*=0.8;
 			menuSize[1]*=0.8;
 			ImGui::SetNextWindowSize(menuSize, ImGuiCond_Always);
-			ImGui::Begin("Menu",&(this->PARAMETERS.imgui.show_menu),ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove);
+			ImGuiWindowFlags iwf=ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove;
+			if (this->PARAMETERS.io.crt.display_effects) iwf|=ImGuiWindowFlags_NoBackground;
+			ImGui::Begin("Menu",&(this->PARAMETERS.imgui.show_menu),iwf);
 			ImGui::Text("Appuyez sur F1 pour afficher/cacher le menu");
 			if (ImGui::BeginTabBar("MenuTabBar", ImGuiTabBarFlags_None)){
 				
@@ -701,6 +741,38 @@ class M12Window{
 						ImGui::TextDisabled("Certaines associations de paramètres peuvent ne pas être interprétés par le minitel.");
 						ImGui::TextDisabled("Les Websockets sécurisés (wss) sont aussi pris en charge.");
 						ImGui::Unindent();
+					}
+					
+					if (this->PARAMETERS.io.peri.printer.p_activated!=NULL){
+						if (ImGui::CollapsingHeader("Imprimante Vidéotex")){
+							ImGui::Indent();
+
+							bool printer_activated=this->PARAMETERS.io.peri.printer.p_activated->load(std::memory_order_relaxed);
+							if (ImGui::Checkbox("Imprimante activée",&printer_activated)) this->PARAMETERS.io.peri.printer.p_activated->store(printer_activated,std::memory_order_relaxed);
+							
+							if (printer_activated){
+								ImGui::Text("Impression: Fnct+I F (français) / Fnct+I A (anglais)");
+							
+								int lang = this->PARAMETERS.io.peri.printer.p_fr->load(std::memory_order_relaxed)?1:0;
+								ImGui::Text("Langue de l'imprimante:");
+								ImGui::Indent();
+								ImGui::RadioButton("français", &lang, 1);
+								ImGui::SameLine();
+								ImGui::RadioButton("anglais", &lang, 0);
+								ImGui::Unindent();
+								this->PARAMETERS.io.peri.printer.p_fr->store((bool)lang,std::memory_order_relaxed);
+								
+								if (this->PARAMETERS.io.peri.printer.last_print!=NULL) ImGui::Checkbox("Afficher la dernière impression",&(this->PARAMETERS.io.peri.printer.show));
+								
+								ImGui::TextDisabled("L'imprimante ne prends pas en charge les charactères semi-graphiques et le DRCS.");
+								ImGui::TextDisabled("Pour que l'impression marche:");
+								ImGui::Indent();
+								ImGui::TextDisabled("Le minitel doit être en standard Vidéotex ou mixte.");
+								ImGui::TextDisabled("La prise périinformatique doit être libre et non hinibée.");
+								ImGui::Unindent();
+							}
+							ImGui::Unindent();
+						}
 					}
 					//ImGui::Checkbox("Afficher les notifications##peri",&(this->PARAMETERS.io.peri.notify_state));
 					
@@ -838,24 +910,28 @@ class M12Window{
 					ImGui::Text("Facteur d'étirement de l'image:");
 					ImGui::Indent();
 					ImGui::SliderFloat("##crt_width", &(this->PARAMETERS.io.crt.width_factor), 0.5, 1.5, "x%.3f");
+					this->PARAMETERS.io.crt.display_effects=ImGui::IsItemActive();
 					ImGui::SameLine();
 					if(ImGui::Button("Réinitialiser##crt_width")) this->PARAMETERS.io.crt.width_factor=this->default_parameters.io.crt.width_factor;
 					ImGui::Unindent();
 					ImGui::Text("Niveau de luminosité du noir:");
 					ImGui::Indent();
 					ImGui::SliderFloat("##crt_black_level", &(this->PARAMETERS.io.crt.black_level), 0., 20., "%.1f%%");
+					this->PARAMETERS.io.crt.display_effects=this->PARAMETERS.io.crt.display_effects||ImGui::IsItemActive();
 					ImGui::SameLine();
 					if(ImGui::Button("Réinitialiser##crt_black_level")) this->PARAMETERS.io.crt.black_level=this->default_parameters.io.crt.black_level;
 					ImGui::Unindent();
 					ImGui::Text("Courbure de l'écran:");
 					ImGui::Indent();
 					ImGui::SliderFloat("##crt_curvature", &(this->PARAMETERS.io.crt.curvature), 0., 0.5, "%.3f");
+					this->PARAMETERS.io.crt.display_effects=this->PARAMETERS.io.crt.display_effects||ImGui::IsItemActive();
 					ImGui::SameLine();
 					if(ImGui::Button("Réinitialiser##crt_curvature")) this->PARAMETERS.io.crt.curvature=this->default_parameters.io.crt.curvature;
 					ImGui::Unindent();
 					ImGui::Text("Durée de rétention de l'image:");
 					ImGui::Indent();
 					ImGui::SliderFloat("##crt_decay", &(this->PARAMETERS.io.crt.decay), 0., 1., "%.3fs");
+					this->PARAMETERS.io.crt.display_effects=this->PARAMETERS.io.crt.display_effects||ImGui::IsItemActive();
 					ImGui::SameLine();
 					if(ImGui::Button("Réinitialiser##crt_decay")) this->PARAMETERS.io.crt.decay=this->default_parameters.io.crt.decay;
 					ImGui::Unindent();
@@ -863,12 +939,11 @@ class M12Window{
 					ImGui::Checkbox("Sortie vidéo RGB",&(this->PARAMETERS.io.crt.rgb));
 					ImGui::SameLine();
 					ImGui::TextDisabled("(hack)");
-					ImGui::Text("Niveau du noir:");
 					
 					ImGui::SeparatorText("Divers");
 					if (this->PARAMETERS.io.other.os_rtc!=NULL){
-						static bool os_rtc=this->PARAMETERS.io.other.os_rtc->load(std::memory_order_relaxed);
-						ImGui::Checkbox("Utiliser la date de l'ordinateur pour le RTC",&(os_rtc));
+						bool os_rtc=this->PARAMETERS.io.other.os_rtc->load(std::memory_order_relaxed);
+						ImGui::Checkbox("Utiliser la date de l'ordinateur pour l'horloge temps réel",&(os_rtc));
 						this->PARAMETERS.io.other.os_rtc->store(os_rtc,std::memory_order_relaxed);
 						ImGui::SameLine();
 						ImGui::TextDisabled("(hack)");
