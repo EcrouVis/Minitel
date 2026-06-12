@@ -43,14 +43,14 @@ Transfert d'état des touches (clavier -> microcontrôleur):
 		M 0x3B
 		: 0x3D
     flèche droite 0x3F
-      non utilisé 0x41
-      non utilisé 0x43
+      non visible 0x41
+      non visible 0x43
    appel annuaire 0x45
-      non utilisé 0x47
-      non utilisé 0x49
-      non utilisé 0x4B
-      non utilisé 0x4D
-      non utilisé 0x4F
+   non implémenté 0x47
+   non implémenté 0x49
+   non implémenté 0x4B
+   non implémenté 0x4D
+   non implémenté 0x4F
 		ç 0x51
 		à 0x53
 	   on/off 0x55
@@ -111,6 +111,10 @@ Transfert d'état des touches (clavier -> microcontrôleur):
 		0x01 - 0x0F / 0xC1 - 0xFF: écho / non prévu et non filtré par le programme (par exemple 0xC1==0x11+Shift / 0xC1+Shift==0x11+Ctrl …)
 		0x41, 0x43, 0x47, 0x49, 0x4B, 0x4D, 0x4F: pas d'effet?
 
+		2 à 3 touches peuvent être détectées simultanément (les touches suivantes seront ignorées jusqu'à ce qu'une touche soit relâchée).
+
+		Les touches sont agencées en une matrice: les 4 bits de poids fort indiquent la colonne et les bits de poids faibles (sauf le plus faible) indiquent la ligne.
+
 Transfert de numérotation téléphone (microcontrôleur -> clavier):
 	o1: xxxx0000
 	o2: abcdefg1
@@ -168,9 +172,10 @@ Commandes de changement d'état du téléphone (microcontrôleur -> clavier):
 	0x23 éteindre la led on/off
 	0x29 allumer la led haut parleur
 	0x2B allumer la led on/off
-	0x33 faire clignoter la led on/off
-
-	0x39 ??? (faire clignoter la led haut parleur? / supposition / pas encore testé)
+	0x31 faire clignoter la led haut parleur rapidement (supposition)
+	0x33 faire clignoter la led on/off rapidement
+	0x39 faire clignoter la led haut parleur lentement
+	0x3B faire clignoter la led on/off lentement (supposition)
 
 	0x41, 0x43, 0x45, 0x47 volume du haut parleur (0x41 volume minimal / 0x47 volume maximal)
 	0x49, 0x4B, 0x4D, 0x4F volume de la sonnerie (0x49 volume minimal / 0x4F volume maximal)

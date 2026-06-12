@@ -6,3 +6,5 @@ démarrage:
 mem puis décrocher téléphone puis mem et mem:
 	ne sort pas du menu et supprime la flèche la première fois qu'est appuyé mem après avoir décroché -> effets visuels testés et vérifiés sur le véritable hardware
 	écriture de l'E/S 0xE7 (adresse basse) une fois sorti du menu
+
+Lors de l'appui sur le bouton on/off après un démarrage, le minitel est configuré d'une telle façon que lorsqu'il est débranché, il se retrouve dans une partie du code qui ne lui permette pas de corrompre sa sauvegarde. Le problème est que ce n'est pas le seul bouton qui permette de réveiller le minitel (le bouton mem par exemple) et tant que le bouton on/off n'est pas touché, le minitel n'est pas configuré correctement.
