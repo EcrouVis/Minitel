@@ -6,13 +6,13 @@
 
 #include "miniaudio/miniaudio.h"
 
-class AudioBufferOut{
+class AudioBuffer{
 	public:
 		//emulation thread
-		AudioBufferOut(){
+		AudioBuffer(){
 			ma_pcm_rb_init(ma_format_f32, 1, 1024, NULL, NULL, &(this->rb));//TODO: buffer length
 		}
-		~AudioBufferOut(){
+		~AudioBuffer(){
 			ma_pcm_rb_uninit(&(this->rb));
 		}
 		void AudioIn(float s){
@@ -26,12 +26,17 @@ class AudioBufferOut{
 		}
 		//video/configuration thread
 		void setVolumeLog(float v){
-			this->volume.store((exp(v)-1)/(M_E-1),std::memory_order_relaxed);
+			this->volume.store((exp(v/100.)-1)/(M_E-1),std::memory_order_relaxed);
 		}
 		//audio thread
-		virtual void AudioOut(float* pOutput, ma_uint32 frameCount){
+		ma_uint32 AudioOut(float* pOutput, ma_uint32 frameCount){
 			ma_uint32 frames=ma_pcm_rb_available_read(&(this->rb));
-			if (frames>=frameCount) frames=frameCount;
+			ma_uint32 framesRemaining;
+			if (frames>=frameCount){
+				framesRemaining=frames-frameCount;
+				frames=frameCount;
+			}
+			else framesRemaining=0;
 			//else printf("fc %u\n",frameCount-frames);
 			ma_uint32 frameIndex=0;
 			void* pMappedBuffer;
@@ -42,6 +47,7 @@ class AudioBufferOut{
 				frameIndex+=framesToRead;
 				ma_pcm_rb_commit_read(&(this->rb), framesToRead);
 			}
+			return framesRemaining;
 		}
 	private:
 		ma_pcm_rb rb;

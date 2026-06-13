@@ -143,7 +143,6 @@ class TS7514{
 				//case 0x0C:
 				//	break;
 			}
-			s+=this->getTxOutSample();//test TODO: remove
 			return s;
 		}
 		

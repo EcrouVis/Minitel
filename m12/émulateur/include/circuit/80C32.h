@@ -415,6 +415,10 @@ class m80C32{
 
 //inline member functions / called only in one place inside the hot path
 
+__attribute__((always_inline)) inline unsigned char m80C32::getSFRByteIn(unsigned char address){
+	return this->SFR[address&0x7F].load(std::memory_order_relaxed);
+}
+
 __attribute__((always_inline)) inline void m80C32::CLKTickIn(){
 	this->fixedSerialClockTick();
 	

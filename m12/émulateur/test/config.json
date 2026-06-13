@@ -2,7 +2,8 @@
 	"UI":	{
 		"show menu":	true,
 		"idle":	true,
-		"DPI":	1
+		"DPI":	1,
+		"fullscreen":	false
 	},
 	"Emulation":	{
 		"auto start":	false,
@@ -20,10 +21,10 @@
 		},
 		"Buzzer":	{
 			"notification":	true,
-			"volume":	1
+			"volume":	100
 		},
 		"Speaker":	{
-			"volume":	1
+			"volume":	100
 		},
 		"CRT":	{
 			"width factor":	0.66666668653488159,

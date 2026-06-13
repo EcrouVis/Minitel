@@ -71,12 +71,15 @@ struct imguiTS7514REGView{
 struct P_ImGui{
 	bool show_menu=true;
 	bool idle=true;
+	int window_position[2]={0};
+	int window_size[2]={0};
+	
 };
 struct P_Emulation{
 	int state=-1;
 };
 struct P_Keyboard{
-	
+	bool num_lock=false;
 };
 struct P_Peri_Local_Websocket{
 	std::atomic_bool* p_plugged=NULL;
@@ -103,11 +106,11 @@ struct P_Modem{
 	bool notify_state=true;
 };
 struct P_Buzzer{
-	float volume=1.;
+	float volume=100.;
 	bool notify=true;
 };
 struct P_Speaker{
-	float volume=1.;
+	float volume=100.;
 };
 struct P_CRT{
 	bool rgb=false;
@@ -119,6 +122,7 @@ struct P_CRT{
 	const float width=480;
 	const float height=250;
 	bool display_effects=false;
+	bool error_loading_texture=false;
 };
 struct P_Other{
 	std::atomic_bool* os_rtc=NULL;

@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <ctime>
 #include <cstdlib>
+#include <climits>
 
 #include <vector>
 
@@ -43,8 +44,9 @@
 #include "miniaudio/miniaudio.h"
 
 //#include "io/TS7514Audio.h"
-#include "circuit/SpeakerBuffer.h"
-#include "circuit/BuzzerBuffer.h"
+#include "circuit/AudioBuffer.h"
+#include "circuit/SpeakerFilter.h"
+#include "circuit/BuzzerFilter.h"
 #include "circuit/TS7514.h"
 
 #include "FileAccess.h"
@@ -55,8 +57,12 @@
 
 struct audioContext{
 	Clocks* pCLKs=NULL;
-	SpeakerBuffer* spkb=NULL;
-	BuzzerBuffer* bzb=NULL;
+	AudioBuffer* ab=NULL;
+	SpeakerFilter* spkf=NULL;
+	BuzzerFilter* bzf=NULL;
+	float samplesRemaining[UCHAR_MAX];
+	unsigned char samplesRemainingIndex;
+	unsigned long maxSamplesRemaining=1024;
 };
 
 
@@ -85,6 +91,7 @@ class M12Window{
 				exit(EXIT_FAILURE);
 			}
 		 
+			glfwSetInputMode(window, GLFW_LOCK_KEY_MODS, GLFW_TRUE);
 			glfwSetWindowUserPointer(this->window,this);
 			glfwSetKeyCallback(this->window, this->key_callback);
 			//glfwSetCharCallback(this->window, this->char_callback);
@@ -160,6 +167,9 @@ class M12Window{
 					
 					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"DPI");
 					if (cJSON_IsNumber(c_param)&&(c_param->valuedouble>=1)) ImGui::GetStyle().FontScaleDpi=c_param->valuedouble;
+					
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"fullscreen");
+					if (cJSON_IsBool(c_param)&&cJSON_IsTrue(c_param)) this->setWindowFullscreen();
 					
 					//IO
 					subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
@@ -277,6 +287,7 @@ class M12Window{
 				cJSON_AddBoolToObject(JSONSubconfig1,"show menu",this->PARAMETERS.imgui.show_menu);
 				cJSON_AddBoolToObject(JSONSubconfig1,"idle",this->PARAMETERS.imgui.idle);
 				cJSON_AddNumberToObject(JSONSubconfig1,"DPI",ImGui::GetStyle().FontScaleDpi);
+				cJSON_AddBoolToObject(JSONSubconfig1,"fullscreen",glfwGetWindowMonitor(window)!=NULL);
 			}
 			JSONSubconfig1=cJSON_AddObjectToObject(JSONConfigOut,"Emulation");
 			if (JSONSubconfig1!=NULL){
@@ -332,13 +343,19 @@ class M12Window{
 			
 			//audio
 			ma_device_uninit(&(this->audioDevice));//uninit audio before stoping -> don't read deleted buffer
-			//shutdown emulator
-			//M12Window* p_M12Window=(M12Window*)glfwGetWindowUserPointer(window);
-			this->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
-			//this->AC.pCLKs->requestSamples(1);
 			
-			//wait emulator response / emulator will timeout then read this->PARAMETERS.p_gState->shutdown and exit
-			while (this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){}
+			//power down the minitel
+			thread_message ms;
+			ms.cmd=EMU_OFF;
+			this->p_mb_circuit->send(&ms);
+			this->PARAMETERS.p_gState->stepByStep.store(false,std::memory_order_relaxed);
+			//wait emulator response
+			while (this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){
+				this->AC.pCLKs->requestSamples(512,512);//don't wait that a timout occur in clocks.h ->speed up shutdown
+			}
+			
+			//shutdown emulator
+			this->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
 			
 			//RAM and ROM files
 			unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->eram));
@@ -398,54 +415,63 @@ class M12Window{
 							this->PARAMETERS.debug.vreg.PAT=&(((TS9347wVRAM*)ms.p)->PAT);
 							this->PARAMETERS.debug.vreg.MAT=&(((TS9347wVRAM*)ms.p)->MAT);
 							
-							const char* path="./ressources/TS9347_Texture_Character_Set_Datasheet.bmp";
+							static const char* path="./ressources/TS9347_Texture_Character_Set_Datasheet.bmp";
 							int width, height, nrChannels;
 							unsigned char *data = stbi_load(path, &width, &height, &nrChannels, 1);
-							int nW=width/8;
-							int nH=height/10;
-							int n=288;
-							unsigned char d[n*10]={0};
-							if ((nW*nH)<n) n=nW*nH;
-							if (nH>nW){
-								for (int i=0;i<n;i++){//char i
-									int j=(i%nH)*10*width+(i/nH)*8;//char 0,0 position
-									for (int s=0;s<10;s++){//slice
-										unsigned char sd=0;
-										for (int k=0;k<8;k++){//pixel in slice
-											sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
-										}
-										d[i*10+s]=sd;
-									}
-								}
+							if (data==NULL){
+								this->Notification.notify("La texture pour l'affichage vidéo n'a pas chargé correctement.",false,ImVec4(1,0,0,1));
+								this->PARAMETERS.io.crt.error_loading_texture=true;
 							}
 							else{
-								for (int i=0;i<n;i++){//char i
-									int j=(i%nW)*8+(i/nW)*10*width;//char 0,0 position
-									for (int s=0;s<10;s++){//slice
-										unsigned char sd=0;
-										for (int k=0;k<8;k++){//pixel in slice
-											sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+								int nW=width/8;
+								int nH=height/10;
+								int n=288;
+								unsigned char d[n*10]={0};
+								if ((nW*nH)<n) n=nW*nH;
+								if (nH>nW){
+									for (int i=0;i<n;i++){//char i
+										int j=(i%nH)*10*width+(i/nH)*8;//char 0,0 position
+										for (int s=0;s<10;s++){//slice
+											unsigned char sd=0;
+											for (int k=0;k<8;k++){//pixel in slice
+												sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+											}
+											d[i*10+s]=sd;
 										}
-										d[i*10+s]=sd;
 									}
 								}
-							}
-							
-							((TS9347wVRAM*)ms.p)->setROMCharset(d);
+								else{
+									for (int i=0;i<n;i++){//char i
+										int j=(i%nW)*8+(i/nW)*10*width;//char 0,0 position
+										for (int s=0;s<10;s++){//slice
+											unsigned char sd=0;
+											for (int k=0;k<8;k++){//pixel in slice
+												sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+											}
+											d[i*10+s]=sd;
+										}
+									}
+								}
 								
-							stbi_image_free(data);
+								((TS9347wVRAM*)ms.p)->setROMCharset(d);
+									
+								stbi_image_free(data);
+							}
 							break;
 						}
 						case CRT_BUFFER:
 							this->p_CRTout->setBuffer((CRTBuffer*)ms.p);
 							break;
-						case SPEAKER_BUFFER:
-							this->AC.spkb=(SpeakerBuffer*)ms.p;
-							this->AC.spkb->setVolumeLog(this->PARAMETERS.io.speaker.volume);
+						case AUDIO_BUFFER:
+							this->AC.ab=(AudioBuffer*)ms.p;
 							break;
-						case BUZZER_BUFFER:
-							this->AC.bzb=(BuzzerBuffer*)ms.p;
-							this->AC.bzb->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
+						case SPEAKER_FILTER:
+							this->AC.spkf=(SpeakerFilter*)ms.p;
+							this->AC.spkf->setVolumeLog(this->PARAMETERS.io.speaker.volume);
+							break;
+						case BUZZER_FILTER:
+							this->AC.bzf=(BuzzerFilter*)ms.p;
+							this->AC.bzf->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
 							break;
 						case PRINTER:
 							this->PARAMETERS.io.peri.printer.p_activated=&(((SimplifiedMinitelNetworkAppPrinter*)ms.p)->activated);
@@ -543,8 +569,6 @@ class M12Window{
 							this->PARAMETERS.io.peri.printer.last_print=(char*)ms.p;
 							this->PARAMETERS.io.peri.printer.show=true;
 							break;
-						case CRT_POWER_ON:break;
-						case CRT_POWER_OFF:break;
 						case MODEM:
 							this->PARAMETERS.debug.mreg.RPROG=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RPROG]);
 							this->PARAMETERS.debug.mreg.RDTMF=&(((TS7514*)ms.p)->REG[((TS7514*)ms.p)->RDTMF]);
@@ -653,6 +677,10 @@ class M12Window{
 				if (ImGui::BeginTabItem("Emulation")){
 					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
+					if(this->PARAMETERS.io.crt.error_loading_texture){
+						ImGui::TextColored(ImVec4(1, 0, 0, 1), "La texture pour l'affichage vidéo n'a pas chargé.");
+						ImGui::TextColored(ImVec4(1, 0, 0, 1), "Veuillez vérifier que ./ressources/TS9347_Texture_Character_Set_Datasheet.bmp existe ou n'est pas corrompu.");
+					}
 					ImGui::SeparatorText("Contrôle de l'émulateur");
 					if(this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){
 						ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0,0.8,0,1));
@@ -692,6 +720,13 @@ class M12Window{
 					
 					if (disable_load_memory) ImGui::EndDisabled();
 					
+					ImGui::SeparatorText("Contrôle de l'application");
+					ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.8,0,0,1));
+					ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(1,0,0,1));
+					ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(1,0,0,1));
+					if (ImGui::Button("Quitter")) glfwSetWindowShouldClose(this->window, GLFW_TRUE);
+					ImGui::PopStyleColor(3);
+					
 					ImGui::EndChild();
 					ImGui::EndTabItem();
 				}
@@ -705,10 +740,14 @@ class M12Window{
 					static ma_uint32 captureDeviceCount;*/
 					
 					ImGui::SeparatorText("Clavier");
-					ImGui::Text("L'émulateur est conçu pour un clavier AZERTY avec un pavé numérique (de préférence) et verr num désactivé.");
+					ImGui::Text("L'émulateur est conçu pour un clavier AZERTY avec un pavé numérique (de préférence) et Verr. Num. désactivé.");
+					if (this->PARAMETERS.io.keyboard.num_lock){
+						ImGui::Indent();
+						ImGui::TextColored(ImVec4(1, 0, 0, 1), "Verr. Num. semble être activé. Certains charactères seront inacessibles.");
+						ImGui::Unindent();
+					}
 					ImGui::Text("Les touches différentes du minitel sont les suivantes:");
-					
-					if (ImGui::BeginTable("keyTable",3,ImGuiTableFlags_Borders|ImGuiTableFlags_SizingStretchSame,ImVec2(0, 0))){
+					if (ImGui::BeginTable("keyTable",3,ImGuiTableFlags_Borders|ImGuiTableFlags_SizingFixedSame|ImGuiTableFlags_NoHostExtendX,ImVec2(0, 0))){
 						ImGui::TableSetupColumn("Clavier", ImGuiTableColumnFlags_None);
 						ImGui::TableSetupColumn("Pavé numérique", ImGuiTableColumnFlags_None);
 						ImGui::TableSetupColumn("Correspondance", ImGuiTableColumnFlags_None);
@@ -734,18 +773,16 @@ class M12Window{
 					
 					ImGui::SeparatorText("Prise péri-informatique");
 					
-					if (ImGui::CollapsingHeader("Connexion Websocket")){
-						ImGui::Indent();
+					if (ImGui::TreeNode("Connexion Websocket")){
 						ImGui::Text("Accès au service: Shift+Connexion/Fin W");
 						ImGui::Text("Arrêt du service: Shift+Connexion/Fin x2");
 						ImGui::TextDisabled("Certaines associations de paramètres peuvent ne pas être interprétés par le minitel.");
 						ImGui::TextDisabled("Les Websockets sécurisés (wss) sont aussi pris en charge.");
-						ImGui::Unindent();
+						ImGui::TreePop();
 					}
 					
 					if (this->PARAMETERS.io.peri.printer.p_activated!=NULL){
-						if (ImGui::CollapsingHeader("Imprimante Vidéotex")){
-							ImGui::Indent();
+						if (ImGui::TreeNode("Imprimante Vidéotex")){
 
 							bool printer_activated=this->PARAMETERS.io.peri.printer.p_activated->load(std::memory_order_relaxed);
 							if (ImGui::Checkbox("Imprimante activée",&printer_activated)) this->PARAMETERS.io.peri.printer.p_activated->store(printer_activated,std::memory_order_relaxed);
@@ -762,8 +799,6 @@ class M12Window{
 								ImGui::Unindent();
 								this->PARAMETERS.io.peri.printer.p_fr->store((bool)lang,std::memory_order_relaxed);
 								
-								if (this->PARAMETERS.io.peri.printer.last_print!=NULL) ImGui::Checkbox("Afficher la dernière impression",&(this->PARAMETERS.io.peri.printer.show));
-								
 								ImGui::TextDisabled("L'imprimante ne prends pas en charge les charactères semi-graphiques et le DRCS.");
 								ImGui::TextDisabled("Pour que l'impression marche:");
 								ImGui::Indent();
@@ -771,138 +806,30 @@ class M12Window{
 								ImGui::TextDisabled("La prise périinformatique doit être libre et non hinibée.");
 								ImGui::Unindent();
 							}
-							ImGui::Unindent();
+								
+							if (this->PARAMETERS.io.peri.printer.last_print!=NULL) ImGui::Checkbox("Afficher la dernière impression",&(this->PARAMETERS.io.peri.printer.show));
+							
+							ImGui::TreePop();
 						}
 					}
 					//ImGui::Checkbox("Afficher les notifications##peri",&(this->PARAMETERS.io.peri.notify_state));
 					
 					ImGui::SeparatorText("Modem");
-					/*static int modem_io=0;
-					ImGui::RadioButton("Débranché##modem", &modem_io, 0);
-					ImGui::SameLine();
-					ImGui::RadioButton("Socket UNIX##modem", &modem_io, 1);
-					ImGui::SameLine();
-					ImGui::RadioButton("Prise audio##modem", &modem_io, 2);
-					if (modem_io==1){
-						ImGui::Indent();
-						ImGui::Text("Socket:");
-						ImGui::Unindent();
-					}
-					if (modem_io==2){
-						ImGui::Indent();
-						ImGui::Text("Entrée:");
-						static ma_uint32 modem_audio_i=0;
-						static bool modem_i_combo_state_previous=true;
-						bool modem_i_combo_state=ImGui::BeginCombo("##modem_i", (modem_audio_i>=captureDeviceCount)?"":pCaptureDeviceInfos[modem_audio_i].name, 0);
-						if (modem_i_combo_state!=modem_i_combo_state_previous){
-							ma_result result;
-							if (modem_audio_i<captureDeviceCount){
-								ma_device_id id=pCaptureDeviceInfos[modem_audio_i].id;
-								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
-								modem_audio_i=0;
-								for(ma_uint32 i=0;i<captureDeviceCount;i++){
-									if(ma_device_id_equal(&(pCaptureDeviceInfos[i].id),&id)){
-										modem_audio_i=i;
-										break;
-									}
-								}
-							}
-							else{
-								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
-							}
-							if (result != MA_SUCCESS) {
-								printf("Failed to retrieve device information.\n");
-							}
-							modem_i_combo_state_previous=modem_i_combo_state;
-						}
-						if(modem_i_combo_state){
-							for (unsigned int i=0;i<captureDeviceCount;i++) if(i!=modem_audio_i&&ImGui::Selectable(pCaptureDeviceInfos[i].name)) modem_audio_i=i;
-							ImGui::EndCombo();
-						}
-						ImGui::Text("Sortie:");
-						static ma_uint32 modem_audio_o=0;
-						static bool modem_o_combo_state_previous=true;
-						bool modem_o_combo_state=ImGui::BeginCombo("##modem_o", (modem_audio_o>=playbackDeviceCount)?"":pPlaybackDeviceInfos[modem_audio_o].name, 0);
-						if (modem_o_combo_state!=modem_o_combo_state_previous){
-							ma_result result;
-							if (modem_audio_o<playbackDeviceCount){
-								ma_device_id id=pPlaybackDeviceInfos[modem_audio_o].id;
-								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
-								modem_audio_o=0;
-								for(ma_uint32 i=0;i<playbackDeviceCount;i++){
-									if(ma_device_id_equal(&(pPlaybackDeviceInfos[i].id),&id)){
-										modem_audio_o=i;
-										break;
-									}
-								}
-							}
-							else{
-								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
-							}
-							if (result != MA_SUCCESS) {
-								printf("Failed to retrieve device information.\n");
-							}
-							modem_o_combo_state_previous=modem_o_combo_state;
-						}
-						if(modem_o_combo_state){
-							for (unsigned int i=0;i<playbackDeviceCount;i++) if(i!=modem_audio_o&&ImGui::Selectable(pPlaybackDeviceInfos[i].name)) modem_audio_o=i;
-							ImGui::EndCombo();
-						}
-						ImGui::Unindent();
-					}
-					ImGui::Checkbox("Afficher les notifications##modem",&(this->PARAMETERS.io.modem.notify_state));*/
 					
 					ImGui::SeparatorText("Buzzer");
-					/*static int buzzer_o=0;
-					ImGui::RadioButton("Débranché##buzzer", &buzzer_o, 0);
-					ImGui::SameLine();
-					ImGui::RadioButton("Prise audio##buzzer", &buzzer_o, 1);
-					if (buzzer_o==1){
-						ImGui::Indent();
-						ImGui::Text("Sortie:");
-						static ma_uint32 buzzer_audio_o=0;
-						static bool buzzer_o_combo_state_previous=true;
-						bool buzzer_o_combo_state=ImGui::BeginCombo("##buzzer", (buzzer_audio_o>=playbackDeviceCount)?"":pPlaybackDeviceInfos[buzzer_audio_o].name, 0);
-						if (buzzer_o_combo_state!=buzzer_o_combo_state_previous){
-							ma_result result;
-							if (buzzer_audio_o<playbackDeviceCount){
-								ma_device_id id=pPlaybackDeviceInfos[buzzer_audio_o].id;
-								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
-								buzzer_audio_o=0;
-								for(ma_uint32 i=0;i<playbackDeviceCount;i++){
-									if(ma_device_id_equal(&(pPlaybackDeviceInfos[i].id),&id)){
-										buzzer_audio_o=i;
-										break;
-									}
-								}
-							}
-							else{
-								result = ma_context_get_devices(&audio_context, &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount);
-							}
-							if (result != MA_SUCCESS) {
-								printf("Failed to retrieve device information.\n");
-							}
-							buzzer_o_combo_state_previous=buzzer_o_combo_state;
-						}
-						if(buzzer_o_combo_state){
-							for (unsigned int i=0;i<playbackDeviceCount;i++) if(i!=buzzer_audio_o&&ImGui::Selectable(pPlaybackDeviceInfos[i].name)) buzzer_audio_o=i;
-							ImGui::EndCombo();
-						}
-						ImGui::Unindent();
-					}*/
-					if (this->AC.bzb!=NULL){
+					if (this->AC.bzf!=NULL){
 						ImGui::Text("Volume:");
 						ImGui::Indent();
-						if (ImGui::SliderFloat("##buzzer_volume", &(this->PARAMETERS.io.buzzer.volume), 0., 1., "%.3f")) this->AC.bzb->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
+						if (ImGui::SliderFloat("##buzzer_volume", &(this->PARAMETERS.io.buzzer.volume), 0., 100., "%.1f%%")) this->AC.bzf->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
 						ImGui::Unindent();
 					}
 					ImGui::Checkbox("Afficher les notifications##buzzer",&(this->PARAMETERS.io.buzzer.notify));
 					
 					ImGui::SeparatorText("Haut parleur");
-					if (this->AC.spkb!=NULL){
+					if (this->AC.spkf!=NULL){
 						ImGui::Text("Volume:");
 						ImGui::Indent();
-						if (ImGui::SliderFloat("##speaker_volume", &(this->PARAMETERS.io.speaker.volume), 0., 1., "%.3f")) this->AC.spkb->setVolumeLog(this->PARAMETERS.io.speaker.volume);
+						if (ImGui::SliderFloat("##speaker_volume", &(this->PARAMETERS.io.speaker.volume), 0., 100., "%.1f%%")) this->AC.spkf->setVolumeLog(this->PARAMETERS.io.speaker.volume);
 						ImGui::Unindent();
 					}
 					
@@ -963,6 +890,12 @@ class M12Window{
 					if(ImGui::Button("+##dpi")) ImGui::GetStyle().FontScaleDpi+=1;
 					ImGui::Checkbox("Rafraichissement d'image dynamique",&(this->PARAMETERS.imgui.idle));
 					
+					bool fullscreen=glfwGetWindowMonitor(window)!=NULL;
+					if (ImGui::Checkbox("Plein écran",&fullscreen)){
+						if (fullscreen) this->setWindowFullscreen();
+						else this->setWindowWindowed();
+					}
+					
 					ImGui::EndChild();
 					ImGui::EndTabItem();
 				}
@@ -1003,6 +936,9 @@ class M12Window{
 					
 					ImGui::SeparatorText("Statistiques");
 					ImGui::Text("Rafraichissement d'image: %.1f FPS",ImGui::GetIO().Framerate);
+					ImGui::Text("Tampon audio (échantillons restants):");
+					ImGui::PlotLines("##audio_buffer", this->AC.samplesRemaining, sizeof(this->AC.samplesRemaining)/sizeof(this->AC.samplesRemaining[0]),0,NULL,0,(float)this->AC.maxSamplesRemaining, ImVec2(-1, 80.0f));
+					//ImGui::Text("Retard audio (max: %lu): %lu",this->AC.maxSamplesPending,this->AC.samplesPending);
 					
 					ImGui::EndChild();
 					ImGui::EndTabItem();
@@ -1035,6 +971,17 @@ class M12Window{
 				ImGui::EndTabBar();
 			}
 			ImGui::End();
+		}
+		
+		void setWindowFullscreen(){
+			glfwGetWindowPos(this->window,&(this->PARAMETERS.imgui.window_position[0]),&(this->PARAMETERS.imgui.window_position[1]));
+			glfwGetWindowSize(this->window,&(this->PARAMETERS.imgui.window_size[0]),&(this->PARAMETERS.imgui.window_size[1]));
+			GLFWmonitor* monitor=glfwGetPrimaryMonitor();
+			const GLFWvidmode* mode=glfwGetVideoMode(monitor);
+			glfwSetWindowMonitor(this->window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
+		}
+		void setWindowWindowed(){
+			glfwSetWindowMonitor(this->window, NULL, this->PARAMETERS.imgui.window_position[0], this->PARAMETERS.imgui.window_position[1], this->PARAMETERS.imgui.window_size[0], this->PARAMETERS.imgui.window_size[1], 0);
 		}
 		
 		void takeScreenshot(){
@@ -1075,20 +1022,21 @@ class M12Window{
 			if (key==GLFW_KEY_F10&&action==GLFW_PRESS) p_M12Window->takeScreenshot();
 			ImGuiIO& io=ImGui::GetIO();
 			KeyboardInput(p_M12Window->p_mb_circuit,!io.WantCaptureKeyboard,scancode,action,mods);
+			printf("C %08X %08X %08X\n",scancode,action,mods);
+			p_M12Window->PARAMETERS.io.keyboard.num_lock=(bool)(mods&GLFW_MOD_NUM_LOCK);
 		}
-		//static void char_callback(GLFWwindow* window, unsigned int codepoint){}
+		/*static void char_callback(GLFWwindow* window, unsigned int codepoint){
+			printf("UTF-32 %08X\n",codepoint);
+		}*/
 		static void audio_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){
 			audioContext* AC=(audioContext*)pDevice->pUserData;
 			
 			if (AC->pCLKs!=NULL){
-				AC->pCLKs->requestSamples(frameCount,1024);//TODO: 512->buffer length / windows limitation in shared mode (480 @48000Hz) /limit max->800 @48000 (screen update @~60fps)
+				AC->pCLKs->requestSamples(frameCount,AC->maxSamplesRemaining);//TODO: 512->buffer length / windows limitation in shared mode (480 @48000Hz) /limit max->800 @48000 (screen update @~60fps)
 			}
 			
-			if (AC->spkb!=NULL){
-				AC->spkb->AudioOut((float*)pOutput,frameCount);
-			}
-			if (AC->bzb!=NULL){
-				AC->bzb->AudioOut((float*)pOutput,frameCount);
+			if (AC->ab!=NULL){
+				AC->samplesRemaining[AC->samplesRemainingIndex++]=(float)AC->ab->AudioOut((float*)pOutput,frameCount);
 			}
 		}
 		static void window_close_callback(GLFWwindow* window){

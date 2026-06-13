@@ -46,80 +46,50 @@ class Clocks{
 		}
 		void requestSamples(unsigned long n,unsigned long nmax=ULONG_MAX){
 			{
-			std::unique_lock<std::mutex> lock(this->audioMutex);
-			this->requestedSamples+=n;
-			if (this->requestedSamples>nmax) this->requestedSamples=nmax;
-			lock.unlock();
-			this->audioCV.notify_one();
+				std::lock_guard<std::mutex> lock(this->audioMutex);
+				this->requestedSamples+=n;
+				if (this->requestedSamples>nmax) this->requestedSamples=nmax;
 			}
+			this->audioCV.notify_one();
 		}
 		
 		void start(){
-			//this->last_t=std::chrono::steady_clock::now();
-			
-			{
-				std::unique_lock<std::mutex> lock(this->audioMutex);
-				if (this->requestedSamples<=0){
-					this->audioCV.wait(lock, [this](){
-						return this->requestedSamples>0;
-					});
-				}
-			}
+			std::unique_lock lock(this->audioMutex,std::defer_lock);
 			while (true){
-				
-				/*//clock
-					this->div_sync++;
-					if (this->div_sync>=this->div_sync_max){
-						this->div_sync=0;
-						
-						std::chrono::time_point<std::chrono::steady_clock> new_t=std::chrono::steady_clock::now();
-						this->dt+=std::chrono::duration<double>(new_t-this->last_t)-this->dt_sleep_max;
-						//while (std::chrono::steady_clock::now()-new_t<this->dt_sleep_max-this->dt);
-						if (this->dt<this->dt_sleep_max) std::this_thread::sleep_for(this->dt_sleep_max-this->dt);
-						this->last_t=new_t;
-						this->checkMailbox();
-						stop=this->stop();
-						//pause=this->pause();
-					}*/
 				//sync to audio
 				this->audio_div_sync+=this->audio_sample_rate.load(std::memory_order_relaxed);
 				if (this->audio_div_sync>=this->master_clock_rate){
-					this->audio_div_sync=this->audio_div_sync%this->master_clock_rate;
+					this->audio_div_sync-=this->master_clock_rate;
 					this->audioSample(this->audio_sample_rate.load(std::memory_order_relaxed));
-					bool chk_mb=false;
-					{
-						std::unique_lock<std::mutex> lock(this->audioMutex);
-						/*
-						because of wait_for there is a case where this->requestedSamples can underflow
-						ex: 
-							pc was in deep sleep and woke up
-							-> program resume running before audio callback is called
-							-> audio callback not called
-							-> this->audioCV.wait_for timeout multiple times
-							-> this->requestedSamples underflow
-							-> mailbox not checked
-							-> emulation feel not responsive
-						fix:
-							if ((bool)this->requestedSamples) this->requestedSamples--;
-							instead of
-							this->requestedSamples--;
-							or
-							if (!(bool)this->requestedSamples) this->requestedSamples++;
-							after this->audioCV.wait_for
-						*/
+					
+					lock.lock();
+					/*
+					because of wait_for there is a case where this->requestedSamples can underflow
+					ex: 
+						pc was in deep sleep and woke up
+						-> program resume running before audio callback is called
+						-> audio callback not called
+						-> this->audioCV.wait_for timeout multiple times
+						-> this->requestedSamples underflow
+						-> mailbox not checked
+						-> emulation feel not responsive
+					fix:
+						if ((bool)this->requestedSamples) this->requestedSamples--;
+						instead of
 						this->requestedSamples--;
-						if (this->requestedSamples==0){
-							this->audioCV.wait_for(lock, std::chrono::milliseconds(500), [this](){
-								return this->requestedSamples>0;
-							});//requested samples or switch to clock sync
-							chk_mb=true;//avoid blocking audio thread while checking mailbox
-							if (!(bool)this->requestedSamples) this->requestedSamples++;
-						}
-					}
-					if (chk_mb){
+						or
+						if (!(bool)this->requestedSamples) this->requestedSamples++;
+						after this->audioCV.wait_for
+					*/
+					this->requestedSamples--;
+					if (this->requestedSamples==0){
+						this->audioCV.wait_for(lock, std::chrono::milliseconds(500), [this](){return (bool)this->requestedSamples;});//requested samples
+						if (!(bool)this->requestedSamples) this->requestedSamples=1;
+						lock.unlock();//avoid blocking audio thread while checking mailbox
 						this->checkMailbox();//check less often mailbox
 						if (this->stop()) return;
 					}
+					else lock.unlock();
 				}
 				
 				if (!this->pause()){

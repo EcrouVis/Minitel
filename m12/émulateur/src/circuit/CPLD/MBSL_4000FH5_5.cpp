@@ -65,7 +65,8 @@ void MBSL_4000FH5_5::nCSChangeIn(bool b){
 	this->sendnCSRAM(!b);
 }
 void MBSL_4000FH5_5::WATCHDOGChangeIn(bool b){
-	if ((bool)(this->STATUS&0x10)) this->sendRST(b);
+	//if ((bool)(this->STATUS&0x10)) 
+		this->sendRST(b);
 	if (this->WATCHDOG&&!b) this->STATUS&=~0x10;
 	this->WATCHDOG=b;
 }
@@ -203,9 +204,8 @@ void MBSL_4000FH5_5::UC2CPLD(){
 			this->S_out_step=1;
 			break;
 		case 0x51:
-			//printf("to CPLD status %02X\n",this->data);
-			if ((bool)(this->data^this->STATUS)&0x10){
-				this->sendRST(this->WATCHDOG&&(bool)(this->data&0x10));
+			if ((bool)((this->data^this->STATUS)&0x10)){
+				//this->sendRST(this->WATCHDOG&&(bool)(this->data&0x10));
 			}
 			this->STATUS=this->data;
 			this->STATUS|=0x0C;

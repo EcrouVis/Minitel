@@ -14,7 +14,7 @@ void memoryWindow(const char* w_title,imguiMemoryView* memView){
 	std::atomic_uint* mem_op=memView->op;
 	
 	
-	ImGui::SetNextWindowSizeConstraints(ImVec2(-1,ImGui::GetTextLineHeightWithSpacing()*19),ImVec2(-1,FLT_MAX));
+	ImGui::SetNextWindowSizeConstraints(ImVec2(-1,0),ImVec2(-1,FLT_MAX));
 	ImGui::Begin(w_title,&(memView->show),0);
 	
 	int n_nibble=0;
@@ -29,10 +29,8 @@ void memoryWindow(const char* w_title,imguiMemoryView* memView){
 	la[n_nibble-1]=0x78;
 	la[n_nibble]=0;
 	
-	char ld[19];
-	ld[16]=0x20;//hack
-	ld[17]=0x20;
-	ld[18]=0;
+	char ld[17];
+	ld[16]=0;
 	
 	if (mem_op==NULL) memView->follow_address=false;
 	else {
@@ -116,7 +114,7 @@ void memoryWindow(const char* w_title,imguiMemoryView* memView){
 }
 void sfr80C32Window(imgui80C32SFRView* sfrView){
 	
-	ImGui::Begin("Registres spéciaux du 80C32",&(sfrView->show),0);
+	ImGui::Begin("Registres spéciaux du 80C32",&(sfrView->show),ImGuiWindowFlags_AlwaysAutoResize);
 	
 	char b[]=": 0x\0\0\0";
 	unsigned char v_sfr;
@@ -139,7 +137,7 @@ void sfr80C32Window(imgui80C32SFRView* sfrView){
 }
 void regTS9347Window(imguiTS9347REGView* regView){
 	
-	ImGui::Begin("Registres de la puce vidéo TS9347",&(regView->show),0);
+	ImGui::Begin("Registres de la puce vidéo TS9347",&(regView->show),ImGuiWindowFlags_AlwaysAutoResize);
 	
 	char b[]=": 0x\0\0\0";
 	unsigned char v_reg;
@@ -160,7 +158,7 @@ void regTS9347Window(imguiTS9347REGView* regView){
 }
 void regTS7514Window(imguiTS7514REGView* regView){
 	
-	ImGui::Begin("Registres du modem TS7514",&(regView->show),0);
+	ImGui::Begin("Registres du modem TS7514",&(regView->show),ImGuiWindowFlags_AlwaysAutoResize);
 	
 	char b[]=": 0x\0\0\0";
 	unsigned char v_reg;

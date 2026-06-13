@@ -36,6 +36,10 @@ const unsigned short line_DTMF_0=line_DTMF_941Hz|line_DTMF_1336Hz;
 const unsigned short line_DTMF_H=line_DTMF_941Hz|line_DTMF_1477Hz;
 const unsigned short line_DTMF_D=line_DTMF_941Hz|line_DTMF_1633Hz;
 
+const unsigned short line_DTMF_high=line_DTMF_1209Hz|line_DTMF_1336Hz|line_DTMF_1477Hz|line_DTMF_1633Hz;
+const unsigned short line_DTMF_low=line_DTMF_697Hz|line_DTMF_770Hz|line_DTMF_852Hz|line_DTMF_941Hz;
+const unsigned short line_DTMF=line_DTMF_low|line_DTMF_high;
+
 const float line_DTMF_HF_Attenuation=0.3548;
 const float line_DTMF_LF_Attenuation=0.2818;
 #endif

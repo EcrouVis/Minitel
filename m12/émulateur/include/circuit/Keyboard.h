@@ -7,6 +7,7 @@
 #include <atomic>
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
+#include "circuit/PhoneLine.h"
 struct keyboard_message{
 	bool focus;
 	int scancode;
@@ -15,7 +16,8 @@ struct keyboard_message{
 };
 const unsigned char LED_OFF=0;
 const unsigned char LED_ON=1;
-const unsigned char LED_BLINK=2;
+const unsigned char LED_BLINK_FAST=2;
+const unsigned char LED_BLINK_SLOW=3;
 
 
 class Keyboard{
@@ -90,13 +92,30 @@ class Keyboard{
 			}
 			if (this->DTMF_step>0||this->DTMF_queue.size()!=0){
 				this->DTMF_step++;
-				if (!(bool)(this->phone_status&0x10)){
-					this->phone_status|=0x10;
-					this->sendStatus();
+				if (this->DTMF_queue.front()==12){
+					if (this->DTMF_step>=600){
+						this->DTMF_step=0;
+						this->DTMF_queue.pop();
+					}
 				}
-				if (this->DTMF_step>=((this->DTMF_queue.front()==12)?600:89)){
-					this->DTMF_step=0;
-					this->DTMF_queue.pop();
+				else{
+					if (!(bool)(this->phone_status&0x10)){
+						this->phone_status|=0x10;
+						this->sendStatus();
+						constexpr unsigned short freq[16]={line_DTMF_0,line_DTMF_1,line_DTMF_2,line_DTMF_3,line_DTMF_4,line_DTMF_5,line_DTMF_6,line_DTMF_7,line_DTMF_8,line_DTMF_9,0,0,0,0,line_DTMF_S,line_DTMF_H};
+						this->phoneLineStateOut|=freq[this->DTMF_queue.front()];
+						this->sendPhoneLine(this->phoneLineStateOut);
+					}
+					if (this->DTMF_step>=45&&(bool)(this->phoneLineStateOut&line_DTMF)){
+						this->phoneLineStateOut&=~line_DTMF;
+						this->sendPhoneLine(this->phoneLineStateOut);
+					}
+					if (this->DTMF_step>=89){
+						this->DTMF_step=0;
+						this->DTMF_queue.pop();
+						this->phone_status&=~0x10;//TODO: re test behaviour
+						this->sendStatus();
+					}
 				}
 			}
 			else if ((bool)(this->phone_status&0x10)){
@@ -173,6 +192,7 @@ class Keyboard{
 						case 336:this->queueKey(0x5F,keyPressed);break;//flèche bas
 						case 333:this->queueKey(0x3F,keyPressed);break;//flèche droite
 						
+						case 54:
 						case 42:this->queueKey(0xAF,keyPressed);break;//shift
 						case 58:this->queueKey(0x9F,keyPressed);break;//min/maj
 						case 285:
@@ -200,8 +220,6 @@ class Keyboard{
 						case 66:this->queueKey(0x65,keyPressed);break;//F8=Répétition
 						case 67:this->queueKey(0x63,keyPressed);break;//F9=Envoi
 						
-						//test TODO: remove:
-						case 0x53:if (keyPressed){this->playRingtone();}this->phone_status&=0xFB;this->phone_status|=(keyPressed?0x04:0);this->sendStatus();break;//numpad .
 						default:printf("key pressed: %02X\n",kb_m->scancode);break;
 					}
 				}
@@ -232,14 +250,57 @@ class Keyboard{
 			this->S_in=b;
 		}
 		
+		void phoneLineChangeIn(unsigned short state){
+			if (this->phoneLineStateIn==state) return;
+			this->phoneLineStateIn=state;
+			if (((bool)(state&line_Ringing))!=((bool)(this->phone_status&0x04))){
+				this->phone_status&=~0x04;
+				this->phone_status|=((bool)(state&line_Ringing))?0x04:0;
+				this->sendStatus();
+				if ((bool)(state&line_Ringing)) this->playRingtone();
+			}
+		}
+		
+		void subscribePhoneLine(std::function<void(unsigned short)> f){
+			this->sendPhoneLine=f;
+		}
+		
 		float getSpeakerSample(unsigned long sampleRate){
 			float s;
 			s=this->getRingtoneSample(sampleRate);
-			//TODO
+			if (this->speaker_on) s+=this->phoneLineSample;
+			constexpr float v[4]={0.0316227766,0.1,0.316227766,1};//guess TODO
+			s*=v[this->ringtone_volume];
 			return s;
+		}
+		void setPhoneLineSample(float f){
+			this->phoneLineSample=f;
+		}
+		float getPhoneLineSample(unsigned long sampleRate){
+			switch (this->phoneLineStateOut&line_DTMF_high){
+				case 0:this->dtmf_phase1=0;break;
+				case line_DTMF_1209Hz:this->dtmf_phase1+=1209;break;
+				case line_DTMF_1336Hz:this->dtmf_phase1+=1336;break;
+				case line_DTMF_1477Hz:this->dtmf_phase1+=1477;break;
+				case line_DTMF_1633Hz:this->dtmf_phase1+=1633;break;
+			}
+			if (this->dtmf_phase1>sampleRate) this->dtmf_phase1-=sampleRate;
+			switch (this->phoneLineStateOut&line_DTMF_low){
+				case 0:this->dtmf_phase1=0;break;
+				case line_DTMF_697Hz:dtmf_phase2+=697;break;
+				case line_DTMF_770Hz:dtmf_phase2+=770;break;
+				case line_DTMF_852Hz:dtmf_phase2+=852;break;
+				case line_DTMF_941Hz:dtmf_phase2+=941;break;
+			}
+			if (this->dtmf_phase2>sampleRate) this->dtmf_phase2-=sampleRate;
+			return std::sin(2*M_PI*((float)this->dtmf_phase2)/((float)sampleRate))+0.8*std::sin(2*M_PI*((float)this->dtmf_phase1)/((float)sampleRate));
 		}
 	private:
 		unsigned char phone_status=0x61;
+		
+		unsigned short phoneLineStateIn=0;
+		unsigned short phoneLineStateOut=0;
+		std::function<void(unsigned short)> sendPhoneLine=[](unsigned short d){};
 	
 		bool S_in=false;
 		unsigned char S_in_step=0;
@@ -288,6 +349,11 @@ class Keyboard{
 		bool speaker_on=false;
 		unsigned char speaker_volume=0;
 		
+		float phoneLineSample=0;
+		
+		unsigned long dtmf_phase1=0;
+		unsigned long dtmf_phase2=0;
+		
 		void commandReceived(){
 			if (this->command_part){
 				if ((this->SBUF_in&1)==1){
@@ -316,17 +382,21 @@ class Keyboard{
 			if ((bool)(this->cmd_p1&0x04)){//commande
 				switch (this->cmd_p2){
 					case 0x01:
-						if((this->phone_status&0x48)!=0x08){
+						if((this->phone_status&0x48)!=0x08){//TODO: move code
 							this->phone_status=(this->phone_status&(~0x48))|0x08;
 							this->sendStatus();
 						}
+						this->phoneLineStateOut|=line_Closed;
+						this->sendPhoneLine(this->phoneLineStateOut);
 						printf("phone line connected\n");
 						break;
 					case 0x03:
-						if((this->phone_status&0x48)!=0x40){
+						if((this->phone_status&0x48)!=0x40){//TODO: move code
 							this->phone_status=(this->phone_status&(~0x48))|0x40;
 							this->sendStatus();
 						}
+						this->phoneLineStateOut&=~line_Closed;
+						this->sendPhoneLine(this->phoneLineStateOut);
 						printf("phone line disconnected\n");
 						break;
 					case 0x05:
@@ -365,19 +435,12 @@ class Keyboard{
 					
 					case 0x21:this->LED_SPEAKER.store(LED_OFF,std::memory_order_release);printf("power off speaker led\n");break;
 					case 0x23:this->LED_POWER.store(LED_OFF,std::memory_order_release);printf("power off on/off led\n");break;
-					
 					case 0x29:this->LED_SPEAKER.store(LED_ON,std::memory_order_release);printf("power on speaker led\n");break;
 					case 0x2B:this->LED_POWER.store(LED_ON,std::memory_order_release);printf("power on on/off led\n");break;
-					
-					case 0x33:this->LED_POWER.store(LED_BLINK,std::memory_order_release);printf("blink on/off led\n");break;
-					
-					case 0x39://test TODO: rewrite/remove
-						/*if((this->phone_status&0x48)!=0x08){
-							this->phone_status=(this->phone_status&(~0x48))|0x08;
-							this->sendStatus();
-						}*/
-						printf("!!!!\n");
-						break;
+					case 0x31:this->LED_SPEAKER.store(LED_BLINK_FAST,std::memory_order_release);printf("blink speaker led fast (guess)\n");break;
+					case 0x33:this->LED_POWER.store(LED_BLINK_FAST,std::memory_order_release);printf("blink on/off led fast\n");break;
+					case 0x39:this->LED_SPEAKER.store(LED_BLINK_SLOW,std::memory_order_release);printf("blink speaker led slow\n");break;
+					case 0x3B:this->LED_POWER.store(LED_BLINK_SLOW,std::memory_order_release);printf("blink on/off led slow (guess)\n");break;
 					
 					case 0x41:
 						//printf("set speaker volume 1\n");
@@ -478,14 +541,9 @@ class Keyboard{
 					this->ringtone_note++;
 				}
 				float a=1.-std::exp(-((float)this->ringtone_note+((float)this->ringtone_tick)/((float)sampleRate))/(12.*0.06));
-				constexpr float v[4]={0.0316227766,0.1,0.316227766,1};//guess TODO
-				return ((this->ringtone_phase_tick*4>sampleRate)?-1.:1.)*v[this->ringtone_volume]*a;
+				return ((this->ringtone_phase_tick*4>sampleRate)?-1.:1.)*a;
 			}
 			return 0.;
-		}
-		float getPhoneLineSample(){
-			constexpr float v[4]={0.0316227766,0.1,0.316227766,1};//guess TODO
-			return v[this->speaker_volume]*0;//TODO
 		}
 		void playRingtone(){
 			this->ringtone_note=0;

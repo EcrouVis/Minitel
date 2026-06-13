@@ -12,7 +12,7 @@ class CRTBuffer{
 	public:
 		void VideoChangeIn(unsigned char* v){
 			bool change=false;
-			std::unique_lock<std::mutex> lock(this->videoMutex);
+			std::lock_guard<std::mutex> lock(this->videoMutex);
 			for (int i=0;i<VIDEO_FRAME_SIZE;i++){
 				if (v[i]!=this->data[i]){
 					change=true;
@@ -25,14 +25,19 @@ class CRTBuffer{
 			}
 			
 		}
+		void CRTPowerChangeIn(bool b){
+			this->power.store(b,std::memory_order_relaxed);
+			if (!b) this->newFrame.store(true,std::memory_order_release);
+		}
 		void subscribeSignal(std::function<void()> f){
 			this->sendSignal=f;
 		}
 		
 		void getVideoFrame(unsigned char* buffer){
-			std::unique_lock<std::mutex> lock(this->videoMutex);
+			std::lock_guard<std::mutex> lock(this->videoMutex);
 			this->newFrame.store(false,std::memory_order_release);
-			memcpy(buffer,this->data,VIDEO_FRAME_SIZE*sizeof(unsigned char));
+			if (this->power.load(std::memory_order_relaxed)) memcpy(buffer,this->data,VIDEO_FRAME_SIZE*sizeof(unsigned char));
+			else memset(buffer,0,VIDEO_FRAME_SIZE*sizeof(unsigned char));
 		}
 		bool frameChanged(){
 			return this->newFrame.load(std::memory_order_acquire);
@@ -43,6 +48,7 @@ class CRTBuffer{
 		
 		std::mutex videoMutex;
 		std::atomic_bool newFrame;
+		std::atomic_bool power=false;
 		
 };
 

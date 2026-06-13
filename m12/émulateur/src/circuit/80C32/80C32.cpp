@@ -91,9 +91,7 @@ unsigned char m80C32::getRAMByte(unsigned char address){
 	this->last_memory_operation.store(address,std::memory_order_relaxed);
 	return this->iRAM[address].load(std::memory_order_relaxed);
 }
-unsigned char m80C32::getSFRByteIn(unsigned char address){
-	return this->SFR[address&0x7F].load(std::memory_order_relaxed);
-}
+
 unsigned char m80C32::getSFRByteOut(unsigned char address){
 	/*switch (address){
 		case this->P0:

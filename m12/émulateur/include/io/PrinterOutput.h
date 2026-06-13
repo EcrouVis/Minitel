@@ -14,7 +14,7 @@ void PrinterOutput(GLFWwindow* window,NotificationServer* notif, P_Peri_Printer*
 	ImGui::Text(config->last_print);
 	constexpr char btxt[]="Copier dans le presse-papier";
 	int min_size=ImGui::CalcTextSize(btxt).x+2*ImGui::GetStyle().FramePadding.x;
-	int w_size=ImGui::GetContentRegionAvail().x;
+	int w_size=ImGui::CalcTextSize(config->last_print).x;
 	if(ImGui::Button(btxt,ImVec2(w_size>min_size?w_size:min_size,0))){
 		glfwSetClipboardString(window,config->last_print);
 		notif->notify("Texte copié dans le presse-papier",false,ImVec4(0,1,1,1));

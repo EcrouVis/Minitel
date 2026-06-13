@@ -10,9 +10,11 @@
 #include "circuit/Keyboard.h"
 #include "circuit/clocks.h"
 #include "circuit/CRTBuffer.h"
-#include "circuit/SpeakerBuffer.h"
-#include "circuit/BuzzerBuffer.h"
+#include "circuit/AudioBuffer.h"
+#include "circuit/BuzzerFilter.h"
+#include "circuit/SpeakerFilter.h"
 //#include "circuit/DIN5Interface.h"
+#include "circuit/PhoneLineWirring.h"
 
 #include "circuit/debug/IOLogger.h"
 #include "circuit/debug/dbg_80C32.h"
@@ -34,6 +36,7 @@
 
 //#include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
 #include "circuit/DIN5/MinitelNetwork.h"
+#include "circuit/RTC/RTCNetwork.h"
 
 #include <vector>
 
@@ -64,9 +67,16 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	smn.registerApp(&smnalw);
 	SimplifiedMinitelNetworkAppPrinter smnnap;
 	smn.registerApp(&smnnap);
+	
 	CRTBuffer crtb;
-	SpeakerBuffer spkb;
-	BuzzerBuffer bzb;
+	AudioBuffer ab;
+	BuzzerFilter bzf(3000);
+	SpeakerFilter spkf;
+	
+	RTCNetwork rtcn;
+	RTCServiceMinipavi rtcmp;
+	rtcn.subscribeService((RTCService*)&rtcmp);
+	PhoneLineWire phoneLine;
 	
 	RuntimeDecompiler rtd(&uc);
 	
@@ -217,7 +227,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	bool kb_s1=false;
 	bool kb_s2=false;
 	
-	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2,&smn,p_mb_video](unsigned char d){
+	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2,&smn,&phoneLine,p_mb_video,&crtb](unsigned char d){
 		modem.MCnBCChangeIn((bool)(d&1));
 		modem.MODEMnDTMFChangeIn((bool)(d&2));
 		kb_s1=(bool)(d&4);
@@ -227,34 +237,36 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		static bool close_modem=false;
 		if (close_modem!=((bool)(d&0x10))){
 			close_modem=(bool)(d&0x10);
-			modem.RA2ChangeIn(close_modem?0x0400:0);//test
+			phoneLine.closeRelay(close_modem);
+			//modem.RA2ChangeIn(close_modem?0x0400:0);//test
 			if (close_modem) printf("modem connected\n");
 			else printf("modem disconnected\n");
 		}
 		//0x20->crt power
-		static bool crt_power=false;
-		if (crt_power!=((bool)(d&0x20))){
-			crt_power=(bool)(d&0x20);
-			thread_message ms_p_notif;
-			ms_p_notif.cmd=crt_power?CRT_POWER_ON:CRT_POWER_OFF;
-			p_mb_video->send(&ms_p_notif);
-		}
+		crtb.CRTPowerChangeIn((bool)(d&0x20));
 		//0x40->din power - not used in the emulator
 		smn.PWRChangeIn((bool)(d&0x40));
 		//0x80->minitel memory access? - not wired
 	};
 	cpld.subscribePIO(std::cref(CPLDIObus));
 	
-	auto RSTwire=[&uc,p_mb_video](bool b){
+	auto RSTwire=[&uc,p_mb_video,p_gState,&eram](bool b){
 		uc.ResetChangeIn(b);
 		static bool bp=true;
-		printf("rst wire %i\n",b);
-		if (!b&&bp){
+		if ((!b)&&bp){
+			printf("reboot\n");
 			thread_message ms_p_notif;
 			ms_p_notif.cmd=NOTIFICATION_REBOOT;
 			p_mb_video->send(&ms_p_notif);
 		}
+		else if((!bp)&&b){//save ram state
+			printf("power down\n");
+			static unsigned char eram_cpy[ERAM_SIZE];
+			eram.copy((unsigned char*)eram_cpy);
+			writeM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
+		}
 		bp=b;
+		p_gState->minitelOn.store(!b,std::memory_order_relaxed);
 			
 	};
 	cpld.subscribeRST(RSTwire);
@@ -264,10 +276,12 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	wt.subscribeRST(WTwire);
 	
-	auto WWTwire=[&uc,&P3_uc,&P3_ext](bool b){
+	auto WWTwire=[&uc,&P3_uc,&P3_ext,&wt](bool b){
 		P3_ext&=~0x04;
 		P3_ext|=(b?0x04:0);
-		uc.PXChangeIn(uc.P3,P3_ext&P3_uc);
+		unsigned char d=P3_ext&P3_uc;
+		uc.PXChangeIn(uc.P3,d);
+		wt.ENChangeIn((bool)(d&0x04));
 	};
 	wt.subscribenWRST(WWTwire);
 	
@@ -292,10 +306,41 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	crtb.subscribeSignal(VideoSignal);
 	
-	auto ATOwire=[](unsigned short d){
+	/*unsigned short ModemPhoneLineState=0;
+	unsigned short KeyboardPhoneLineState=0;
+	unsigned short RTCPhoneLineState=0;
+	modem.subscribeATO([&rtcn,&kb,&modem,&ModemPhoneLineState,&KeyboardPhoneLineState,&RTCPhoneLineState](unsigned short d){
 		printf("ATO %04X\n",d);
-	};
-	modem.subscribeATO(ATOwire);
+		ModemPhoneLineState=d;
+		unsigned short st=ModemPhoneLineState|KeyboardPhoneLineState|RTCPhoneLineState;
+		printf("PL %04X\n",st);
+		rtcn.phoneLineChangeIn(st);
+		kb.phoneLineChangeIn(st);
+		modem.RA2ChangeIn(st);
+	});
+	kb.subscribePhoneLine([&rtcn,&kb,&modem,&ModemPhoneLineState,&KeyboardPhoneLineState,&RTCPhoneLineState](unsigned short d){
+		printf("KB %04X\n",d);
+		KeyboardPhoneLineState=d;
+		unsigned short st=ModemPhoneLineState|KeyboardPhoneLineState|RTCPhoneLineState;
+		printf("PL %04X\n",st);
+		rtcn.phoneLineChangeIn(st);
+		kb.phoneLineChangeIn(st);
+		modem.RA2ChangeIn(st);
+	});
+	rtcn.subscribePhoneLine([&rtcn,&kb,&modem,&ModemPhoneLineState,&KeyboardPhoneLineState,&RTCPhoneLineState](unsigned short d){
+		printf("RTC %04X\n",d);
+		RTCPhoneLineState=d;
+		unsigned short st=ModemPhoneLineState|KeyboardPhoneLineState|RTCPhoneLineState;
+		printf("PL %04X\n",st);
+		rtcn.phoneLineChangeIn(st);
+		kb.phoneLineChangeIn(st);
+		modem.RA2ChangeIn(st);
+	});*/
+	rtcn.subscribePhoneLine([&phoneLine](unsigned short d){phoneLine.wireRTCIn(d);});
+	kb.subscribePhoneLine([&phoneLine](unsigned short d){phoneLine.wireKeyboardIn(d);});
+	modem.subscribeATO([&phoneLine](unsigned short d){phoneLine.wireModemIn(d);});
+	phoneLine.subscribeWireLine([&rtcn,&kb](unsigned short d){rtcn.phoneLineChangeIn(d);kb.phoneLineChangeIn(d);});
+	phoneLine.subscribeWireModem([&modem](unsigned short d){modem.RA2ChangeIn(d);});
 	
 	smnnap.subscribePrintFinished([p_mb_video](const char* p){
 		char* pc=(char*)malloc(strlen(p)*sizeof(char)+1);
@@ -309,11 +354,13 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	//debug
 	
 	modem.debug_cmd=[p_mb_video](unsigned char cmd){
-		if (cmd>=0x38&&cmd<=0x3B){
+		static unsigned char buzzer=0x3F;
+		if (cmd>=0x38&&cmd<=0x3B&&!(buzzer>=0x38&&buzzer<=0x3B)){
 			thread_message ms_p_notif;
 			ms_p_notif.cmd=NOTIFICATION_BUZZER;
 			p_mb_video->send(&ms_p_notif);
 		}
+		if ((cmd&0xF0)==0x30) buzzer=cmd;
 	};
 
 	auto dbgIOIN=[p_gState,p_mb_video](unsigned char a,unsigned char d){
@@ -471,10 +518,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 				printf("address c:%05lX -> c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])),(((unsigned long)uc.PX_out[1]&3)<<16)|(((unsigned short)uc.getRAMByte(sp))<<8)|((unsigned short)uc.getRAMByte(sp-1)));
 			}
 		}
-	};
-	uc.debug_signal_alu_before_exec=[p_gState,&uc,&sm](){
-		if (p_gState->stepByStep.load(std::memory_order_relaxed)) print_m12_alu_instruction(&uc);
-		sm.updateState();
 	};*/
 	
 	bool pause_emu=false;
@@ -484,9 +527,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			rtd.update();
 		}*/
 		if (p_gState->stepByStep.load(std::memory_order_relaxed)){
-			printf("I=%02X C=%u ",uc.instruction[0],uc.i_cycle[uc.instruction[0]]);
 			print_m12_alu_instruction(&uc);
 		}
+		//sm.updateState();
 	};
 	
 	//clock
@@ -508,7 +551,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	//mailbox
 	
-	auto checkMB=[p_mb_circuit,&eram,&erom,&uc,&modem,&wt,&cpld,&pause_emu,&kb,p_gState](){
+	auto checkMB=[p_mb_circuit,&eram,&erom,&modem,&wt,&pause_emu,&kb,p_gState,&rtcn,&rtcmp,&crtb](){
 		pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
 		thread_message ms;
 		static unsigned char erom_cpy[EROM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
@@ -522,19 +565,14 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 					readM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
 					eram.set((unsigned char*)eram_cpy);
 					//reset
-					uc.Reset();//ensure the reset of the 80C32
-					modem.Reset();
 					wt.PWRChangeIn(true);
-					p_gState->minitelOn.store(true,std::memory_order_relaxed);
-					printf("power on\n");
 					break;
 				case EMU_OFF:
-					//save ram to file
-					eram.copy((unsigned char*)eram_cpy);
-					writeM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
+					//wait RST signal before saving the ram
+					modem.Reset();
 					wt.PWRChangeIn(false);
-					p_gState->minitelOn.store(false,std::memory_order_relaxed);
-					printf("power off\n");
+					crtb.CRTPowerChangeIn(false);
+					//TODO: reset keyboard
 					break;
 				case EMU_NEXT_STEP:
 					pause_emu=false;
@@ -542,6 +580,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 				case KEYBOARD_STATE_UPDATE:
 				{
 					keyboard_message* kbm=(keyboard_message*)ms.p;
+					if (kbm->scancode==0x53) rtcn.requestPhoneLine((RTCService*)&rtcmp);
 					kb.KeyboardChangeIn(kbm);
 					delete kbm;
 					break;
@@ -562,9 +601,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		modem.CLKTickIn();//to resample ATxI input
 	};
 	CLKs.subscribe14745600Hz(std::cref(CLKTick14745600));
-	auto CLKTick600=[&kb,&cpld](){
+	auto CLKTick600=[&kb,&cpld,&rtcn](){
 		cpld.CLKTickIn();
 		kb.CLKTickIn();
+		rtcn.CLKTickIn600Hz();
 	};
 	CLKs.subscribe600Hz(CLKTick600);
 	auto CLKTick9600=[&smn,&wt](){
@@ -573,14 +613,19 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	CLKs.subscribe9600Hz(CLKTick9600);
 	
-	auto CLKAudio=[&spkb,&kb,&bzb,&modem](unsigned long sr){
-		spkb.AudioIn(kb.getSpeakerSample(sr));
-		bzb.AudioIn(modem.getBuzzerSample(sr));
+	auto CLKAudio=[&ab,&kb,&bzf,&spkf,&modem,&rtcn,&phoneLine](unsigned long sr){
 		static unsigned long srp=0;
 		if (sr!=srp){
-			bzb.setSampleRate(sr);
+			bzf.setSampleRate(sr);
 			srp=sr;
 		}
+		
+		phoneLine.setRTCSample(rtcn.getPhoneLineSample(sr));
+		phoneLine.setKeyboardSample(kb.getPhoneLineSample(sr));
+		phoneLine.setModemSample(modem.getTxOutSample());
+		kb.setPhoneLineSample(phoneLine.getPhoneLineSample());
+		
+		ab.AudioIn(spkf.filter(kb.getSpeakerSample(sr))+bzf.filter(modem.getBuzzerSample(sr)));
 	};
 	CLKs.subscribeAudioSample(CLKAudio);
 	
@@ -634,12 +679,20 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	ms.cmd=CRT_BUFFER;
 	p_mb_video->send(&ms);
 	
-	ms.p=(void*)&spkb;
-	ms.cmd=SPEAKER_BUFFER;
+	ms.p=(void*)&ab;
+	ms.cmd=AUDIO_BUFFER;
 	p_mb_video->send(&ms);
 	
-	ms.p=(void*)&bzb;
-	ms.cmd=BUZZER_BUFFER;
+	ms.p=(void*)&spkf;
+	ms.cmd=SPEAKER_FILTER;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&bzf;
+	ms.cmd=BUZZER_FILTER;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&ab;
+	ms.cmd=AUDIO_BUFFER;
 	p_mb_video->send(&ms);
 	
 	ms.p=(void*)&smnnap;

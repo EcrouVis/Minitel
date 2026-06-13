@@ -519,6 +519,29 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			return this->NOT_CMD;
 		}
 		
+		unsigned char isISO2022CMD(){
+			switch(this->CMDBuffer.size()){
+				case 1:
+					if (this->CMDBuffer[0]==0x1B) return this->CMD_ONGOING;
+					break;
+				case 2:
+					if (this->CMDBuffer[0]==0x1B&&(this->CMDBuffer[1]&0xF0)==0x20) return this->CMD_ONGOING;
+					break;
+				default:
+					if (this->CMDBuffer[0]==0x1B){
+						for (size_t i=1;i<this->CMDBuffer.size()-1;i++){
+							if ((this->CMDBuffer[i]&0xF0)!=0x20) return this->NOT_CMD;
+						}
+						switch (this->CMDBuffer[this->CMDBuffer.size()-1]){
+							case 0x20 ... 0x2F:return this->CMD_ONGOING;
+							case 0x30 ... 0x7E:return this->CMD_FINISHED;
+						}
+					}
+					break;
+			}
+			return this->NOT_CMD;
+		}
+		
 		void RESTINGReceiveCMD(unsigned char d){
 			if (this->PTin){
 				resync:
@@ -591,7 +614,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			if (s==this->NOT_CMD){
 				s=this->isACKCMD();
 				if (s==this->NOT_CMD){
-					s=this->isPRO1CMD()|this->isPRO2CMD()|this->isPRO3CMD()|this->isCursorPositionCMD()|this->isCSICMD();
+					s=this->isPRO1CMD()|this->isPRO2CMD()|this->isPRO3CMD()|this->isCursorPositionCMD()|this->isCSICMD()|this->isISO2022CMD();
 					if (s==this->NOT_CMD){
 						s=this->isSS2();
 						if (s==this->NOT_CMD){
@@ -1647,8 +1670,13 @@ class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
 			
 			if (!(bool)cmd){
 				if (d==0x0C) this->PrintBuffer.clear();
-				else if (this->fr.load(std::memory_order_relaxed)) this->printISO646FRChar(d);
-				else this->printASCIIChar(d);
+				else{
+					if (this->PrintBuffer.size()>=2&&d==0x0A&&this->PrintBuffer[this->PrintBuffer.size()-1]==0x0D&&this->PrintBuffer[this->PrintBuffer.size()-2]==0x08){//BS CR LF -> CR LF
+						this->PrintBuffer.erase(this->PrintBuffer.end()-2);
+					}
+					if (this->fr.load(std::memory_order_relaxed)) this->printISO646FRChar(d);
+					else this->printASCIIChar(d);
+				}
 			}
 		}
 		
