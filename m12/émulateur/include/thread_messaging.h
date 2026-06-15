@@ -36,6 +36,7 @@ const int PRINTER=27;
 const int PRINT_FINISHED=28;
 const int SPEAKER_FILTER=29;
 const int BUZZER_FILTER=30;
+const int AUTO_START_MODULE=31;
 
 /*const int DUMP_ERAM=1;
 const int LOAD_ERAM=1<<1;
@@ -43,7 +44,7 @@ const int LOAD_EROM=1<<2;*/
 const int EMU_ON=1<<3;
 const int EMU_OFF=1<<4;
 const int EMU_NEXT_STEP=1<<5;
-const int KEYBOARD_STATE_UPDATE=1<<6;
+const int SPECIAL=1<<6;//for testing purpose
 /*
 const int RESTART;*/
 

@@ -74,47 +74,8 @@ class M12Window{
 			this->p_mb_circuit=p_mb_circuit;
 			this->p_mb_video=p_mb_video;
 			
-			//glfw
-			glfwSetErrorCallback(this->error_callback);
-		 
-			if (!glfwInit())
-				exit(EXIT_FAILURE);
-		 
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-			glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-		 
-			this->window = glfwCreateWindow(640, 480, this->PARAMETERS.info.title, NULL, NULL);
-			if (!this->window)
-			{
-				glfwTerminate();
-				exit(EXIT_FAILURE);
-			}
-		 
-			glfwSetInputMode(window, GLFW_LOCK_KEY_MODS, GLFW_TRUE);
-			glfwSetWindowUserPointer(this->window,this);
-			glfwSetKeyCallback(this->window, this->key_callback);
-			//glfwSetCharCallback(this->window, this->char_callback);
-			glfwSetWindowCloseCallback(this->window, this->window_close_callback);
-			glfwSetErrorCallback(this->window_error_callback);
-		 
-			glfwMakeContextCurrent(this->window);
-			gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
-			glfwSwapInterval(1);
-			
-			//imgui
-			IMGUI_CHECKVERSION();
-			ImGui::CreateContext();
-			ImGuiIO& io=ImGui::GetIO();
-			io.IniFilename=NULL;
-			
-			ImGui_ImplGlfw_InitForOpenGL(this->window,true);
-			ImGui_ImplOpenGL3_Init();
-		 
-			//emulator display
-			/*GLuint vertex_buffer;
-			glGenBuffers(1, &vertex_buffer);
-			glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);*/
+			bool fullscreen=false;
+			double fontDPI=1;
 			
 			//RAM and ROM selection callbacks
 			this->RAMS.setCallback([this](char* f){
@@ -166,10 +127,10 @@ class M12Window{
 					if (cJSON_IsBool(c_param)) this->PARAMETERS.imgui.idle=cJSON_IsTrue(c_param);
 					
 					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"DPI");
-					if (cJSON_IsNumber(c_param)&&(c_param->valuedouble>=1)) ImGui::GetStyle().FontScaleDpi=c_param->valuedouble;
+					if (cJSON_IsNumber(c_param)&&(c_param->valuedouble>=1)) fontDPI=c_param->valuedouble;
 					
 					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"fullscreen");
-					if (cJSON_IsBool(c_param)&&cJSON_IsTrue(c_param)) this->setWindowFullscreen();
+					if (cJSON_IsBool(c_param)&&cJSON_IsTrue(c_param)) fullscreen=true;
 					
 					//IO
 					subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
@@ -241,10 +202,55 @@ class M12Window{
 				}
 			}
 			
+			
+			
+			//glfw
+			glfwSetErrorCallback(this->error_callback);
+		 
+			if (!glfwInit())
+				exit(EXIT_FAILURE);
+		 
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+			glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+		 
+			this->window = glfwCreateWindow(this->PARAMETERS.imgui.window_size[0], this->PARAMETERS.imgui.window_size[1], this->PARAMETERS.info.title, fullscreen?glfwGetPrimaryMonitor():NULL, NULL);
+			//this->window = glfwCreateWindow(640, 480, this->PARAMETERS.info.title, NULL, NULL);
+			if (!this->window)
+			{
+				glfwTerminate();
+				exit(EXIT_FAILURE);
+			}
+		 
+			glfwSetInputMode(window, GLFW_LOCK_KEY_MODS, GLFW_TRUE);
+			glfwSetWindowUserPointer(this->window,this);
+			glfwSetKeyCallback(this->window, this->key_callback);
+			//glfwSetCharCallback(this->window, this->char_callback);
+			glfwSetWindowCloseCallback(this->window, this->window_close_callback);
+			glfwSetErrorCallback(this->window_error_callback);
+		 
+			glfwMakeContextCurrent(this->window);
+			gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
+			glfwSwapInterval(1);
+			
+			//imgui
+			IMGUI_CHECKVERSION();
+			ImGui::CreateContext();
+			ImGuiIO& io=ImGui::GetIO();
+			io.IniFilename=NULL;
+			
+			ImGui_ImplGlfw_InitForOpenGL(this->window,true);
+			ImGui_ImplOpenGL3_Init();
+			
+			ImGui::GetStyle().FontScaleDpi=fontDPI;
+			
+			//display
+			
 			this->p_CRTout=new CRTRenderer(this->window,&(this->PARAMETERS));
-			this->keyboardIndicator=new KeyboardIndicator();
 			
 			this->Notification.notify(4,ImVec4(0,1,1,1));
+			
+			this->keyboardIndicator.Init();
 			
 			//audio
 			//see https://github.com/mackron/miniaudio/discussions/1084
@@ -277,6 +283,7 @@ class M12Window{
 			}
 		}
 		~M12Window(){
+			
 			//save config
 			if (this->JSONConfig!=NULL) cJSON_Delete(this->JSONConfig);
 			
@@ -332,6 +339,7 @@ class M12Window{
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Other");
 				if (JSONSubconfig2!=NULL){
 					if (this->PARAMETERS.io.other.os_rtc!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"os rtc",this->PARAMETERS.io.other.os_rtc->load(std::memory_order_relaxed));
+					if (this->PARAMETERS.io.other.auto_start!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"auto start",this->PARAMETERS.io.other.auto_start->load(std::memory_order_relaxed));
 				}
 			}
 			char* configString=cJSON_Print(JSONConfigOut);
@@ -368,7 +376,6 @@ class M12Window{
 			//emulation screen
 			delete this->p_CRTout;
 			//indicators
-			delete this->keyboardIndicator;
 			//printer output
 			if (this->PARAMETERS.io.peri.printer.last_print!=NULL){
 				free(this->PARAMETERS.io.peri.printer.last_print);
@@ -473,6 +480,19 @@ class M12Window{
 							this->AC.bzf=(BuzzerFilter*)ms.p;
 							this->AC.bzf->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
 							break;
+						case AUTO_START_MODULE:
+							this->PARAMETERS.io.other.auto_start=&(((SimplifiedMinitelNetworkAppAutoStart*)ms.p)->autoStart);
+							{
+								if (this->JSONConfig!=NULL){
+									cJSON* json_o=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"Other");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"auto start");
+									if (cJSON_IsBool(json_o)){
+										this->PARAMETERS.io.other.auto_start->store(cJSON_IsTrue(json_o),std::memory_order_relaxed);
+									}
+								}
+							}
+							break;
 						case PRINTER:
 							this->PARAMETERS.io.peri.printer.p_activated=&(((SimplifiedMinitelNetworkAppPrinter*)ms.p)->activated);
 							this->PARAMETERS.io.peri.printer.p_fr=&(((SimplifiedMinitelNetworkAppPrinter*)ms.p)->fr);
@@ -542,7 +562,8 @@ class M12Window{
 							}
 							break;
 						case KEYBOARD:
-							this->keyboardIndicator->setKeyboard((Keyboard*)ms.p);
+							this->keyboardIndicator.setKeyboard((Keyboard*)ms.p);
+							this->keyboardInput.setKeyboard((Keyboard*)ms.p);
 							break;
 						case NOTIFICATION:
 							this->Notification.notify((const char*)ms.p,true);
@@ -619,6 +640,8 @@ class M12Window{
 				ImGui_ImplOpenGL3_NewFrame();
 				ImGui_ImplGlfw_NewFrame();
 				ImGui::NewFrame();
+				ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Tab, ImGuiInputFlags_RouteGlobal);//disable ImGui shortcut that could interfer
+				ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Tab, ImGuiInputFlags_RouteGlobal);
 				//ImGui::ShowDemoWindow(NULL);
 				if (this->PARAMETERS.io.peri.printer.show) PrinterOutput(this->window,&(this->Notification),&(this->PARAMETERS.io.peri.printer));
 				if (this->PARAMETERS.imgui.show_menu) this->mainMenuWindow();
@@ -630,7 +653,11 @@ class M12Window{
 				if (this->PARAMETERS.debug.vreg.show) regTS9347Window(&(this->PARAMETERS.debug.vreg));
 				if (this->PARAMETERS.debug.mreg.show) regTS7514Window(&(this->PARAMETERS.debug.mreg));
 				this->Notification.notification_window();
-				this->keyboardIndicator->window();
+				this->keyboardIndicator.window();
+				if (this->PARAMETERS.io.keyboard.show_teletel_keys) this->keyboardInput.KeyboardTeletelWindow();
+				if (this->PARAMETERS.io.keyboard.show_phone_keys) this->keyboardInput.KeyboardPhoneWindow();
+				if (this->PARAMETERS.io.keyboard.show_azerty_keys) this->keyboardInput.KeyboardAzertyWindow();
+				this->menuPopup();
 				
 				//render frame emulator
 				this->p_CRTout->render();
@@ -652,7 +679,8 @@ class M12Window{
 		ROMSelector ROMS=ROMSelector("./rom/");
 		NotificationServer Notification;
 		CRTRenderer* p_CRTout;
-		KeyboardIndicator* keyboardIndicator;
+		KeyboardIndicator keyboardIndicator;
+		KeyboardInput keyboardInput;
 		Mailbox* p_mb_circuit;
 		Mailbox* p_mb_video;
 		
@@ -660,6 +688,25 @@ class M12Window{
 		ma_device_config audioDeviceConfig;
 		ma_device audioDevice;
 		cJSON* JSONConfig=NULL;
+		
+		void menuPopup(){
+			if (ImGui::IsMouseClicked(ImGuiMouseButton_Right,false)){
+				ImGuiIO& io=ImGui::GetIO();
+				if (!io.WantCaptureMouse)ImGui::OpenPopup("menu_popup");
+			}
+			if (ImGui::BeginPopup("menu_popup")){
+				ImGui::SeparatorText("Menu");
+				if(ImGui::Button("Ouvrir le menu",ImVec2(-1,0))){
+					this->PARAMETERS.imgui.show_menu=true;
+					ImGui::CloseCurrentPopup();
+				}
+				ImGui::SeparatorText("Clavier virtuel");
+				ImGui::Checkbox("Touches télétel",&(this->PARAMETERS.io.keyboard.show_teletel_keys));
+				ImGui::Checkbox("Touches téléphoniques",&(this->PARAMETERS.io.keyboard.show_phone_keys));
+				ImGui::Checkbox("Touches azerty",&(this->PARAMETERS.io.keyboard.show_azerty_keys));
+				ImGui::EndPopup();
+			}
+		}
 		
 		void mainMenuWindow(){
 			ImVec2 center = ImGui::GetMainViewport()->GetCenter();
@@ -671,7 +718,8 @@ class M12Window{
 			ImGuiWindowFlags iwf=ImGuiWindowFlags_NoCollapse|ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoMove;
 			if (this->PARAMETERS.io.crt.display_effects) iwf|=ImGuiWindowFlags_NoBackground;
 			ImGui::Begin("Menu",&(this->PARAMETERS.imgui.show_menu),iwf);
-			ImGui::Text("Appuyez sur F1 pour afficher/cacher le menu");
+			ImGui::Text("Appuyez sur F1 pour afficher/cacher le menu.");
+			ImGui::Text("Faites un clique droit pour afficher le menu rapide.");
 			if (ImGui::BeginTabBar("MenuTabBar", ImGuiTabBarFlags_None)){
 				
 				if (ImGui::BeginTabItem("Emulation")){
@@ -747,29 +795,32 @@ class M12Window{
 						ImGui::Unindent();
 					}
 					ImGui::Text("Les touches différentes du minitel sont les suivantes:");
-					if (ImGui::BeginTable("keyTable",3,ImGuiTableFlags_Borders|ImGuiTableFlags_SizingFixedSame|ImGuiTableFlags_NoHostExtendX,ImVec2(0, 0))){
+					if (ImGui::BeginTable("keyTable",2,ImGuiTableFlags_Borders|ImGuiTableFlags_SizingFixedSame|ImGuiTableFlags_NoHostExtendX,ImVec2(0, 0))){
 						ImGui::TableSetupColumn("Clavier", ImGuiTableColumnFlags_None);
-						ImGui::TableSetupColumn("Pavé numérique", ImGuiTableColumnFlags_None);
 						ImGui::TableSetupColumn("Correspondance", ImGuiTableColumnFlags_None);
 						ImGui::TableHeadersRow();
 						
-						const char *key1[17]={"_","Escape","Alt","²","Tab","=","Backspace","F2","F3","F4","F5","F6","F7","F8","F9","*","ù"};
-						const char *key2[17]={"","","","","","","","","","","","","","","","*","/"};
-						const char *key3[17]={"!","Esc","Fnct","\'On/Off\'","Connex/Fin","Mem","\'Haut Parleur\'","Sommaire","Guide","Annulation","Correction","Retour","Suite","Répétition","Envoi","*","#"};
-						for (int i=0;i<17;i++){
+						const char *key1[13]={"Escape","Alt","²","Tab","Backspace","F2","F3","F4","F5","F6","F7","F8","F9"};
+						const char *key2[13]={"Esc","Fnct","\'On/Off\'","Connex/Fin","Mem","Sommaire","Guide","Annulation","Correction","Retour","Suite","Répétition","Envoi"};
+						for (int i=0;i<13;i++){
 							ImGui::TableNextRow();
 							ImGui::TableSetColumnIndex(0);
 							ImGui::Text(key1[i]);
 							ImGui::TableSetColumnIndex(1);
 							ImGui::Text(key2[i]);
-							ImGui::TableSetColumnIndex(2);
-							ImGui::Text(key3[i]);
 						}
 						
 						ImGui::EndTable();
 					}
 					ImGui::Text("F1 permet d'afficher ce menu.");
 					ImGui::Text("F10 permet de faire une capture d'écran.");
+					
+					ImGui::Text("Clavier virtuel:");
+					ImGui::Indent();
+					ImGui::Checkbox("Afficher les touches télétel",&(this->PARAMETERS.io.keyboard.show_teletel_keys));
+					ImGui::Checkbox("Afficher les touches téléphoniques",&(this->PARAMETERS.io.keyboard.show_phone_keys));
+					ImGui::Checkbox("Afficher les touches azerty",&(this->PARAMETERS.io.keyboard.show_azerty_keys));
+					ImGui::Unindent();
 					
 					ImGui::SeparatorText("Prise péri-informatique");
 					
@@ -874,7 +925,13 @@ class M12Window{
 						this->PARAMETERS.io.other.os_rtc->store(os_rtc,std::memory_order_relaxed);
 						ImGui::SameLine();
 						ImGui::TextDisabled("(hack)");
-						
+					}
+					if (this->PARAMETERS.io.other.auto_start!=NULL){
+						bool auto_start=this->PARAMETERS.io.other.auto_start->load(std::memory_order_relaxed);
+						ImGui::Checkbox("Allumer le minitel au lancement de l'émulation",&(auto_start));
+						this->PARAMETERS.io.other.auto_start->store(auto_start,std::memory_order_relaxed);
+						ImGui::SameLine();
+						ImGui::TextDisabled("(hack)");
 					}
 					
 					ImGui::EndChild();
@@ -1020,10 +1077,15 @@ class M12Window{
 			//if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(window, GLFW_TRUE);
 			if (key==GLFW_KEY_F1&&action==GLFW_PRESS) p_M12Window->PARAMETERS.imgui.show_menu=!p_M12Window->PARAMETERS.imgui.show_menu;
 			if (key==GLFW_KEY_F10&&action==GLFW_PRESS) p_M12Window->takeScreenshot();
+			if (key==GLFW_KEY_F11&&action==GLFW_PRESS){
+				thread_message ms;
+				ms.cmd=SPECIAL;
+				p_M12Window->p_mb_circuit->send(&ms);
+			}
 			ImGuiIO& io=ImGui::GetIO();
-			KeyboardInput(p_M12Window->p_mb_circuit,!io.WantCaptureKeyboard,scancode,action,mods);
-			printf("C %08X %08X %08X\n",scancode,action,mods);
+			p_M12Window->keyboardInput.InputTranslate(!io.WantCaptureKeyboard,scancode,action,mods);
 			p_M12Window->PARAMETERS.io.keyboard.num_lock=(bool)(mods&GLFW_MOD_NUM_LOCK);
+			//printf("scancode %i %s\n",scancode,glfwGetKeyName(GLFW_KEY_UNKNOWN,scancode));
 		}
 		/*static void char_callback(GLFWwindow* window, unsigned int codepoint){
 			printf("UTF-32 %08X\n",codepoint);
@@ -1032,7 +1094,7 @@ class M12Window{
 			audioContext* AC=(audioContext*)pDevice->pUserData;
 			
 			if (AC->pCLKs!=NULL){
-				AC->pCLKs->requestSamples(frameCount,AC->maxSamplesRemaining);//TODO: 512->buffer length / windows limitation in shared mode (480 @48000Hz) /limit max->800 @48000 (screen update @~60fps)
+				AC->pCLKs->requestSamples(frameCount,AC->maxSamplesRemaining);
 			}
 			
 			if (AC->ab!=NULL){

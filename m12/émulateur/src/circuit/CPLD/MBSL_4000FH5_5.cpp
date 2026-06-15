@@ -67,7 +67,11 @@ void MBSL_4000FH5_5::nCSChangeIn(bool b){
 void MBSL_4000FH5_5::WATCHDOGChangeIn(bool b){
 	//if ((bool)(this->STATUS&0x10)) 
 		this->sendRST(b);
-	if (this->WATCHDOG&&!b) this->STATUS&=~0x10;
+	if ((!this->WATCHDOG)&&b){
+		this->STATUS&=~0x10;
+		this->IO=0;//TODO: fix/guess
+		this->sendPIO(this->IO);
+	}
 	this->WATCHDOG=b;
 }
 

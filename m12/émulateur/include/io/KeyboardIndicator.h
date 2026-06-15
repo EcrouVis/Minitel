@@ -7,7 +7,7 @@
 #include "FontAwesomeIcon.h"
 class KeyboardIndicator{
 	public:
-		KeyboardIndicator(){
+		void Init(){
 			ImGuiIO& io=ImGui::GetIO();
 			ImFontConfig config;
 			this->font = io.Fonts->AddFontDefault(&config);

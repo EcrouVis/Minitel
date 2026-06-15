@@ -72,7 +72,7 @@ struct P_ImGui{
 	bool show_menu=true;
 	bool idle=true;
 	int window_position[2]={0};
-	int window_size[2]={0};
+	int window_size[2]={640,480};
 	
 };
 struct P_Emulation{
@@ -80,6 +80,9 @@ struct P_Emulation{
 };
 struct P_Keyboard{
 	bool num_lock=false;
+	bool show_teletel_keys=false;
+	bool show_phone_keys=false;
+	bool show_azerty_keys=false;
 };
 struct P_Peri_Local_Websocket{
 	std::atomic_bool* p_plugged=NULL;
@@ -126,6 +129,7 @@ struct P_CRT{
 };
 struct P_Other{
 	std::atomic_bool* os_rtc=NULL;
+	std::atomic_bool* auto_start=NULL;
 };
 struct P_IO{
 	P_Keyboard keyboard;

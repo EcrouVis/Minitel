@@ -65,8 +65,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	SimplifiedMinitelNetwork smn;
 	SimplifiedMinitelNetworkAppLocalWebsocket smnalw;
 	smn.registerApp(&smnalw);
-	SimplifiedMinitelNetworkAppPrinter smnnap;
-	smn.registerApp(&smnnap);
+	SimplifiedMinitelNetworkAppPrinter smnap;
+	smn.registerApp(&smnap);
+	SimplifiedMinitelNetworkAppAutoStart smnas;
+	smn.registerApp(&smnas);
 	
 	CRTBuffer crtb;
 	AudioBuffer ab;
@@ -254,13 +256,13 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		uc.ResetChangeIn(b);
 		static bool bp=true;
 		if ((!b)&&bp){
-			printf("reboot\n");
+			//printf("reboot\n");
 			thread_message ms_p_notif;
 			ms_p_notif.cmd=NOTIFICATION_REBOOT;
 			p_mb_video->send(&ms_p_notif);
 		}
 		else if((!bp)&&b){//save ram state
-			printf("power down\n");
+			//printf("power down\n");
 			static unsigned char eram_cpy[ERAM_SIZE];
 			eram.copy((unsigned char*)eram_cpy);
 			writeM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
@@ -342,7 +344,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	phoneLine.subscribeWireLine([&rtcn,&kb](unsigned short d){rtcn.phoneLineChangeIn(d);kb.phoneLineChangeIn(d);});
 	phoneLine.subscribeWireModem([&modem](unsigned short d){modem.RA2ChangeIn(d);});
 	
-	smnnap.subscribePrintFinished([p_mb_video](const char* p){
+	smnap.subscribePrintFinished([p_mb_video](const char* p){
 		char* pc=(char*)malloc(strlen(p)*sizeof(char)+1);
 		strcpy(pc,p);
 		thread_message ms_p_notif;
@@ -571,18 +573,14 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 					//wait RST signal before saving the ram
 					modem.Reset();
 					wt.PWRChangeIn(false);
-					crtb.CRTPowerChangeIn(false);
 					//TODO: reset keyboard
 					break;
 				case EMU_NEXT_STEP:
 					pause_emu=false;
 					break;
-				case KEYBOARD_STATE_UPDATE:
+				case SPECIAL:
 				{
-					keyboard_message* kbm=(keyboard_message*)ms.p;
-					if (kbm->scancode==0x53) rtcn.requestPhoneLine((RTCService*)&rtcmp);
-					kb.KeyboardChangeIn(kbm);
-					delete kbm;
+					rtcn.requestPhoneLine((RTCService*)&rtcmp);
 					break;
 				}
 				default:
@@ -695,8 +693,12 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	ms.cmd=AUDIO_BUFFER;
 	p_mb_video->send(&ms);
 	
-	ms.p=(void*)&smnnap;
+	ms.p=(void*)&smnap;
 	ms.cmd=PRINTER;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&smnas;
+	ms.cmd=AUTO_START_MODULE;
 	p_mb_video->send(&ms);
 	
 	

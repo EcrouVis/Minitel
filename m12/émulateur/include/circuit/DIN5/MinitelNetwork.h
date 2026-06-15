@@ -209,6 +209,12 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			CMD_FINISHED=0x02
 		};
 		
+		virtual void PWRCallback(bool b) final override{
+			if (this->PWR&&!b){
+				this->forceReset();
+			}
+			this->PWR=b;
+		};
 		virtual void PTCallback(bool b) override final{
 			this->PTin=b;
 		}
@@ -304,6 +310,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		std::vector<unsigned char> qRx;
 		std::vector<unsigned char> CMDBuffer;
 		unsigned char subState=0;
+		bool PWR=false;
 		
 		struct {
 			std::vector<unsigned char> wsBuffer;
@@ -322,6 +329,17 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			
 			unsigned char currentLine=0;
 		} parameters;
+		
+		void forceReset(){
+			std::queue<unsigned char> empty;
+			std::swap(this->qTx,empty);
+			this->qRx.clear();
+			this->CMDBuffer.clear();
+			this->subState=0;
+			this->currentState=this->RESTING;
+			this->disconnect();
+			this->PTout=true;
+		}
 		
 		void addCharWsBuffer(){
 			if (this->parameters.wsSplit.size()==29*2) this->print(bell,sizeof(bell)/sizeof(bell[0]));
@@ -1621,6 +1639,11 @@ class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
 			CMD_FINISHED=0x02
 		};
 		
+		virtual void PWRCallback(bool b) override final{
+			if (this->PWR&&!b) this->PTout=true;
+			this->PWR=b;
+		}
+		
 		virtual void PTCallback(bool b) override final{
 			this->PTin=b;
 		}
@@ -1698,6 +1721,7 @@ class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
 		
 	private:
 		bool PTin=false;
+		bool PWR=false;
 		std::vector<unsigned char> CMDBuffer;
 		std::vector<unsigned char> PrintBuffer;
 		std::queue<unsigned char> TxBuffer;
@@ -1887,6 +1911,69 @@ class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
 			}
 		}
 		
+};
+class SimplifiedMinitelNetworkAppAutoStart: public SimplifiedMinitelNetworkApp{
+	public:
+		std::atomic_bool autoStart=false;
+	
+		virtual void CLKCallback() final override{
+			if ((bool)this->stop_delay_cnt){
+				this->stop_delay_cnt--;
+				if (!(bool)this->stop_delay_cnt){
+					this->PTout=true;
+				}
+			}
+		}
+		virtual void RxCallback(unsigned char d) final override{
+			if (this->starting&&this->PTin){
+				if (d==0x72&&this->prevRx==0x93){
+					this->transmission_index=0;
+					this->starting=false;
+					this->PTout=false;
+				}
+				this->prevRx=d;
+			}
+		}
+		virtual void TxQueueEmptyCallback() final override{
+			if (this->TxEmpty()) this->stop_delay_cnt=this->stop_delay_50ms;
+		}
+		virtual void PTCallback(bool b) final override{
+			if (b&&!this->PTin) this->prevRx=0;
+			this->PTin=b;
+		}
+		virtual void PWRCallback(bool b) final override{
+			if (b&&!this->PWR&&this->autoStart.load(std::memory_order_relaxed)){
+				this->starting=true;
+				this->PTout=true;
+				this->stop_delay_cnt=0;
+			}
+			this->PWR=b;
+		};
+		virtual bool TxEmpty() final override{
+			return this->transmission_index>=sizeof(this->cmd)/sizeof(this->cmd[0]);
+		}
+		virtual unsigned char TxPop() final override{
+			if (this->TxEmpty()){
+				return 0;
+			}
+			else{
+				return this->cmd[this->transmission_index++];
+			}
+		}
+	private:
+		//bool PTout=true;
+		bool PTin=false;
+		bool PWR=false;
+		bool starting=false;
+		
+		unsigned char prevRx=0;
+		
+		constexpr static unsigned char cmd[]={0x1B,0xBB,0x6A,0xD8,0x41};
+		
+		unsigned char transmission_index=0;//ensure don't exit before sending cmd
+		
+		constexpr static unsigned short stop_delay_50ms=480;
+		unsigned short stop_delay_cnt=0;
 };
 
 #endif

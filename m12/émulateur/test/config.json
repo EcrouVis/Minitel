@@ -35,7 +35,8 @@
 			"rgb":	false
 		},
 		"Other":	{
-			"os rtc":	false
+			"os rtc":	false,
+			"auto start":	false
 		}
 	}
 }
