@@ -1,0 +1,52 @@
+Envoi d'un message depuis un minitel 12 Philips:
+
+Connexion au service:
+	Connexion du minitel au serveur.
+	Le serveur demande la procédure de correction d'erreurs (optionnel).
+	Le serveur envoi une Indication de Ressource Disponnible (IRD) au minitel pour une messagerie 40 colonnes. 
+	Le minitel fait une demande de connexion (DC) à la messagerie du serveur.
+	Le serveur acquite (AC) la demande de connexion.
+	Le minitel fait la procédure de retournement du modem (optionnel).
+	Le minitel demande la procédure de correction d'erreurs (optionnel).
+
+Envoi des données (suivant la norme ETS 300 075 / propre au minitel 12 philips / peut être différent pour d'autres minitels):
+	Envoi du DDU D-Set mode au serveur avec T-Associate (avec le mode C, le nom d'application "M", le noyeau basique et la demande de confirmation demandé).
+	Le serveur envoi T-Response positive pour acquiter le message.
+	Si il n'y a pas d'acquitement au bout d'un certain temps le minitel envoi D-U abort et recommence le cycle quelques fois avant d'arrêter
+	Envoi des TDUs T-Write contenant le message (avec l'encodage en mode 4).
+	Le serveur acquite les messages avec T-Response positive.
+	Si il y a un problème le serveur peut envoyer T-Read-restart pour demander la répétition du message.
+	Le serveur peut aussi envoyer T-Response negative (mais je n'ai pas encore testé ce cas).
+	A la fin, le minitel envoi D-U abort.
+
+Déconnexion du service:
+	Le minitel fait une demande de libération de connexion (DLC) à la messagerie du serveur.
+
+
+
+Format des messages:
+
+1B 20 20 31
+	1B 20 21 31
+		1B 20 22 31
+			nom de l'expéditeur
+		1B 21 20 31
+		1B 20 23 31
+			numéro de téléphone de l'expéditeur (format chaîne de caractères)
+		1B 21 20 31
+	1B 21 20 31
+	1B 20 24 31
+		1B 20 22 31
+			nom du destinataire
+		1B 21 20 31
+		1B 20 23 31
+			numéro d'abonné du destinataire (format chaîne de caractères)
+		1B 21 20 31
+	1B 21 20 31
+	1B 20 25 31
+		objet du message
+	1B 21 20 31
+	1B 20 26 31
+		message
+	1B 21 20 31
+1B 21 20 31
