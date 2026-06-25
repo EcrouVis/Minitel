@@ -3,7 +3,9 @@
 
 #include <atomic>
 #include <cmath>
-
+#ifndef M_E
+#define M_E  2.7182818284590452354
+#endif
 #include "miniaudio/miniaudio.h"
 
 class AudioBuffer{

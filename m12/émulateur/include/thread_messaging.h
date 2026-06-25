@@ -9,44 +9,46 @@ struct thread_message{
 	void* p;
 };
 
-const int ERAM=1;
-const int NOTIFICATION=3;
-const int NOTIFICATION_BUZZER=4;
-const int NOTIFICATION_REBOOT=15;
-const int NOTIFICATION_RED=5;
-const int NOTIFICATION_GREEN=6;
-const int NOTIFICATION_BLUE=7;
-const int NOTIFICATION_ORANGE=8;
-const int NOTIFICATION_YELLOW=9;
-const int NOTIFICATION_CYAN=10;
-const int NOTIFICATION_PURPLE=11;
-const int EROM=2;
-const int UC=12;
-const int VC=13;
-const int CPLD=14;
-const int KEYBOARD=18;
-const int MODEM=19;
-const int CLOCK=20;
-const int EMULATOR_READY=21;
-//const int BUZZER_NOTIFICATION_CONTROL=22;
-//const int DIN5_INTERFACE_LOCAL_WEBSOCKET=23;
-const int CRT_BUFFER=24;
-const int AUDIO_BUFFER=25;
-const int PRINTER=27;
-const int PRINT_FINISHED=28;
-const int SPEAKER_FILTER=29;
-const int BUZZER_FILTER=30;
-const int AUTO_START_MODULE=31;
+constexpr int ERAM=1;
+constexpr int NOTIFICATION=3;
+constexpr int NOTIFICATION_BUZZER=4;
+constexpr int NOTIFICATION_REBOOT=15;
+constexpr int NOTIFICATION_RED=5;
+constexpr int NOTIFICATION_GREEN=6;
+constexpr int NOTIFICATION_BLUE=7;
+constexpr int NOTIFICATION_ORANGE=8;
+constexpr int NOTIFICATION_YELLOW=9;
+constexpr int NOTIFICATION_CYAN=10;
+constexpr int NOTIFICATION_PURPLE=11;
+constexpr int EROM=2;
+constexpr int UC=12;
+constexpr int VC=13;
+constexpr int CPLD=14;
+constexpr int KEYBOARD=18;
+constexpr int MODEM=19;
+constexpr int CLOCK=20;
+constexpr int EMULATOR_READY=21;
+//constexpr int BUZZER_NOTIFICATION_CONTROL=22;
+//constexpr int DIN5_INTERFACE_LOCAL_WEBSOCKET=23;
+constexpr int CRT_BUFFER=24;
+constexpr int AUDIO_BUFFER=25;
+constexpr int PRINTER=27;
+constexpr int PRINT_FINISHED=28;
+constexpr int SPEAKER_FILTER=29;
+constexpr int BUZZER_FILTER=30;
+constexpr int AUTO_START_MODULE=31;
+constexpr int WEBSOCKET_DIN=32;
 
-/*const int DUMP_ERAM=1;
-const int LOAD_ERAM=1<<1;
-const int LOAD_EROM=1<<2;*/
-const int EMU_ON=1<<3;
-const int EMU_OFF=1<<4;
-const int EMU_NEXT_STEP=1<<5;
-const int SPECIAL=1<<6;//for testing purpose
+/*constexpr int DUMP_ERAM=1;
+constexpr int LOAD_ERAM=1<<1;
+constexpr int LOAD_EROM=1<<2;*/
+constexpr int EMU_ON=1<<3;
+constexpr int EMU_OFF=1<<4;
+constexpr int EMU_NEXT_STEP=1<<5;
+constexpr int SPECIAL=1<<6;//for testing purpose
+constexpr int EMU_SHUTDOWN=1<<7;
 /*
-const int RESTART;*/
+constexpr int RESTART;*/
 
 
 class Mailbox{

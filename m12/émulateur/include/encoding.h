@@ -366,4 +366,8 @@ class cmdSplitterVideotex{
 		std::vector<std::vector<unsigned char>*> cmdnestq;
 };
 
+std::vector<unsigned char>* DProtocolTranslationMode4Encode(const std::vector<unsigned char>* data,bool C0=false,bool space=false);
+
+std::vector<unsigned char>* DProtocolTranslationMode4Decode(const std::vector<unsigned char>* edata);
+
 #endif

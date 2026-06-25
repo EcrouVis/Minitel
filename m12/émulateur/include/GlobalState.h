@@ -5,7 +5,7 @@
 #include <mutex>
 
 struct GlobalState{
-	std::atomic_bool shutdown=false;
+	//std::atomic_bool shutdown=false;
 	std::atomic_bool minitelOn=false;
 	std::atomic_bool stepByStep=false;
 	

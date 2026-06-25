@@ -666,13 +666,13 @@ class KeyboardInput{
 			if(ImGui::IsItemActivated()) this->setKey(0x35,true);
 			if(ImGui::IsItemDeactivated()) this->setKey(0x35,false);
 			
-			activated=this->getKey(0x33);
+			activated=this->getKey(0x45);
 			if (activated) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
 			if (shift) ImGui::Button("Impr.",ImVec2(bs,0));
 			else ImGui::Button("(_)",ImVec2(bs,0));
 			if (activated) ImGui::PopStyleColor();
-			if(ImGui::IsItemActivated()) this->setKey(0x33,true);
-			if(ImGui::IsItemDeactivated()) this->setKey(0x33,false);
+			if(ImGui::IsItemActivated()) this->setKey(0x45,true);
+			if(ImGui::IsItemDeactivated()) this->setKey(0x45,false);
 			
 			ImGui::SameLine();
 			
@@ -685,12 +685,12 @@ class KeyboardInput{
 			
 			ImGui::SameLine();
 			
-			activated=this->getKey(0x45);
+			activated=this->getKey(0x33);
 			if (activated) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
 			ImGui::Button("[V]>",ImVec2(bs,0));
 			if (activated) ImGui::PopStyleColor();
-			if(ImGui::IsItemActivated()) this->setKey(0x45,true);
-			if(ImGui::IsItemDeactivated()) this->setKey(0x45,false);
+			if(ImGui::IsItemActivated()) this->setKey(0x33,true);
+			if(ImGui::IsItemDeactivated()) this->setKey(0x33,false);
 			
 			activated=this->getKey(0x23);
 			if (activated) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
@@ -909,6 +909,40 @@ class KeyboardInput{
 									
 								case 9://_
 									kbs.key=0x21;//numpad 3
+									kbs.shift=true;
+									break;
+									
+								//special phone keys
+								case 25://P
+									kbs.key=0x23;//Volume +
+									break;
+									
+								case 39://M
+									kbs.key=0x13;//Volume -
+									break;
+									
+								case 16://A
+									kbs.key=0x45;//appel Annuaire
+									break;
+									
+								case 17://Z
+									kbs.key=0x25;//appel n°51
+									break;
+									
+								case 19://R
+									kbs.key=0x33;//appel Répertoire
+									break;
+									
+								case 48://B
+									kbs.key=0x15;//appel Bis
+									break;
+									
+								case 20://T
+									kbs.key=0x35;//téléphone
+									break;
+									
+								case 23://I
+									kbs.key=0x45;//Impr.
 									kbs.shift=true;
 									break;
 							}

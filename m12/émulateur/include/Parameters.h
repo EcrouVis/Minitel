@@ -71,7 +71,7 @@ struct imguiTS7514REGView{
 struct P_ImGui{
 	bool show_menu=true;
 	bool idle=true;
-	int window_position[2]={0};
+	int window_position[2]={200,200};
 	int window_size[2]={640,480};
 	
 };
@@ -81,15 +81,15 @@ struct P_Emulation{
 struct P_Keyboard{
 	bool num_lock=false;
 	bool show_teletel_keys=false;
+	ImVec2 teletel_keys_window_pos;
 	bool show_phone_keys=false;
+	ImVec2 phone_keys_window_pos;
 	bool show_azerty_keys=false;
+	ImVec2 azerty_keys_window_pos;
+	bool auto_hide_indicator=true;
 };
-struct P_Peri_Local_Websocket{
-	std::atomic_bool* p_plugged=NULL;
-	std::atomic_bool* p_power=NULL;
-	std::atomic<int>* p_baudrate_in=NULL;
-	std::atomic<int>* p_baudrate_out=NULL;
-	const char* baudrate_name[4] = { "300", "1200", "4800", "9600"};
+struct P_Peri_Websocket{
+	void* p_peri=NULL;
 };
 struct P_Peri_Printer{
 	std::atomic_bool* p_activated=NULL;
@@ -100,7 +100,7 @@ struct P_Peri_Printer{
 struct P_Peri{
 	//bool plugged=false;
 	bool notify_state=true;
-	//P_Peri_Local_Websocket peri_lws;
+	P_Peri_Websocket websocket;
 	P_Peri_Printer printer;
 };
 struct P_Modem{
@@ -116,17 +116,19 @@ struct P_Speaker{
 	float volume=100.;
 };
 struct P_CRT{
-	bool rgb=false;
+	bool rgb;
+	float black_level;
+	float curvature;
+	float decay;
+	bool scanline;
 	float width_factor=2./3.;
-	float black_level=12.5;
-	float curvature=0.225;
-	float decay=1./3.;
-	bool scanline=true;
 	const float width=480;
 	const float height=250;
 	bool display_effects=false;
 	bool error_loading_texture=false;
 };
+constexpr P_CRT CRT_retro_preset{false,12.5,0.225,1./3.,true};
+constexpr P_CRT CRT_modern_preset{true,0.,0.,0.,false};
 struct P_Other{
 	std::atomic_bool* os_rtc=NULL;
 	std::atomic_bool* auto_start=NULL;
@@ -137,7 +139,7 @@ struct P_IO{
 	P_Modem modem;
 	P_Buzzer buzzer;
 	P_Speaker speaker;
-	P_CRT crt;
+	P_CRT crt=CRT_retro_preset;
 	P_Other other;
 };
 struct P_Debug{

@@ -131,3 +131,84 @@ char* videotex_to_utf8(std::vector<unsigned char>* vdt, bool G1){//SEP/REP/US/ES
 	cstr[str.size()]=0;
 	return cstr;
 }
+
+std::vector<unsigned char>* DProtocolTranslationMode4Encode(const std::vector<unsigned char>* data,bool C0,bool space){
+	std::vector<unsigned char>* edata=new std::vector<unsigned char>;
+	edata->reserve(data->size()*2);
+	for (size_t i=0;i<data->size();i++){
+		switch ((*data)[i]){
+			case 0x00 ... 0x1E:
+				if (C0){
+					edata->push_back(0x7E);
+					edata->push_back((*data)[i]+0x50);
+				}
+				else edata->push_back((*data)[i]);
+				break;
+			case 0x1F:
+				edata->push_back(0x7E);
+				edata->push_back(0x6F);
+				break;
+			case 0x20:
+				if (space){
+					edata->push_back(0x7D);
+				}
+				else edata->push_back((*data)[i]);
+				break;
+			case 0x21 ... 0x7A:
+				edata->push_back((*data)[i]);
+				break;
+			case 0x7B ... 0xD0:
+				edata->push_back(0x7B);
+				edata->push_back((*data)[i]-0x58);
+				break;
+			case 0xD1 ... 0xFF:
+				edata->push_back(0x7E);
+				edata->push_back((*data)[i]+0x50);//overflow
+				break;
+		}
+	}
+	return edata;
+}
+
+std::vector<unsigned char>* DProtocolTranslationMode4Decode(const std::vector<unsigned char>* edata){
+	std::vector<unsigned char>* data=new std::vector<unsigned char>;
+	data->reserve(edata->size());
+	for (size_t i=0;i<edata->size();i++){
+		switch ((*edata)[i]){
+			case 0x00 ... 0x1E:
+			case 0x20 ... 0x7A:
+				data->push_back((*edata)[i]);
+				break;
+			case 0x1F:
+			case 0x7C:
+			case 0x7F:
+				delete data;
+				return NULL;
+			case 0x7B:
+				i++;
+				if (i<edata->size()&&(*edata)[i]>=0x23&&(*edata)[i]<=0x78){
+					data->push_back((*edata)[i]+0x58);
+					
+				}
+				else{
+					delete data;
+					return NULL;
+				}
+				break;
+			case 0x7D:
+				data->push_back(0x20);
+				break;
+			case 0x7E:
+				i++;
+				if (i<edata->size()&&(*edata)[i]>=0x21&&(*edata)[i]<=0x6F){
+					data->push_back((*edata)[i]-0x50);
+				}
+				else{
+					delete data;
+					return NULL;
+				}
+				break;
+		}
+	}
+	return data;
+}

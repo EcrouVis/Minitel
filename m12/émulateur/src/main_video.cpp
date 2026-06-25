@@ -20,6 +20,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
+#include "icon/M12_icon_square.png.h"
+
 #include <filesystem>
 #include <ctime>
 #include <cstdlib>
@@ -135,8 +137,14 @@ class M12Window{
 					//IO
 					subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
 					
+					//Keyboard
+					cJSON* subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"Keyboard");
+					
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"auto hide indicator");
+					if (cJSON_IsBool(c_param)) this->PARAMETERS.io.keyboard.auto_hide_indicator=cJSON_IsTrue(c_param);
+					
 					//Buzzer
-					cJSON* subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"Buzzer");
+					subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"Buzzer");
 					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"notification");
 					if (cJSON_IsBool(c_param)){
 						this->PARAMETERS.io.buzzer.notify=cJSON_IsTrue(c_param);
@@ -213,6 +221,8 @@ class M12Window{
 			glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 			glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 			glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+			//glfwWindowHint(GLFW_MAXIMIZED , GL_TRUE);
+			//glfwWindowHint(GLFW_AUTO_ICONIFY , GL_FALSE);
 		 
 			this->window = glfwCreateWindow(this->PARAMETERS.imgui.window_size[0], this->PARAMETERS.imgui.window_size[1], this->PARAMETERS.info.title, fullscreen?glfwGetPrimaryMonitor():NULL, NULL);
 			//this->window = glfwCreateWindow(640, 480, this->PARAMETERS.info.title, NULL, NULL);
@@ -221,8 +231,14 @@ class M12Window{
 				glfwTerminate();
 				exit(EXIT_FAILURE);
 			}
-		 
-			glfwSetInputMode(window, GLFW_LOCK_KEY_MODS, GLFW_TRUE);
+			
+			GLFWimage images[1]; 
+			images[0].pixels = stbi_load_from_memory(M12_icon_square_png,sizeof(M12_icon_square_png), &images[0].width, &images[0].height, 0, 4); 
+			glfwSetWindowIcon(this->window, 1, images);
+			glfwPollEvents();//fix for https://github.com/glfw/glfw/issues/2753
+			stbi_image_free(images[0].pixels);
+			
+			glfwSetInputMode(this->window, GLFW_LOCK_KEY_MODS, GLFW_TRUE);
 			glfwSetWindowUserPointer(this->window,this);
 			glfwSetKeyCallback(this->window, this->key_callback);
 			//glfwSetCharCallback(this->window, this->char_callback);
@@ -253,6 +269,12 @@ class M12Window{
 			this->keyboardIndicator.Init();
 			
 			//audio
+			
+			if (ma_context_init(NULL, 0, NULL, &(this->miniaudioContext)) != MA_SUCCESS) {
+				printf("Failed to initialize context.\n");
+				exit(-1);
+			}
+			
 			//see https://github.com/mackron/miniaudio/discussions/1084
 			//see https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio
 			this->audioDeviceConfig = ma_device_config_init(ma_device_type_playback);
@@ -271,7 +293,7 @@ class M12Window{
 
 			if (ma_device_init(NULL, &(this->audioDeviceConfig), &(this->audioDevice)) != MA_SUCCESS) {
 				printf("Failed to open playback device.\n");
-				return;
+				exit(-1);
 			}
 
 			printf("Device Name: %s\n", this->audioDevice.playback.name);
@@ -279,7 +301,7 @@ class M12Window{
 			if (ma_device_start(&(this->audioDevice)) != MA_SUCCESS) {
 				printf("Failed to start playback device.\n");
 				ma_device_uninit(&(this->audioDevice));
-				return;
+				exit(-1);
 			}
 		}
 		~M12Window(){
@@ -290,6 +312,7 @@ class M12Window{
 			cJSON* JSONConfigOut = cJSON_CreateObject();
 			cJSON* JSONSubconfig1=cJSON_AddObjectToObject(JSONConfigOut,"UI");
 			cJSON* JSONSubconfig2=NULL;
+			cJSON* JSONSubconfig3=NULL;
 			if (JSONSubconfig1!=NULL){
 				cJSON_AddBoolToObject(JSONSubconfig1,"show menu",this->PARAMETERS.imgui.show_menu);
 				cJSON_AddBoolToObject(JSONSubconfig1,"idle",this->PARAMETERS.imgui.idle);
@@ -306,12 +329,31 @@ class M12Window{
 			}
 			JSONSubconfig1=cJSON_AddObjectToObject(JSONConfigOut,"IO");
 			if (JSONSubconfig1!=NULL){
+				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Keyboard");
+				if (JSONSubconfig2!=NULL){
+					cJSON_AddBoolToObject(JSONSubconfig2,"auto hide indicator",this->PARAMETERS.io.keyboard.auto_hide_indicator);
+				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"DIN");
 				if (JSONSubconfig2!=NULL){
-					JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig2,"Printer");
-					if (JSONSubconfig2!=NULL){
-						if (this->PARAMETERS.io.peri.printer.p_activated!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"enabled",this->PARAMETERS.io.peri.printer.p_activated->load(std::memory_order_relaxed));
-						if (this->PARAMETERS.io.peri.printer.p_fr!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"fr",this->PARAMETERS.io.peri.printer.p_fr->load(std::memory_order_relaxed));
+					JSONSubconfig3=cJSON_AddObjectToObject(JSONSubconfig2,"Printer");
+					if (JSONSubconfig3!=NULL){
+						if (this->PARAMETERS.io.peri.printer.p_activated!=NULL) cJSON_AddBoolToObject(JSONSubconfig3,"enabled",this->PARAMETERS.io.peri.printer.p_activated->load(std::memory_order_relaxed));
+						if (this->PARAMETERS.io.peri.printer.p_fr!=NULL) cJSON_AddBoolToObject(JSONSubconfig3,"fr",this->PARAMETERS.io.peri.printer.p_fr->load(std::memory_order_relaxed));
+					}
+					JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig2,"Websocket");
+					if (JSONSubconfig2!=NULL&&this->PARAMETERS.io.peri.websocket.p_peri!=NULL){
+						SimplifiedMinitelNetworkAppLocalWebsocket* pws=(SimplifiedMinitelNetworkAppLocalWebsocket*)this->PARAMETERS.io.peri.websocket.p_peri;
+						char* url=pws->getURL();
+						cJSON_AddStringToObject(JSONSubconfig2,"URL",url);
+						free(url);
+						cJSON_AddNumberToObject(JSONSubconfig2,"baudrate",pws->parameters.baudrate.load(std::memory_order_relaxed));
+						cJSON_AddBoolToObject(JSONSubconfig2,"parity",pws->parameters.parity.load(std::memory_order_relaxed));
+						cJSON_AddNumberToObject(JSONSubconfig2,"ping",pws->parameters.ping.load(std::memory_order_relaxed));
+						cJSON_AddNumberToObject(JSONSubconfig2,"display",pws->parameters.display.load(std::memory_order_relaxed));
+						cJSON_AddBoolToObject(JSONSubconfig2,"echo",pws->parameters.echo.load(std::memory_order_relaxed));
+						cJSON_AddBoolToObject(JSONSubconfig2,"extended keyboard",pws->parameters.extendedKeyboard.load(std::memory_order_relaxed));
+						cJSON_AddBoolToObject(JSONSubconfig2,"uppercase",pws->parameters.upperCase.load(std::memory_order_relaxed));
+						cJSON_AddBoolToObject(JSONSubconfig2,"cursor",pws->parameters.cursor.load(std::memory_order_relaxed));
 					}
 				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Phone line");
@@ -351,6 +393,7 @@ class M12Window{
 			
 			//audio
 			ma_device_uninit(&(this->audioDevice));//uninit audio before stoping -> don't read deleted buffer
+			ma_context_uninit(&(this->miniaudioContext));
 			
 			//power down the minitel
 			thread_message ms;
@@ -363,7 +406,9 @@ class M12Window{
 			}
 			
 			//shutdown emulator
-			this->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
+			ms.cmd=EMU_SHUTDOWN;
+			this->p_mb_circuit->send(&ms);
+			//this->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
 			
 			//RAM and ROM files
 			unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->eram));
@@ -512,6 +557,53 @@ class M12Window{
 								}
 							}
 							break;
+						case WEBSOCKET_DIN:
+							{
+								this->PARAMETERS.io.peri.websocket.p_peri=ms.p;
+								SimplifiedMinitelNetworkAppLocalWebsocket* pws=(SimplifiedMinitelNetworkAppLocalWebsocket*)ms.p;
+								if (this->JSONConfig!=NULL){
+									cJSON* json_o=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"IO");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"DIN");
+									json_o=cJSON_GetObjectItemCaseSensitive(json_o,"Websocket");
+									cJSON* json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"URL");
+									if (cJSON_IsString(json_o2)){
+										pws->setURL(json_o2->valuestring);
+									}
+									json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"baudrate");
+									if (cJSON_IsNumber(json_o2)&&json_o2->valueint>=0&&json_o2->valueint<4){
+										pws->parameters.baudrate.store(json_o2->valueint,std::memory_order_relaxed);
+									}
+									json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"parity");
+									if (cJSON_IsBool(json_o2)){
+										pws->parameters.parity.store(cJSON_IsTrue(json_o2),std::memory_order_relaxed);
+									}
+									json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"ping");
+									if (cJSON_IsNumber(json_o2)&&json_o2->valueint>=0&&json_o2->valueint<4){
+										pws->parameters.ping.store(json_o2->valueint,std::memory_order_relaxed);
+									}
+									json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"display");
+									if (cJSON_IsNumber(json_o2)&&json_o2->valueint>=0&&json_o2->valueint<4){
+										pws->parameters.display.store(json_o2->valueint,std::memory_order_relaxed);
+									}
+									json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"echo");
+									if (cJSON_IsBool(json_o2)){
+										pws->parameters.echo.store(cJSON_IsTrue(json_o2),std::memory_order_relaxed);
+									}
+									json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"extended keyboard");
+									if (cJSON_IsBool(json_o2)){
+										pws->parameters.extendedKeyboard.store(cJSON_IsTrue(json_o2),std::memory_order_relaxed);
+									}
+									json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"uppercase");
+									if (cJSON_IsBool(json_o2)){
+										pws->parameters.upperCase.store(cJSON_IsTrue(json_o2),std::memory_order_relaxed);
+									}
+									json_o2=cJSON_GetObjectItemCaseSensitive(json_o,"cursor");
+									if (cJSON_IsBool(json_o2)){
+										pws->parameters.cursor.store(cJSON_IsTrue(json_o2),std::memory_order_relaxed);
+									}
+								}
+							}
+							break;
 						case UC:
 						{
 							m80C32* uc=(m80C32*)ms.p;
@@ -604,7 +696,6 @@ class M12Window{
 							this->AC.pCLKs=(Clocks*)ms.p;
 							this->AC.pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
 							printf("Sync emulator to audio sample rate @%iHz\n",this->audioDevice.sampleRate);
-							this->AC.pCLKs->requestSamples(256,256);//TODO: 256->buffer length
 							break;
 						case EMULATOR_READY:
 							{
@@ -630,43 +721,7 @@ class M12Window{
 							break;
 					}
 				}
-				
-				int width, height;
-				glfwGetFramebufferSize(this->window, &width, &height);
-				glClear(GL_COLOR_BUFFER_BIT);
-				glViewport(0,0,width,height);
-				
-				//create frame imgui
-				ImGui_ImplOpenGL3_NewFrame();
-				ImGui_ImplGlfw_NewFrame();
-				ImGui::NewFrame();
-				ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Tab, ImGuiInputFlags_RouteGlobal);//disable ImGui shortcut that could interfer
-				ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Tab, ImGuiInputFlags_RouteGlobal);
-				//ImGui::ShowDemoWindow(NULL);
-				if (this->PARAMETERS.io.peri.printer.show) PrinterOutput(this->window,&(this->Notification),&(this->PARAMETERS.io.peri.printer));
-				if (this->PARAMETERS.imgui.show_menu) this->mainMenuWindow();
-				if (this->PARAMETERS.debug.eram.mem!=NULL&&this->PARAMETERS.debug.eram.show) memoryWindow("RAM externe",&(this->PARAMETERS.debug.eram));
-				if (this->PARAMETERS.debug.erom.mem!=NULL&&this->PARAMETERS.debug.erom.show) memoryWindow("ROM externe",&(this->PARAMETERS.debug.erom));
-				if (this->PARAMETERS.debug.iram.mem!=NULL&&this->PARAMETERS.debug.iram.show) memoryWindow("RAM interne",&(this->PARAMETERS.debug.iram));
-				if (this->PARAMETERS.debug.sfr.show) sfr80C32Window(&(this->PARAMETERS.debug.sfr));
-				if (this->PARAMETERS.debug.vram.mem!=NULL&&this->PARAMETERS.debug.vram.show) memoryWindow("VRAM",&(this->PARAMETERS.debug.vram));
-				if (this->PARAMETERS.debug.vreg.show) regTS9347Window(&(this->PARAMETERS.debug.vreg));
-				if (this->PARAMETERS.debug.mreg.show) regTS7514Window(&(this->PARAMETERS.debug.mreg));
-				this->Notification.notification_window();
-				this->keyboardIndicator.window();
-				if (this->PARAMETERS.io.keyboard.show_teletel_keys) this->keyboardInput.KeyboardTeletelWindow();
-				if (this->PARAMETERS.io.keyboard.show_phone_keys) this->keyboardInput.KeyboardPhoneWindow();
-				if (this->PARAMETERS.io.keyboard.show_azerty_keys) this->keyboardInput.KeyboardAzertyWindow();
-				this->menuPopup();
-				
-				//render frame emulator
-				this->p_CRTout->render();
-		 
-				//render frame imgui
-				ImGui::Render();
-				ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-		 
-				glfwSwapBuffers(this->window);
+				this->render();
 				if (this->PARAMETERS.imgui.idle) glfwWaitEventsTimeout(0.05);
 				else glfwPollEvents();
 			}
@@ -684,10 +739,60 @@ class M12Window{
 		Mailbox* p_mb_circuit;
 		Mailbox* p_mb_video;
 		
+		ma_context miniaudioContext;
 		audioContext AC;
 		ma_device_config audioDeviceConfig;
 		ma_device audioDevice;
+		
 		cJSON* JSONConfig=NULL;
+		
+		void render(){
+			int width, height;
+			glfwGetFramebufferSize(this->window, &width, &height);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glViewport(0,0,width,height);
+			
+			//create frame imgui
+			ImGui_ImplOpenGL3_NewFrame();
+			ImGui_ImplGlfw_NewFrame();
+			ImGui::NewFrame();
+			ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiKey_Tab, ImGuiInputFlags_RouteGlobal);//disable ImGui shortcut that could interfer
+			ImGui::Shortcut(ImGuiMod_Ctrl | ImGuiMod_Shift | ImGuiKey_Tab, ImGuiInputFlags_RouteGlobal);
+			//ImGui::ShowDemoWindow(NULL);
+			if (this->PARAMETERS.io.peri.printer.show) PrinterOutput(this->window,&(this->Notification),&(this->PARAMETERS.io.peri.printer));
+			if (this->PARAMETERS.imgui.show_menu) this->mainMenuWindow();
+			if (this->PARAMETERS.debug.eram.mem!=NULL&&this->PARAMETERS.debug.eram.show) memoryWindow("RAM externe",&(this->PARAMETERS.debug.eram));
+			if (this->PARAMETERS.debug.erom.mem!=NULL&&this->PARAMETERS.debug.erom.show) memoryWindow("ROM externe",&(this->PARAMETERS.debug.erom));
+			if (this->PARAMETERS.debug.iram.mem!=NULL&&this->PARAMETERS.debug.iram.show) memoryWindow("RAM interne",&(this->PARAMETERS.debug.iram));
+			if (this->PARAMETERS.debug.sfr.show) sfr80C32Window(&(this->PARAMETERS.debug.sfr));
+			if (this->PARAMETERS.debug.vram.mem!=NULL&&this->PARAMETERS.debug.vram.show) memoryWindow("VRAM",&(this->PARAMETERS.debug.vram));
+			if (this->PARAMETERS.debug.vreg.show) regTS9347Window(&(this->PARAMETERS.debug.vreg));
+			if (this->PARAMETERS.debug.mreg.show) regTS7514Window(&(this->PARAMETERS.debug.mreg));
+			this->Notification.notification_window();
+			if ((!this->PARAMETERS.io.keyboard.auto_hide_indicator)||this->keyboardIndicator.isSignaling()) this->keyboardIndicator.window();
+			if (this->PARAMETERS.io.keyboard.show_teletel_keys){
+				ImGui::SetNextWindowPos(this->PARAMETERS.io.keyboard.teletel_keys_window_pos, ImGuiCond_Appearing, ImVec2(0.5, 0.5));
+				this->keyboardInput.KeyboardTeletelWindow();
+			}
+			if (this->PARAMETERS.io.keyboard.show_phone_keys){
+				ImGui::SetNextWindowPos(this->PARAMETERS.io.keyboard.phone_keys_window_pos, ImGuiCond_Appearing, ImVec2(0.5, 0.5));
+				this->keyboardInput.KeyboardPhoneWindow();
+			}
+			if (this->PARAMETERS.io.keyboard.show_azerty_keys){
+				ImGui::SetNextWindowPos(this->PARAMETERS.io.keyboard.azerty_keys_window_pos, ImGuiCond_Appearing, ImVec2(0.5, 0.5));
+				this->keyboardInput.KeyboardAzertyWindow();
+			}
+			this->menuPopup();
+			
+			//render frame emulator
+			this->p_CRTout->render();
+	 
+			//render frame imgui
+			ImGui::Render();
+			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+	 
+			glfwSwapBuffers(this->window);
+		}
 		
 		void menuPopup(){
 			if (ImGui::IsMouseClicked(ImGuiMouseButton_Right,false)){
@@ -701,9 +806,25 @@ class M12Window{
 					ImGui::CloseCurrentPopup();
 				}
 				ImGui::SeparatorText("Clavier virtuel");
-				ImGui::Checkbox("Touches télétel",&(this->PARAMETERS.io.keyboard.show_teletel_keys));
-				ImGui::Checkbox("Touches téléphoniques",&(this->PARAMETERS.io.keyboard.show_phone_keys));
-				ImGui::Checkbox("Touches azerty",&(this->PARAMETERS.io.keyboard.show_azerty_keys));
+				ImGuiIO& io=ImGui::GetIO();
+				if (ImGui::Checkbox("Touches télétel",&(this->PARAMETERS.io.keyboard.show_teletel_keys))){
+					if (this->PARAMETERS.io.keyboard.show_teletel_keys&&ImGui::IsMousePosValid()){
+						this->PARAMETERS.io.keyboard.teletel_keys_window_pos[0]=io.MousePos.x;
+						this->PARAMETERS.io.keyboard.teletel_keys_window_pos[1]=io.MousePos.y;
+					}
+				}
+				if (ImGui::Checkbox("Touches téléphoniques",&(this->PARAMETERS.io.keyboard.show_phone_keys))){
+					if (this->PARAMETERS.io.keyboard.show_phone_keys&&ImGui::IsMousePosValid()){
+						this->PARAMETERS.io.keyboard.phone_keys_window_pos[0]=io.MousePos.x;
+						this->PARAMETERS.io.keyboard.phone_keys_window_pos[1]=io.MousePos.y;
+					}
+				}
+				if (ImGui::Checkbox("Touches azerty",&(this->PARAMETERS.io.keyboard.show_azerty_keys))){
+					if (this->PARAMETERS.io.keyboard.show_azerty_keys&&ImGui::IsMousePosValid()){
+						this->PARAMETERS.io.keyboard.azerty_keys_window_pos[0]=io.MousePos.x;
+						this->PARAMETERS.io.keyboard.azerty_keys_window_pos[1]=io.MousePos.y;
+					}
+				}
 				ImGui::EndPopup();
 			}
 		}
@@ -781,46 +902,68 @@ class M12Window{
 				if (ImGui::BeginTabItem("Entrées/Sorties")){
 					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
-					/*static ma_context audio_context=initAudio();
-					static ma_device_info* pPlaybackDeviceInfos;
-					static ma_uint32 playbackDeviceCount;
-					static ma_device_info* pCaptureDeviceInfos;
-					static ma_uint32 captureDeviceCount;*/
-					
 					ImGui::SeparatorText("Clavier");
-					ImGui::Text("L'émulateur est conçu pour un clavier AZERTY avec un pavé numérique (de préférence) et Verr. Num. désactivé.");
-					if (this->PARAMETERS.io.keyboard.num_lock){
-						ImGui::Indent();
-						ImGui::TextColored(ImVec4(1, 0, 0, 1), "Verr. Num. semble être activé. Certains charactères seront inacessibles.");
-						ImGui::Unindent();
-					}
-					ImGui::Text("Les touches différentes du minitel sont les suivantes:");
-					if (ImGui::BeginTable("keyTable",2,ImGuiTableFlags_Borders|ImGuiTableFlags_SizingFixedSame|ImGuiTableFlags_NoHostExtendX,ImVec2(0, 0))){
-						ImGui::TableSetupColumn("Clavier", ImGuiTableColumnFlags_None);
-						ImGui::TableSetupColumn("Correspondance", ImGuiTableColumnFlags_None);
-						ImGui::TableHeadersRow();
-						
-						const char *key1[13]={"Escape","Alt","²","Tab","Backspace","F2","F3","F4","F5","F6","F7","F8","F9"};
-						const char *key2[13]={"Esc","Fnct","\'On/Off\'","Connex/Fin","Mem","Sommaire","Guide","Annulation","Correction","Retour","Suite","Répétition","Envoi"};
-						for (int i=0;i<13;i++){
-							ImGui::TableNextRow();
-							ImGui::TableSetColumnIndex(0);
-							ImGui::Text(key1[i]);
-							ImGui::TableSetColumnIndex(1);
-							ImGui::Text(key2[i]);
+					if (ImGui::TreeNode("Clavier physique")){
+						ImGui::Text("L'émulateur est conçu pour un clavier AZERTY avec un pavé numérique (de préférence) et Verr. Num. désactivé.");
+						if (this->PARAMETERS.io.keyboard.num_lock){
+							ImGui::Indent();
+							ImGui::TextColored(ImVec4(1, 0, 0, 1), "Verr. Num. semble être activé. Certains charactères seront inacessibles.");
+							ImGui::Unindent();
 						}
-						
-						ImGui::EndTable();
+						ImGui::Text("Les touches différentes du minitel sont les suivantes:");
+						if (ImGui::BeginTable("keyTable",4,ImGuiTableFlags_Borders|ImGuiTableFlags_SizingFixedSame|ImGuiTableFlags_NoHostExtendX,ImVec2(0, 0))){
+							ImGui::TableSetupColumn("Clavier", ImGuiTableColumnFlags_None);
+							ImGui::TableSetupColumn("Correspondance", ImGuiTableColumnFlags_None);
+							ImGui::TableSetupColumn("Clavier", ImGuiTableColumnFlags_None);
+							ImGui::TableSetupColumn("Correspondance", ImGuiTableColumnFlags_None);
+							ImGui::TableHeadersRow();
+							
+							const char *key1[13]={"Escape","Alt","²","Tab","Backspace","F2","F3","F4","F5","F6","F7","F8","F9"};
+							const char *key2[13]={"Esc","Fnct","\'On/Off\'","Connex/Fin","Mem","Sommaire","Guide","Annulation","Correction","Retour","Suite","Répétition","Envoi"};
+							const char *key3[8]={"AltGr+P","AltGr+M","AltGr+A","AltGr+Z","AltGr+R","AltGr+B","AltGr+T","AltGr+I"};
+							const char *key4[8]={"Volume+","Volume-","Appel Annuaire","Appel Répertoire n°51","Appel Répertoire","Appel Bis","Décrochage téléphone (haut parleur)","Impr. (Shift+Appel Répertoire)"};
+							for (int i=0;i<13;i++){
+								ImGui::TableNextRow();
+								ImGui::TableSetColumnIndex(0);
+								ImGui::Text(key1[i]);
+								ImGui::TableSetColumnIndex(1);
+								ImGui::Text(key2[i]);
+								if (i<8){
+									ImGui::TableSetColumnIndex(2);
+									ImGui::Text(key3[i]);
+									ImGui::TableSetColumnIndex(3);
+									ImGui::Text(key4[i]);
+								}
+							}
+							
+							ImGui::EndTable();
+						}
+						ImGui::Text("F1 permet d'afficher ce menu.");
+						ImGui::Text("F10 permet de faire une capture d'écran.");
+						ImGui::TreePop();
 					}
-					ImGui::Text("F1 permet d'afficher ce menu.");
-					ImGui::Text("F10 permet de faire une capture d'écran.");
-					
-					ImGui::Text("Clavier virtuel:");
-					ImGui::Indent();
-					ImGui::Checkbox("Afficher les touches télétel",&(this->PARAMETERS.io.keyboard.show_teletel_keys));
-					ImGui::Checkbox("Afficher les touches téléphoniques",&(this->PARAMETERS.io.keyboard.show_phone_keys));
-					ImGui::Checkbox("Afficher les touches azerty",&(this->PARAMETERS.io.keyboard.show_azerty_keys));
-					ImGui::Unindent();
+					if (ImGui::TreeNode("Clavier virtuel")){
+						if (ImGui::Checkbox("Afficher les touches télétel",&(this->PARAMETERS.io.keyboard.show_teletel_keys))){
+							if (this->PARAMETERS.io.keyboard.show_teletel_keys){
+								this->PARAMETERS.io.keyboard.teletel_keys_window_pos=ImGui::GetMainViewport()->GetCenter();
+							}
+						}
+						if (ImGui::Checkbox("Afficher les touches téléphoniques",&(this->PARAMETERS.io.keyboard.show_phone_keys))){
+							if (this->PARAMETERS.io.keyboard.show_phone_keys){
+								this->PARAMETERS.io.keyboard.phone_keys_window_pos=ImGui::GetMainViewport()->GetCenter();
+							}
+						}
+						if (ImGui::Checkbox("Afficher les touches azerty",&(this->PARAMETERS.io.keyboard.show_azerty_keys))){
+							if (this->PARAMETERS.io.keyboard.show_azerty_keys){
+								this->PARAMETERS.io.keyboard.azerty_keys_window_pos=ImGui::GetMainViewport()->GetCenter();
+							}
+						}
+						ImGui::TreePop();
+					}
+					if (ImGui::TreeNode("Témoins lumineux")){
+						ImGui::Checkbox("Cacher automatiquement les lampes témoins du clavier",&(this->PARAMETERS.io.keyboard.auto_hide_indicator));
+						ImGui::TreePop();
+					}
 					
 					ImGui::SeparatorText("Prise péri-informatique");
 					
@@ -867,71 +1010,101 @@ class M12Window{
 					
 					ImGui::SeparatorText("Modem");
 					
-					ImGui::SeparatorText("Buzzer");
-					if (this->AC.bzf!=NULL){
-						ImGui::Text("Volume:");
-						ImGui::Indent();
-						if (ImGui::SliderFloat("##buzzer_volume", &(this->PARAMETERS.io.buzzer.volume), 0., 100., "%.1f%%")) this->AC.bzf->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
-						ImGui::Unindent();
+					/*static ma_device_info* pPlaybackDeviceInfos;
+					static ma_uint32 playbackDeviceCount;
+					static ma_device_info* pCaptureDeviceInfos;
+					static ma_uint32 captureDeviceCount;
+					if (ma_context_get_devices(&(this->miniaudioContext), &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount) != MA_SUCCESS) {
+						printf("Failed to retrieve device information.\n");
 					}
-					ImGui::Checkbox("Afficher les notifications##buzzer",&(this->PARAMETERS.io.buzzer.notify));
+					else{
+						for (ma_uint32 iDevice = 0; iDevice < playbackDeviceCount; ++iDevice) {
+							ImGui::Text("    %u: %s", iDevice, pPlaybackDeviceInfos[iDevice].name);
+						}
+						for (ma_uint32 iDevice = 0; iDevice < captureDeviceCount; ++iDevice) {
+							ImGui::Text("    %u: %s", iDevice, pCaptureDeviceInfos[iDevice].name);
+						}
+					}*/
 					
-					ImGui::SeparatorText("Haut parleur");
-					if (this->AC.spkf!=NULL){
-						ImGui::Text("Volume:");
-						ImGui::Indent();
-						if (ImGui::SliderFloat("##speaker_volume", &(this->PARAMETERS.io.speaker.volume), 0., 100., "%.1f%%")) this->AC.spkf->setVolumeLog(this->PARAMETERS.io.speaker.volume);
-						ImGui::Unindent();
+					ImGui::SeparatorText("Son");
+					if (ImGui::TreeNode("Buzzer")){
+						if (this->AC.bzf!=NULL){
+							ImGui::Text("Volume:");
+							ImGui::Indent();
+							if (ImGui::SliderFloat("##buzzer_volume", &(this->PARAMETERS.io.buzzer.volume), 0., 100., "%.1f%%")) this->AC.bzf->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
+							ImGui::Unindent();
+						}
+						ImGui::Checkbox("Afficher une notification lorsque le minitel bip##buzzer",&(this->PARAMETERS.io.buzzer.notify));
+						ImGui::TreePop();
 					}
 					
-					ImGui::SeparatorText("CRT");
-					ImGui::Text("Facteur d'étirement de l'image:");
-					ImGui::Indent();
-					ImGui::SliderFloat("##crt_width", &(this->PARAMETERS.io.crt.width_factor), 0.5, 1.5, "x%.3f");
-					this->PARAMETERS.io.crt.display_effects=ImGui::IsItemActive();
-					ImGui::SameLine();
-					if(ImGui::Button("Réinitialiser##crt_width")) this->PARAMETERS.io.crt.width_factor=this->default_parameters.io.crt.width_factor;
-					ImGui::Unindent();
-					ImGui::Text("Niveau de luminosité du noir:");
-					ImGui::Indent();
-					ImGui::SliderFloat("##crt_black_level", &(this->PARAMETERS.io.crt.black_level), 0., 20., "%.1f%%");
-					this->PARAMETERS.io.crt.display_effects=this->PARAMETERS.io.crt.display_effects||ImGui::IsItemActive();
-					ImGui::SameLine();
-					if(ImGui::Button("Réinitialiser##crt_black_level")) this->PARAMETERS.io.crt.black_level=this->default_parameters.io.crt.black_level;
-					ImGui::Unindent();
-					ImGui::Text("Courbure de l'écran:");
-					ImGui::Indent();
-					ImGui::SliderFloat("##crt_curvature", &(this->PARAMETERS.io.crt.curvature), 0., 0.5, "%.3f");
-					this->PARAMETERS.io.crt.display_effects=this->PARAMETERS.io.crt.display_effects||ImGui::IsItemActive();
-					ImGui::SameLine();
-					if(ImGui::Button("Réinitialiser##crt_curvature")) this->PARAMETERS.io.crt.curvature=this->default_parameters.io.crt.curvature;
-					ImGui::Unindent();
-					ImGui::Text("Durée de rétention de l'image:");
-					ImGui::Indent();
-					ImGui::SliderFloat("##crt_decay", &(this->PARAMETERS.io.crt.decay), 0., 1., "%.3fs");
-					this->PARAMETERS.io.crt.display_effects=this->PARAMETERS.io.crt.display_effects||ImGui::IsItemActive();
-					ImGui::SameLine();
-					if(ImGui::Button("Réinitialiser##crt_decay")) this->PARAMETERS.io.crt.decay=this->default_parameters.io.crt.decay;
-					ImGui::Unindent();
-					ImGui::Checkbox("Lignes de balayage",&(this->PARAMETERS.io.crt.scanline));
-					ImGui::Checkbox("Sortie vidéo RGB",&(this->PARAMETERS.io.crt.rgb));
-					ImGui::SameLine();
-					ImGui::TextDisabled("(hack)");
+					if (ImGui::TreeNode("Haut parleur")){
+						if (this->AC.spkf!=NULL){
+							ImGui::Text("Volume:");
+							ImGui::Indent();
+							if (ImGui::SliderFloat("##speaker_volume", &(this->PARAMETERS.io.speaker.volume), 0., 100., "%.1f%%")) this->AC.spkf->setVolumeLog(this->PARAMETERS.io.speaker.volume);
+							ImGui::Unindent();
+						}
+						ImGui::TreePop();
+					}
+					
+					ImGui::SeparatorText("Vidéo");
+					if (ImGui::TreeNode("Paramètres d'affichage CRT")){
+						ImGui::Text("Préréglages:");
+						ImGui::Indent();
+						if(ImGui::Button("Original")){
+							this->PARAMETERS.io.crt.black_level=CRT_retro_preset.black_level;
+							this->PARAMETERS.io.crt.curvature=CRT_retro_preset.curvature;
+							this->PARAMETERS.io.crt.decay=CRT_retro_preset.decay;
+							this->PARAMETERS.io.crt.scanline=CRT_retro_preset.scanline;
+							this->PARAMETERS.io.crt.rgb=CRT_retro_preset.rgb;
+						}
+						ImGui::SameLine();
+						if(ImGui::Button("Moderne")){
+							this->PARAMETERS.io.crt.black_level=CRT_modern_preset.black_level;
+							this->PARAMETERS.io.crt.curvature=CRT_modern_preset.curvature;
+							this->PARAMETERS.io.crt.decay=CRT_modern_preset.decay;
+							this->PARAMETERS.io.crt.scanline=CRT_modern_preset.scanline;
+							this->PARAMETERS.io.crt.rgb=CRT_modern_preset.rgb;
+						}
+						ImGui::Unindent();
+						ImGui::Text("Facteur d'étirement de l'image:");
+						ImGui::Indent();
+						ImGui::SliderFloat("##crt_width", &(this->PARAMETERS.io.crt.width_factor), 0.5, 1.5, "x%.3f");
+						this->PARAMETERS.io.crt.display_effects=ImGui::IsItemActive();
+						ImGui::SameLine();
+						if(ImGui::Button("Réinitialiser##crt_width")) this->PARAMETERS.io.crt.width_factor=this->default_parameters.io.crt.width_factor;
+						ImGui::Unindent();
+						ImGui::Text("Niveau de luminosité du noir:");
+						ImGui::Indent();
+						ImGui::SliderFloat("##crt_black_level", &(this->PARAMETERS.io.crt.black_level), 0., 20., "%.1f%%");
+						this->PARAMETERS.io.crt.display_effects=this->PARAMETERS.io.crt.display_effects||ImGui::IsItemActive();
+						ImGui::Unindent();
+						ImGui::Text("Courbure de l'écran:");
+						ImGui::Indent();
+						ImGui::SliderFloat("##crt_curvature", &(this->PARAMETERS.io.crt.curvature), 0., 0.5, "%.3f");
+						this->PARAMETERS.io.crt.display_effects=this->PARAMETERS.io.crt.display_effects||ImGui::IsItemActive();
+						ImGui::Unindent();
+						ImGui::Text("Durée de rétention de l'image:");
+						ImGui::Indent();
+						ImGui::SliderFloat("##crt_decay", &(this->PARAMETERS.io.crt.decay), 0., 1., "%.3fs");
+						this->PARAMETERS.io.crt.display_effects=this->PARAMETERS.io.crt.display_effects||ImGui::IsItemActive();
+						ImGui::Unindent();
+						ImGui::Checkbox("Lignes de balayage",&(this->PARAMETERS.io.crt.scanline));
+						ImGui::Checkbox("Sortie vidéo RGB",&(this->PARAMETERS.io.crt.rgb));
+						ImGui::TreePop();
+					}
 					
 					ImGui::SeparatorText("Divers");
 					if (this->PARAMETERS.io.other.os_rtc!=NULL){
 						bool os_rtc=this->PARAMETERS.io.other.os_rtc->load(std::memory_order_relaxed);
 						ImGui::Checkbox("Utiliser la date de l'ordinateur pour l'horloge temps réel",&(os_rtc));
 						this->PARAMETERS.io.other.os_rtc->store(os_rtc,std::memory_order_relaxed);
-						ImGui::SameLine();
-						ImGui::TextDisabled("(hack)");
 					}
 					if (this->PARAMETERS.io.other.auto_start!=NULL){
 						bool auto_start=this->PARAMETERS.io.other.auto_start->load(std::memory_order_relaxed);
 						ImGui::Checkbox("Allumer le minitel au lancement de l'émulation",&(auto_start));
 						this->PARAMETERS.io.other.auto_start->store(auto_start,std::memory_order_relaxed);
-						ImGui::SameLine();
-						ImGui::TextDisabled("(hack)");
 					}
 					
 					ImGui::EndChild();
@@ -941,10 +1114,13 @@ class M12Window{
 					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
 					ImGui::Text("DPI");
-					ImGui::SameLine();
+					ImGui::Indent();
 					if(ImGui::Button("-##dpi")) ImGui::GetStyle().FontScaleDpi=(ImGui::GetStyle().FontScaleDpi<=1)?1:(ImGui::GetStyle().FontScaleDpi-1);
 					ImGui::SameLine();
+					ImGui::Text("%.1f",ImGui::GetStyle().FontScaleDpi);
+					ImGui::SameLine();
 					if(ImGui::Button("+##dpi")) ImGui::GetStyle().FontScaleDpi+=1;
+					ImGui::Unindent();
 					ImGui::Checkbox("Rafraichissement d'image dynamique",&(this->PARAMETERS.imgui.idle));
 					
 					bool fullscreen=glfwGetWindowMonitor(window)!=NULL;
@@ -993,7 +1169,7 @@ class M12Window{
 					
 					ImGui::SeparatorText("Statistiques");
 					ImGui::Text("Rafraichissement d'image: %.1f FPS",ImGui::GetIO().Framerate);
-					ImGui::Text("Tampon audio (échantillons restants):");
+					ImGui::Text("Tampon audio (échantillons restants après lecture):");
 					ImGui::PlotLines("##audio_buffer", this->AC.samplesRemaining, sizeof(this->AC.samplesRemaining)/sizeof(this->AC.samplesRemaining[0]),0,NULL,0,(float)this->AC.maxSamplesRemaining, ImVec2(-1, 80.0f));
 					//ImGui::Text("Retard audio (max: %lu): %lu",this->AC.maxSamplesPending,this->AC.samplesPending);
 					
@@ -1092,7 +1268,6 @@ class M12Window{
 		}*/
 		static void audio_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){
 			audioContext* AC=(audioContext*)pDevice->pUserData;
-			
 			if (AC->pCLKs!=NULL){
 				AC->pCLKs->requestSamples(frameCount,AC->maxSamplesRemaining);
 			}

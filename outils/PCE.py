@@ -49,7 +49,7 @@ def PCEReceive(data_in):#exemple simple pour montrer comment gérer les erreurs 
     for i in range(len(data_in)):
         if (i%17==16):
             if (data_in[i]!=0):
-                print("Octet "+str(i)+" n'est pas nul")
+                print("Octet "+str(i)+" n'est pas nul dans le bloc "+str(i//17))
                 break
             else:
                 for j in range(15):

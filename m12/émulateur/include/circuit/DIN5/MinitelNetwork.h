@@ -191,6 +191,24 @@ class SimplifiedMinitelNetwork{// ! slave process not implemented
 
 class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetworkApp{//TODO: rewrite
 	public:
+		struct {
+			std::vector<unsigned char> wsBuffer;
+			std::vector<unsigned char> wsSplit;
+			std::mutex wsMutex;
+			
+			std::atomic<unsigned char> baudrate=3;
+			std::atomic_bool parity=false;
+			std::atomic<unsigned char> ping=3;
+			
+			std::atomic<unsigned char> display=0;
+			std::atomic_bool echo=false;
+			std::atomic_bool extendedKeyboard=false;
+			std::atomic_bool upperCase=false;
+			std::atomic_bool cursor=false;
+			
+			unsigned char currentLine=0;
+		} parameters;
+		
 		enum State{
 			RESTING,
 			INIT_MODULE,
@@ -301,6 +319,57 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		~SimplifiedMinitelNetworkAppLocalWebsocket(){
 			this->disconnect();
 		}
+		
+		void setURL(const char* url){
+			std::vector<unsigned char>* p=utf8_to_videotex_ts9347(url,false,true);
+			
+			std::unique_lock<std::mutex> lock(this->parameters.wsMutex);
+			this->parameters.wsBuffer.clear();
+			this->parameters.wsSplit.clear();
+			this->parameters.wsBuffer.insert(this->parameters.wsBuffer.end(), p->begin(), p->end());
+			//compute the length of each visible characters
+			size_t i=0;
+			int n=0;
+			while (i<p->size()){
+				switch ((*p)[i]){
+					case 0x0E:
+					case 0x0F:
+						n++;
+						i++;
+						break;
+					case 0x19://p is considered a valid videotex data
+						if (((*p)[i+1]&0xF0)==0x40){
+							i+=3;
+							n+=3;
+						}
+						else{
+							i+=2;
+							n+=2;
+						}
+						this->parameters.wsSplit.push_back(n);
+						n=0;
+						break;
+					default:
+						n++;
+						i++;
+						this->parameters.wsSplit.push_back(n);
+						n=0;
+						break;
+				}
+			}
+			this->parameters.wsSplit[this->parameters.wsSplit.size()-1]+=n;//if SI/SO at the end of the videotex data
+			delete p;
+			if (this->currentState==this->PARAMETERS){
+				lock.unlock();
+				this->refreshURLLine(this->parameters.currentLine==0);
+			}
+		}
+		
+		char* getURL(){//TODO: sanitize url needed
+			std::lock_guard<std::mutex> lock(this->parameters.wsMutex);
+			char* d=videotex_to_utf8(&(this->parameters.wsBuffer));
+			return d;
+		}
 	private:
 		bool PTin=false;
 		
@@ -311,24 +380,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		std::vector<unsigned char> CMDBuffer;
 		unsigned char subState=0;
 		bool PWR=false;
-		
-		struct {
-			std::vector<unsigned char> wsBuffer;
-			std::vector<unsigned char> wsSplit;
-			
-			int baudrate=3;
-			bool parity=false;
-			bool block=true;
-			int ping=3;
-			
-			unsigned char display=0;
-			bool echo=false;
-			bool extendedKeyboard=false;
-			bool upperCase=false;
-			bool cursor=false;
-			
-			unsigned char currentLine=0;
-		} parameters;
 		
 		void forceReset(){
 			std::queue<unsigned char> empty;
@@ -342,37 +393,61 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		}
 		
 		void addCharWsBuffer(){
-			if (this->parameters.wsSplit.size()==29*2) this->print(bell,sizeof(bell)/sizeof(bell[0]));
+			std::unique_lock<std::mutex> lock(this->parameters.wsMutex);
+			if (this->parameters.wsSplit.size()==29*2){
+				lock.unlock();
+				this->print(bell,sizeof(bell)/sizeof(bell[0]));
+			}
 			else{
 				for (unsigned char d: this->CMDBuffer){
 					this->qTx.push(d);
 					this->parameters.wsBuffer.push_back(d);
 				}
 				this->parameters.wsSplit.push_back(this->CMDBuffer.size());
-				if (this->parameters.wsSplit.size()==29) this->moveCursor(4,12);
+				if (this->parameters.wsSplit.size()==29){
+					lock.unlock();
+					this->moveCursor(4,12);
+				}
 			}
 		}
 		
 		void removeCharWsBuffer(){
-			if (this->parameters.wsSplit.size()==0) this->print(bell,sizeof(bell)/sizeof(bell[0]));
+			std::unique_lock<std::mutex> lock(this->parameters.wsMutex);
+			if (this->parameters.wsSplit.size()==0){
+				lock.unlock();
+				this->print(bell,sizeof(bell)/sizeof(bell[0]));
+			}
 			else{
 				unsigned char l=this->parameters.wsSplit.back();
 				this->parameters.wsSplit.pop_back();
 				for (int i=0;i<l;i++) this->parameters.wsBuffer.pop_back();
-				if (this->parameters.wsSplit.size()==28) this->moveCursor(3,40);
-				else this->qTx.push(0x08);
-				this->selectLineStatic(false);
-				this->printString(".");
-				this->qTx.push(0x08);
-				this->selectLineStatic(true);
+				if (this->parameters.wsSplit.size()<2*29){
+					if (this->parameters.wsSplit.size()==28){
+						lock.unlock();
+						this->moveCursor(3,40);
+					}
+					else{
+						lock.unlock();
+						this->qTx.push(0x08);
+					}
+					this->selectLineStatic(false);
+					this->printString(".");
+					this->qTx.push(0x08);
+					this->selectLineStatic(true);
+				}
 			}
 		}
 		
 		void deleteWsBuffer(){
-			if (this->parameters.wsSplit.size()==0) this->print(bell,sizeof(bell)/sizeof(bell[0]));
+			std::unique_lock<std::mutex> lock(this->parameters.wsMutex);
+			if (this->parameters.wsSplit.size()==0){
+				lock.unlock();
+				this->print(bell,sizeof(bell)/sizeof(bell[0]));
+			}
 			else{
 				this->parameters.wsBuffer.clear();
 				this->parameters.wsSplit.clear();
+				lock.unlock();
 				this->refreshURLLine(this->parameters.currentLine==0);
 			}
 		}
@@ -621,7 +696,13 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			this->currentState=this->PARAMETERS;
 			this->CMDBuffer.clear();
 			this->printParametersStaticPage();
-			if (this->parameters.wsSplit.size()==0) this->setURL((char*)"ws://localhost:8080");
+			{
+			std::unique_lock<std::mutex> lock(this->parameters.wsMutex);
+			if (this->parameters.wsSplit.size()==0){
+				lock.unlock();
+				this->setURL((char*)"ws://localhost:8080");
+			}
+			}
 			this->changeSelection(this->parameters.currentLine);
 		}
 		
@@ -801,7 +882,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					this->print(default_upper_case,sizeof(default_upper_case)/sizeof(default_upper_case[0]));break;
 				case 14://baudrate
 					this->qTx.push(0x1B);this->qTx.push(0x3A);this->qTx.push(0x6B);
-					switch (this->parameters.baudrate){
+					switch (this->parameters.baudrate.load(std::memory_order_relaxed)){
 						case 0:this->qTx.push(0x52);break;
 						case 1:this->qTx.push(0x64);break;
 						case 2:this->qTx.push(0x76);break;
@@ -809,7 +890,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					}
 					break;
 				case 15://disable cursor+clear screen+change state
-					if ((bool)(this->parameters.display&1)){
+					if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&1)){
 						this->qTx.push(0x1B);this->qTx.push(0x5B);this->qTx.push(0x3C);this->qTx.push(0x31);
 						this->qTx.push(0x68);
 					}
@@ -830,8 +911,8 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 				case 0 ... 2://local echo
 					s=this->isPRO3CMD();
 					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x63&&this->CMDBuffer[3]==0x5A){
-						if (this->parameters.echo==(bool)(this->CMDBuffer[4]&0x02)) this->subState=3;
-						else if (this->parameters.echo) this->subState=2;
+						if (this->parameters.echo.load(std::memory_order_relaxed)==(bool)(this->CMDBuffer[4]&0x02)) this->subState=3;
+						else if (this->parameters.echo.load(std::memory_order_relaxed)) this->subState=2;
 						else this->subState=1;
 						this->CONFIGURESendCMD();
 					}
@@ -839,8 +920,8 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 				case 3://standard
 					s=this->isPRO2CMD();
 					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x73){
-						if ((bool)(this->parameters.display&0x01)==(bool)(this->CMDBuffer[3]&0x01)) this->subState=6;
-						else if ((bool)(this->parameters.display&0x01)) this->subState=5;
+						if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&0x01)==(bool)(this->CMDBuffer[3]&0x01)) this->subState=6;
+						else if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&0x01)) this->subState=5;
 						else this->subState=4;
 						this->CONFIGURESendCMD();
 					}
@@ -855,8 +936,8 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 				case 6 ... 8://keyboard
 					s=this->isPRO3CMD();
 					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x73&&this->CMDBuffer[3]==0x59){
-						if (this->parameters.extendedKeyboard==(bool)(this->CMDBuffer[4]&0x01)) this->subState=9;
-						else if (this->parameters.extendedKeyboard) this->subState=8;
+						if (this->parameters.extendedKeyboard.load(std::memory_order_relaxed)==(bool)(this->CMDBuffer[4]&0x01)) this->subState=9;
+						else if (this->parameters.extendedKeyboard.load(std::memory_order_relaxed)) this->subState=8;
 						else this->subState=7;
 						this->CONFIGURESendCMD();
 					}
@@ -864,12 +945,12 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 				case 9 ... 13://case+page/roll
 					s=this->isPRO2CMD();
 					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x73){
-						if ((bool)(this->parameters.display&0x02)==(bool)(this->CMDBuffer[3]&0x02)){
-							if ((!this->parameters.upperCase)==(bool)(this->CMDBuffer[3]&0x08)) this->subState=14;
-							else if (this->parameters.upperCase) this->subState=13;
+						if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&0x02)==(bool)(this->CMDBuffer[3]&0x02)){
+							if ((!this->parameters.upperCase.load(std::memory_order_relaxed))==(bool)(this->CMDBuffer[3]&0x08)) this->subState=14;
+							else if (this->parameters.upperCase.load(std::memory_order_relaxed)) this->subState=13;
 							else this->subState=12;
 						}
-						else if ((bool)(this->parameters.display&0x02)) this->subState=11;
+						else if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&0x02)) this->subState=11;
 						else this->subState=10;
 						this->CONFIGURESendCMD();
 					}
@@ -881,8 +962,9 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 						this->CONFIGURESendCMD();
 					}
 					else if (s==this->NOT_CMD){//fail
-						if (this->parameters.baudrate<2) this->parameters.baudrate++;
-						else if (this->parameters.baudrate>2) this->parameters.baudrate--;
+						unsigned char bdr=this->parameters.baudrate.load(std::memory_order_relaxed);
+						if (bdr<2) this->parameters.baudrate.store(bdr+1,std::memory_order_relaxed);
+						else if (bdr>2) this->parameters.baudrate.store(bdr+1,std::memory_order_relaxed);
 						this->CONFIGURESendCMD();
 					}
 					break;
@@ -907,6 +989,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					this->moveCursor(0,1);
 					this->printString("` ");
 					{
+						std::unique_lock<std::mutex> lock(this->parameters.wsMutex);
 						int n=0;
 						for (size_t i=0;i<32&&i<this->parameters.wsSplit.size();i++){
 							n+=this->parameters.wsSplit[i];
@@ -938,13 +1021,13 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					this->printString("\x19\x2E\x0A\x1E");
 					
 					//cursor
-					if ((bool)(this->parameters.display&1)){
+					if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&1)){
 						this->qTx.push(0x1B);this->qTx.push(0x5B);this->qTx.push(0x3C);this->qTx.push(0x31);
-						if (this->parameters.cursor) this->qTx.push(0x6C);
+						if (this->parameters.cursor.load(std::memory_order_relaxed)) this->qTx.push(0x6C);
 						else this->qTx.push(0x68);
 					}
 					else{
-						if (this->parameters.cursor) this->qTx.push(0x11);
+						if (this->parameters.cursor.load(std::memory_order_relaxed)) this->qTx.push(0x11);
 						else this->qTx.push(0x14);
 					}
 					//////////////////////////////////
@@ -994,9 +1077,9 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 				std::lock_guard<std::mutex> lock(this->pMQMutex);//protect qTx+subState
 				switch (this->subState){
 					case 2:
-						if (this->parameters.parity) this->qRx.push_back(d);
+						if (this->parameters.parity.load(std::memory_order_relaxed)) this->qRx.push_back(d);
 						d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-						if (!this->parameters.parity) this->qRx.push_back(d);
+						if (!this->parameters.parity.load(std::memory_order_relaxed)) this->qRx.push_back(d);
 						resync1:
 						this->CMDBuffer.push_back(d);
 						s=this->isModuleForceRestCMD();
@@ -1057,8 +1140,8 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		void connect(const char* url){
 			//std::string serv="ws://go.minipavi.fr:8182";//"ws://localhost:8080";
 			this->webSocket.setUrl(url);
-			if (this->parameters.ping==0) this->webSocket.setPingInterval(-1);
-			else this->webSocket.setPingInterval(this->parameters.ping*15);
+			if (this->parameters.ping.load(std::memory_order_relaxed)==0) this->webSocket.setPingInterval(-1);
+			else this->webSocket.setPingInterval(this->parameters.ping.load(std::memory_order_relaxed)*15);
 			this->webSocket.disablePerMessageDeflate();
 			this->webSocket.disableAutomaticReconnection();
 			this->webSocket.setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg){
@@ -1104,53 +1187,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		void disconnect(){
 			//if (this->webSocket.getReadyState()==ix::ReadyState::Open||this->webSocket.getReadyState()==ix::ReadyState::Connecting) 
 			this->webSocket.stop();
-		}
-		
-		void setURL(const char* url){
-			std::vector<unsigned char>* p=utf8_to_videotex_ts9347(url,false,true);
-			this->parameters.wsBuffer.clear();
-			this->parameters.wsSplit.clear();
-			this->parameters.wsBuffer.insert(this->parameters.wsBuffer.end(), p->begin(), p->end());
-			//compute the length of each visible characters
-			size_t i=0;
-			int n=0;
-			while (i<p->size()){
-				switch ((*p)[i]){
-					case 0x0E:
-					case 0x0F:
-						n++;
-						i++;
-						break;
-					case 0x19://p is considered a valid videotex data
-						if (((*p)[i+1]&0xF0)==0x40){
-							i+=3;
-							n+=3;
-						}
-						else{
-							i+=2;
-							n+=2;
-						}
-						this->parameters.wsSplit.push_back(n);
-						n=0;
-						break;
-					default:
-						n++;
-						i++;
-						this->parameters.wsSplit.push_back(n);
-						n=0;
-						break;
-				}
-			}
-			this->parameters.wsSplit[this->parameters.wsSplit.size()-1]+=n;//if SI/SO at the end of the videotex data
-			delete p;
-			if (this->currentState==this->PARAMETERS){
-				this->refreshURLLine(this->parameters.currentLine==0);
-			}
-		}
-		
-		char* getURL(){//TODO: sanitize url needed
-			char* d=videotex_to_utf8(&(this->parameters.wsBuffer));
-			return d;
 		}
 		
 		void printLineSeparator(unsigned char row){
@@ -1300,6 +1336,8 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 			this->moveCursor(3,12);
 			this->selectLineStatic(select);
+			{
+			std::unique_lock<std::mutex> lock(this->parameters.wsMutex);
 			if (this->parameters.wsSplit.size()<=29){
 				this->print(this->parameters.wsBuffer.data(),this->parameters.wsBuffer.size());
 				if (this->parameters.wsSplit.size()==29) this->moveCursor(4,12);
@@ -1315,6 +1353,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 				for (unsigned char i=29;i<std::min(2*29,(int)this->parameters.wsSplit.size());i++) l+=this->parameters.wsSplit[i];
 				this->print(p,l);
 				
+			}
 			}
 			if (select) this->print(enable_cursor,sizeof(enable_cursor)/sizeof(enable_cursor[0]));
 		}
@@ -1335,7 +1374,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			this->moveCursor(5,2);
 			this->selectLineDynamic(false);
 			this->printString("baudrate:");
-			switch (this->parameters.baudrate){
+			switch (this->parameters.baudrate.load(std::memory_order_relaxed)){
 				case 0:this->printString("300 Bauds");break;
 				case 1:this->printString("1200 Bauds");break;
 				case 2:this->printString("4800 Bauds");break;
@@ -1345,12 +1384,12 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			this->moveCursor(6,4);
 			this->selectLineDynamic(false);
 			this->printString("format:");
-			this->printString(this->parameters.parity?"7bits+parit\x19\x42""e":"7bits");
+			this->printString(this->parameters.parity.load(std::memory_order_relaxed)?"7bits+parit\x19\x42""e":"7bits");
 			
 			this->moveCursor(7,6);
 			this->selectLineDynamic(false);
 			this->printString("ping:");
-			switch (this->parameters.ping){
+			switch (this->parameters.ping.load(std::memory_order_relaxed)){
 				case 0:this->printString("d\x19\x42""esactiv\x19\x42""e");break;
 				case 1:this->printString("15 secondes");break;
 				case 2:this->printString("30 secondes");break;
@@ -1361,7 +1400,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			this->selectLineDynamic(false);
 			this->printString("affichage:");
 			//this->printString(this->parameters.c80?"mixte":"vid\x19\x42""eotex");
-			switch (this->parameters.display){
+			switch (this->parameters.display.load(std::memory_order_relaxed)){
 				case 0:this->printString("page,vid\x19\x42""eotex");break;
 				case 1:this->printString("page,t\x19\x42""el\x19\x42""einformatique");break;
 				case 2:this->printString("rouleau,vid\x19\x42""eotex");break;
@@ -1371,22 +1410,22 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			this->moveCursor(9,6);
 			this->selectLineDynamic(false);
 			this->printString("\x19\x42""echo:");
-			this->printString(this->parameters.echo?"oui":"non");
+			this->printString(this->parameters.echo.load(std::memory_order_relaxed)?"oui":"non");
 			
 			this->moveCursor(10,3);
 			this->selectLineDynamic(false);
 			this->printString("clavier:");
-			this->printString(this->parameters.extendedKeyboard?"\x19\x42""etendu":"simple");
+			this->printString(this->parameters.extendedKeyboard.load(std::memory_order_relaxed)?"\x19\x42""etendu":"simple");
 			
 			this->moveCursor(11,5);
 			this->selectLineDynamic(false);
 			this->printString("casse:");
-			this->printString(this->parameters.upperCase?"majuscule":"minuscule");
+			this->printString(this->parameters.upperCase.load(std::memory_order_relaxed)?"majuscule":"minuscule");
 			
 			this->moveCursor(12,3);
 			this->selectLineDynamic(false);
 			this->printString("curseur:");
-			this->printString(this->parameters.cursor?"visible":"invisible");
+			this->printString(this->parameters.cursor.load(std::memory_order_relaxed)?"visible":"invisible");
 			
 			this->printLineSeparator(14);
 			
@@ -1428,84 +1467,84 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			switch (line){
 				case 1:
 					this->moveCursor(17,15);
-					this->selectLineDynamic(this->parameters.baudrate==0);
+					this->selectLineDynamic(this->parameters.baudrate.load(std::memory_order_relaxed)==0);
 					this->printString("300 Bauds");
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.baudrate==1);
+					this->selectLineDynamic(this->parameters.baudrate.load(std::memory_order_relaxed)==1);
 					this->printString("1200 Bauds");
 					this->moveCursor(19,15);
-					this->selectLineDynamic(this->parameters.baudrate==2);
+					this->selectLineDynamic(this->parameters.baudrate.load(std::memory_order_relaxed)==2);
 					this->printString("4800 Bauds");
 					this->moveCursor(20,15);
-					this->selectLineDynamic(this->parameters.baudrate==3);
+					this->selectLineDynamic(this->parameters.baudrate.load(std::memory_order_relaxed)==3);
 					this->printString("9600 Bauds");
 					break;
 				case 2:
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.parity);
+					this->selectLineDynamic(!this->parameters.parity.load(std::memory_order_relaxed));
 					this->printString("7bits");
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.parity);
+					this->selectLineDynamic(this->parameters.parity.load(std::memory_order_relaxed));
 					this->printString("7bits+parit\x19\x42""e");
 					break;
 				case 3:
 					this->moveCursor(17,15);
-					this->selectLineDynamic(this->parameters.ping==0);
+					this->selectLineDynamic(this->parameters.ping.load(std::memory_order_relaxed)==0);
 					this->printString("d\x19\x42""esactiv\x19\x42""e");
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.ping==1);
+					this->selectLineDynamic(this->parameters.ping.load(std::memory_order_relaxed)==1);
 					this->printString("15 secondes");
 					this->moveCursor(19,15);
-					this->selectLineDynamic(this->parameters.ping==2);
+					this->selectLineDynamic(this->parameters.ping.load(std::memory_order_relaxed)==2);
 					this->printString("30 secondes");
 					this->moveCursor(20,15);
-					this->selectLineDynamic(this->parameters.ping==3);
+					this->selectLineDynamic(this->parameters.ping.load(std::memory_order_relaxed)==3);
 					this->printString("45 secondes");
 					break;
 				case 4:
 					this->moveCursor(17,15);
-					this->selectLineDynamic(this->parameters.display==0);
+					this->selectLineDynamic(this->parameters.display.load(std::memory_order_relaxed)==0);
 					this->printString("page,vid\x19\x42""eotex");
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.display==1);
+					this->selectLineDynamic(this->parameters.display.load(std::memory_order_relaxed)==1);
 					this->printString("page,t\x19\x42""el\x19\x42""einformatique");
 					this->moveCursor(19,15);
-					this->selectLineDynamic(this->parameters.display==2);
+					this->selectLineDynamic(this->parameters.display.load(std::memory_order_relaxed)==2);
 					this->printString("rouleau,vid\x19\x42""eotex");
 					this->moveCursor(20,15);
-					this->selectLineDynamic(this->parameters.display==3);
+					this->selectLineDynamic(this->parameters.display.load(std::memory_order_relaxed)==3);
 					this->printString("rouleau,t\x19\x42""el\x19\x42""einformatique");
 					break;
 				case 5:
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.echo);
+					this->selectLineDynamic(!this->parameters.echo.load(std::memory_order_relaxed));
 					this->printString("non");
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.echo);
+					this->selectLineDynamic(this->parameters.echo.load(std::memory_order_relaxed));
 					this->printString("oui");
 					break;
 				case 6:
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.extendedKeyboard);
+					this->selectLineDynamic(!this->parameters.extendedKeyboard.load(std::memory_order_relaxed));
 					this->printString("simple");
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.extendedKeyboard);
+					this->selectLineDynamic(this->parameters.extendedKeyboard.load(std::memory_order_relaxed));
 					this->printString("\x19\x42""etendu");
 					break;
 				case 7:
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.upperCase);
+					this->selectLineDynamic(!this->parameters.upperCase.load(std::memory_order_relaxed));
 					this->printString("minuscule");
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.upperCase);
+					this->selectLineDynamic(this->parameters.upperCase.load(std::memory_order_relaxed));
 					this->printString("majuscule");
 					break;
 				case 8:
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.cursor);
+					this->selectLineDynamic(!this->parameters.cursor.load(std::memory_order_relaxed));
 					this->printString("invisible");
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.cursor);
+					this->selectLineDynamic(this->parameters.cursor.load(std::memory_order_relaxed));
 					this->printString("visible");
 					break;
 			}
@@ -1514,15 +1553,15 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		void cycleParameterOption(unsigned char line){//TODO
 			switch (line){
 				case 1://baudrate
-					this->moveCursor(17+this->parameters.baudrate,15);
+					this->moveCursor(17+this->parameters.baudrate.load(std::memory_order_relaxed),15);
 					this->selectLineDynamic(false);
-					this->parameters.baudrate=(this->parameters.baudrate+1)%4;
-					this->moveCursor(17+this->parameters.baudrate,15);
+					this->parameters.baudrate.store((this->parameters.baudrate.load(std::memory_order_relaxed)+1)%4,std::memory_order_relaxed);
+					this->moveCursor(17+this->parameters.baudrate.load(std::memory_order_relaxed),15);
 					this->selectLineDynamic(true);
 					this->moveCursor(5,12);
 					this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
 					this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
-					switch (this->parameters.baudrate){
+					switch (this->parameters.baudrate.load(std::memory_order_relaxed)){
 						case 0:this->printString("300 Bauds\x18");break;
 						case 1:this->printString("1200 Bauds\x18");break;
 						case 2:this->printString("4800 Bauds\x18");break;
@@ -1530,26 +1569,26 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					}
 					break;
 				case 2://parity
-					this->parameters.parity=!this->parameters.parity;
+					this->parameters.parity.store(!this->parameters.parity.load(std::memory_order_relaxed),std::memory_order_relaxed);
 					this->moveCursor(6,12);
 					this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
 					this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
-					this->printString(this->parameters.parity?"7bits+parit\x19\x42""e\x18":"7bits\x18");
+					this->printString(this->parameters.parity.load(std::memory_order_relaxed)?"7bits+parit\x19\x42""e\x18":"7bits\x18");
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.parity);
+					this->selectLineDynamic(!this->parameters.parity.load(std::memory_order_relaxed));
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.parity);
+					this->selectLineDynamic(this->parameters.parity.load(std::memory_order_relaxed));
 					break;
 				case 3://ping
-					this->moveCursor(17+this->parameters.ping,15);
+					this->moveCursor(17+this->parameters.ping.load(std::memory_order_relaxed),15);
 					this->selectLineDynamic(false);
-					this->parameters.ping=(this->parameters.ping+1)%4;
-					this->moveCursor(17+this->parameters.ping,15);
+					this->parameters.ping.store((this->parameters.ping.load(std::memory_order_relaxed)+1)%4,std::memory_order_relaxed);
+					this->moveCursor(17+this->parameters.ping.load(std::memory_order_relaxed),15);
 					this->selectLineDynamic(true);
 					this->moveCursor(7,12);
 					this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
 					this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
-					switch (this->parameters.ping){
+					switch (this->parameters.ping.load(std::memory_order_relaxed)){
 						case 0:this->printString("d\x19\x42""esactiv\x19\x42""e\x18");break;
 						case 1:this->printString("15 secondes\x18");break;
 						case 2:this->printString("30 secondes\x18");break;
@@ -1566,15 +1605,15 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					this->selectLineDynamic(!this->parameters.c80);
 					this->moveCursor(17,15);
 					this->selectLineDynamic(this->parameters.c80);*/
-					this->moveCursor(17+this->parameters.display,15);
+					this->moveCursor(17+this->parameters.display.load(std::memory_order_relaxed),15);
 					this->selectLineDynamic(false);
-					this->parameters.display=(this->parameters.display+1)%4;
-					this->moveCursor(17+this->parameters.display,15);
+					this->parameters.display.store((this->parameters.display.load(std::memory_order_relaxed)+1)%4,std::memory_order_relaxed);
+					this->moveCursor(17+this->parameters.display.load(std::memory_order_relaxed),15);
 					this->selectLineDynamic(true);
 					this->moveCursor(8,12);
 					this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
 					this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
-					switch (this->parameters.display){
+					switch (this->parameters.display.load(std::memory_order_relaxed)){
 						case 0:this->printString("page,vid\x19\x42""eotex\x18");break;
 						case 1:this->printString("page,t\x19\x42""el\x19\x42""einformatique\x18");break;
 						case 2:this->printString("rouleau,vid\x19\x42""eotex\x18");break;
@@ -1582,48 +1621,48 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					}
 					break;
 				case 5://echo
-					this->parameters.echo=!this->parameters.echo;
+					this->parameters.echo.store(!this->parameters.echo.load(std::memory_order_relaxed),std::memory_order_relaxed);
 					this->moveCursor(9,12);
 					this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
 					this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
-					this->printString(this->parameters.echo?"oui\x18":"non\x18");
+					this->printString(this->parameters.echo.load(std::memory_order_relaxed)?"oui\x18":"non\x18");
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.echo);
+					this->selectLineDynamic(!this->parameters.echo.load(std::memory_order_relaxed));
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.echo);
+					this->selectLineDynamic(this->parameters.echo.load(std::memory_order_relaxed));
 					break;
 				case 6://keyboard
-					this->parameters.extendedKeyboard=!this->parameters.extendedKeyboard;
+					this->parameters.extendedKeyboard.store(!this->parameters.extendedKeyboard.load(std::memory_order_relaxed),std::memory_order_relaxed);
 					this->moveCursor(10,12);
 					this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
 					this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
-					this->printString(this->parameters.extendedKeyboard?"\x19\x42""etendu\x18":"simple\x18");
+					this->printString(this->parameters.extendedKeyboard.load(std::memory_order_relaxed)?"\x19\x42""etendu\x18":"simple\x18");
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.extendedKeyboard);
+					this->selectLineDynamic(!this->parameters.extendedKeyboard.load(std::memory_order_relaxed));
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.extendedKeyboard);
+					this->selectLineDynamic(this->parameters.extendedKeyboard.load(std::memory_order_relaxed));
 					break;
 				case 7://case
-					this->parameters.upperCase=!this->parameters.upperCase;
+					this->parameters.upperCase.store(!this->parameters.upperCase.load(std::memory_order_relaxed),std::memory_order_relaxed);
 					this->moveCursor(11,12);
 					this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
 					this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
-					this->printString(this->parameters.upperCase?"majuscule\x18":"minuscule\x18");
+					this->printString(this->parameters.upperCase.load(std::memory_order_relaxed)?"majuscule\x18":"minuscule\x18");
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.upperCase);
+					this->selectLineDynamic(!this->parameters.upperCase.load(std::memory_order_relaxed));
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.upperCase);
+					this->selectLineDynamic(this->parameters.upperCase.load(std::memory_order_relaxed));
 					break;
 				case 8://cursor
-					this->parameters.cursor=!this->parameters.cursor;
+					this->parameters.cursor.store(!this->parameters.cursor.load(std::memory_order_relaxed),std::memory_order_relaxed);
 					this->moveCursor(12,12);
 					this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
 					this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
-					this->printString(this->parameters.cursor?"visible\x18":"invisible\x18");
+					this->printString(this->parameters.cursor.load(std::memory_order_relaxed)?"visible\x18":"invisible\x18");
 					this->moveCursor(17,15);
-					this->selectLineDynamic(!this->parameters.cursor);
+					this->selectLineDynamic(!this->parameters.cursor.load(std::memory_order_relaxed));
 					this->moveCursor(18,15);
-					this->selectLineDynamic(this->parameters.cursor);
+					this->selectLineDynamic(this->parameters.cursor.load(std::memory_order_relaxed));
 					break;
 			}
 		}

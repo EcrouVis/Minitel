@@ -601,7 +601,7 @@ void m80C32::fixedSerialClockTick(){
 }
 void m80C32::RXClockTickX4(){
 	if (this->rx_prescaler<48) return;
-	this->rx_prescaler=this->rx_prescaler%48;
+	this->rx_prescaler-=48;//this->rx_prescaler=this->rx_prescaler%48;
 	this->rx_subtick++;
 	this->rx_subtick&=0x03;
 	
@@ -609,7 +609,7 @@ void m80C32::RXClockTickX4(){
 }
 void m80C32::TXClockTickX4(){
 	if (this->tx_prescaler<48) return;
-	this->tx_prescaler=this->tx_prescaler%48;
+	this->tx_prescaler-=48;//this->tx_prescaler=this->tx_prescaler%48;
 	this->tx_subtick++;
 	this->tx_subtick&=0x03;
 	
@@ -751,7 +751,7 @@ void m80C32::updateTX(){
 			//(*this->sendTxD)(false);
 			//this->sendTxD(false);
 			this->P3_out_alt|=0x02;
-			this->sendP3(this->getSFRByteIn(this->P3)&this->P3_out_alt);
+			this->sendP3(this->PX_out[3]&this->P3_out_alt);//this->sendP3(this->getSFRByteIn(this->P3)&this->P3_out_alt);
 		}
 	}
 	this->TX_bit++;

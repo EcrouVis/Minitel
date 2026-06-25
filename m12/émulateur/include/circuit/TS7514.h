@@ -4,6 +4,9 @@
 #include <cstdio>
 #include <atomic>
 #include <cmath>
+#ifndef M_PI
+#define M_PI (3.14159265358979323846264338327950288)
+#endif
 #include "miniaudio/miniaudio.h"
 #include "circuit/PhoneLine.h"
 
@@ -99,6 +102,7 @@ class TS7514{
 		}
 		void ATxIChangeIn(bool b){
 			//if (b!=this->ATxI) printf("ATxI %i \n",(int)b);
+			if (b!=this->ATxI) this->ATxITimeout=this->ATxITimeoutMax;
 			this->ATxI=b;
 		}
 		
@@ -221,10 +225,20 @@ class TS7514{
 		float ATxI_mean_value=0;
 		float ATxI_sample_out=0;
 		float ATxIFilterBuffer[6];
+		unsigned short ATxITimeout=0;
+		constexpr static unsigned short ATxITimeoutMax=24576;
+		
 		
 		void ATxIFilterUpdate(){//TODO: parallel implementation + SIMD?
 			float x1,x2;
-			if ((this->REG[this->RPTF].load(std::memory_order_relaxed)&0x0C)==0x00){//ATxI selected
+			if ((this->REG[this->RPTF].load(std::memory_order_relaxed)&0x0C)==0x00&&(bool)this->ATxITimeout){//ATxI selected
+				this->ATxITimeout--;
+				if (!(bool)this->ATxITimeout){//if ATxI does not change for a long time (<0.02s) disable ATxI audio processing
+					this->ATxI_sample_out=0;
+					this->ATxI_mean_value=0;
+					for (unsigned int i=0;i<sizeof(this->ATxIFilterBuffer)/sizeof(this->ATxIFilterBuffer[0]);i++) this->ATxIFilterBuffer[i]=0;
+				}
+				
 				if ((this->REG[this->RPTF].load(std::memory_order_relaxed)&0x0E)==0x02){//low pass filter selected
 					//Chebyshev type II 6th order low pass filter (biquad filter transposed direct form 2, cutoff frequency: 6000Hz, sampling frequency: 1228800Hz, attenuation: 55dB)
 					x1=0.0017234474663048761*(this->ATxI?1:-1);
@@ -378,7 +392,7 @@ class TS7514{
 				else rx&=(this->MCnBC_buf)?BC_filter:MC_filter;
 			}
 			if (this->Rx_din!=rx){
-				printf("Rx %04X / MCnBC %i\n",rx,this->MCnBC_buf);
+				//printf("Rx %04X / MCnBC %i\n",rx,this->MCnBC_buf);
 				this->Rx_din=rx;
 				this->sendnDCD(!((bool)rx));//TODO: delay
 				this->sendRxD((bool)(rx&(line_v23_75bps_1|line_v23_1200bps_1)));

@@ -4,6 +4,9 @@
 #include <queue>
 #include <cstdio>
 #include <cmath>
+#ifndef M_PI
+#define M_PI (3.14159265358979323846264338327950288)
+#endif
 #include <atomic>
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"

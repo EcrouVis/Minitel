@@ -35,9 +35,8 @@ class NotificationServer{
 		}
 		void notification_window(double duration=5,double duration_fading=1,int max_notification=-1){
 			if (delete_old_notifications(duration,max_notification)){
-				ImGui::SetNextWindowBgAlpha(0.5f);
 				ImGui::SetNextWindowPos(ImVec2(10,10));
-				ImGui::Begin("Notifications",NULL,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoNav);
+				ImGui::Begin("Notifications",NULL,ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize|ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoBringToFrontOnFocus|ImGuiWindowFlags_NoFocusOnAppearing|ImGuiWindowFlags_NoScrollbar|ImGuiWindowFlags_NoNav|ImGuiWindowFlags_NoBackground);
 				imgui_notification* tmp=this->notification_list;
 				double t=glfwGetTime()-duration;
 				while (tmp!=NULL){

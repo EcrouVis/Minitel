@@ -20,6 +20,10 @@ class KeyboardIndicator{
 		void setKeyboard(Keyboard* kb){
 			this->p_keyboard=kb;
 		}
+		bool isSignaling(){
+			if (this->p_keyboard==NULL) return false;
+			return this->p_keyboard->LED_POWER.load(std::memory_order_acquire)!=LED_OFF||this->p_keyboard->LED_SPEAKER.load(std::memory_order_acquire)!=LED_OFF;
+		}
 		void window(){
 			if (this->p_keyboard==NULL) return;
 			

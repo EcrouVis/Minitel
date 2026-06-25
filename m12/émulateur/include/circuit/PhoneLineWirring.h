@@ -19,7 +19,7 @@ class PhoneLineWire{//simplify wirring+relay for the phone line
 			}
 		}
 		void wireModemIn(unsigned short s){
-			printf("M %04X\n",s);
+			//printf("M %04X\n",s);
 			this->ModemState=s&~line_Closed;
 			if (this->RelayState){
 				unsigned short st=this->ModemState|this->KeyboardState|this->RTCState;
@@ -31,7 +31,7 @@ class PhoneLineWire{//simplify wirring+relay for the phone line
 			}
 		}
 		void wireKeyboardIn(unsigned short s){
-			printf("K %04X\n",s);
+			//printf("K %04X\n",s);
 			this->KeyboardState=s;
 			if (this->RelayState){
 				unsigned short st=this->ModemState|this->KeyboardState|this->RTCState;
@@ -44,7 +44,7 @@ class PhoneLineWire{//simplify wirring+relay for the phone line
 			}
 		}
 		void wireRTCIn(unsigned short s){
-			printf("R %04X\n",s);
+			//printf("R %04X\n",s);
 			this->RTCState=s;
 			if (this->RelayState){
 				unsigned short st=this->ModemState|this->KeyboardState|this->RTCState;

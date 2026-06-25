@@ -11,10 +11,24 @@
 		"RAM file":	""
 	},
 	"IO":	{
+		"Keyboard":	{
+			"auto hide indicator":	true
+		},
 		"DIN":	{
 			"Printer":	{
 				"enabled":	true,
 				"fr":	true
+			},
+			"Websocket":	{
+				"URL":	"ws://localhost:8080",
+				"baudrate":	3,
+				"parity":	false,
+				"ping":	3,
+				"display":	0,
+				"echo":	false,
+				"extended keyboard":	false,
+				"uppercase":	false,
+				"cursor":	true
 			}
 		},
 		"Phone line":	{

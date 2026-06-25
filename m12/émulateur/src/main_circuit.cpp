@@ -522,9 +522,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		}
 	};*/
 	
-	bool pause_emu=false;
-	uc.debug_signal_alu_before_exec=[p_gState,&pause_emu,&rtd,&uc](){
-		pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
+	//bool pause_emu=false;
+	uc.debug_signal_alu_before_exec=[p_gState,&CLKs,&rtd,&uc](){
+		//pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
+		CLKs.setPause(p_gState->stepByStep.load(std::memory_order_relaxed));
 		/*if (p_gState->minitelOn.load(std::memory_order_relaxed)){
 			rtd.update();
 		}*/
@@ -536,25 +537,20 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	//clock
 	
-	auto stopC=[p_gState](){
+	/*auto stopC=[p_gState](){
 		return p_gState->shutdown.load(std::memory_order_relaxed);
 	};
 	CLKs.setStopCondition(stopC);
-	auto pauseC=[&pause_emu](){
+	auto pauseC=inline [&pause_emu](){
 		return pause_emu;
-		/*bool p=p_gState->stepByStep.load(std::memory_order_relaxed)&&(uc.exec_instruction||!next_step);
-		if (uc.exec_instruction){
-			uc.exec_instruction=false;
-			next_step=false;
-		}
-		return p;*/
 	};
-	CLKs.setPauseCondition(pauseC);
+	CLKs.setPauseCondition(pauseC);*/
 	
 	//mailbox
 	
-	auto checkMB=[p_mb_circuit,&eram,&erom,&modem,&wt,&pause_emu,&kb,p_gState,&rtcn,&rtcmp,&crtb](){
-		pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
+	auto checkMB=[p_mb_circuit,&eram,&erom,&modem,&wt,&CLKs,&kb,p_gState,&rtcn,&rtcmp,&crtb](){
+		//pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
+		CLKs.setPause(p_gState->stepByStep.load(std::memory_order_relaxed));
 		thread_message ms;
 		static unsigned char erom_cpy[EROM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
 		static unsigned char eram_cpy[ERAM_SIZE];
@@ -576,13 +572,15 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 					//TODO: reset keyboard
 					break;
 				case EMU_NEXT_STEP:
-					pause_emu=false;
+					//pause_emu=false;
+					CLKs.setPause(false);
 					break;
 				case SPECIAL:
-				{
 					rtcn.requestPhoneLine((RTCService*)&rtcmp);
 					break;
-				}
+				case EMU_SHUTDOWN:
+					CLKs.setStop(true);
+					break;
 				default:
 					fprintf(stdout,"unknown cmd %i\n",ms.cmd);
 					break;
@@ -605,9 +603,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		rtcn.CLKTickIn600Hz();
 	};
 	CLKs.subscribe600Hz(CLKTick600);
-	auto CLKTick9600=[&smn,&wt](){
+	auto CLKTick9600=[&smn,&wt,&rtcmp](){
 		smn.CLKTickIn9600Hz();
 		wt.incrementTimer();
+		rtcmp.CLKTickIn9600Hz();
 	};
 	CLKs.subscribe9600Hz(CLKTick9600);
 	
@@ -695,6 +694,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	ms.p=(void*)&smnap;
 	ms.cmd=PRINTER;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&smnalw;
+	ms.cmd=WEBSOCKET_DIN;
 	p_mb_video->send(&ms);
 	
 	ms.p=(void*)&smnas;
