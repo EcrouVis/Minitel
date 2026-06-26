@@ -224,7 +224,12 @@ class M12Window{
 			//glfwWindowHint(GLFW_MAXIMIZED , GL_TRUE);
 			//glfwWindowHint(GLFW_AUTO_ICONIFY , GL_FALSE);
 		 
-			this->window = glfwCreateWindow(this->PARAMETERS.imgui.window_size[0], this->PARAMETERS.imgui.window_size[1], this->PARAMETERS.info.title, fullscreen?glfwGetPrimaryMonitor():NULL, NULL);
+			if (fullscreen){
+				GLFWmonitor* monitor=glfwGetPrimaryMonitor();
+				const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+				this->window = glfwCreateWindow(mode->width, mode->height, this->PARAMETERS.info.title, monitor, NULL);
+			}
+			else this->window = glfwCreateWindow(this->PARAMETERS.imgui.window_size[0], this->PARAMETERS.imgui.window_size[1], this->PARAMETERS.info.title, NULL, NULL);
 			//this->window = glfwCreateWindow(640, 480, this->PARAMETERS.info.title, NULL, NULL);
 			if (!this->window)
 			{
