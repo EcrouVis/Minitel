@@ -326,38 +326,40 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			std::unique_lock<std::mutex> lock(this->parameters.wsMutex);
 			this->parameters.wsBuffer.clear();
 			this->parameters.wsSplit.clear();
-			this->parameters.wsBuffer.insert(this->parameters.wsBuffer.end(), p->begin(), p->end());
-			//compute the length of each visible characters
-			size_t i=0;
-			int n=0;
-			while (i<p->size()){
-				switch ((*p)[i]){
-					case 0x0E:
-					case 0x0F:
-						n++;
-						i++;
-						break;
-					case 0x19://p is considered a valid videotex data
-						if (((*p)[i+1]&0xF0)==0x40){
-							i+=3;
-							n+=3;
-						}
-						else{
-							i+=2;
-							n+=2;
-						}
-						this->parameters.wsSplit.push_back(n);
-						n=0;
-						break;
-					default:
-						n++;
-						i++;
-						this->parameters.wsSplit.push_back(n);
-						n=0;
-						break;
+			if (p->size()>0){
+				this->parameters.wsBuffer.insert(this->parameters.wsBuffer.end(), p->begin(), p->end());
+				//compute the length of each visible characters
+				size_t i=0;
+				int n=0;
+				while (i<p->size()){
+					switch ((*p)[i]){
+						case 0x0E:
+						case 0x0F:
+							n++;
+							i++;
+							break;
+						case 0x19://p is considered a valid videotex data
+							if (((*p)[i+1]&0xF0)==0x40){
+								i+=3;
+								n+=3;
+							}
+							else{
+								i+=2;
+								n+=2;
+							}
+							this->parameters.wsSplit.push_back(n);
+							n=0;
+							break;
+						default:
+							n++;
+							i++;
+							this->parameters.wsSplit.push_back(n);
+							n=0;
+							break;
+					}
 				}
+				this->parameters.wsSplit[this->parameters.wsSplit.size()-1]+=n;//if SI/SO at the end of the videotex data
 			}
-			this->parameters.wsSplit[this->parameters.wsSplit.size()-1]+=n;//if SI/SO at the end of the videotex data
 			delete p;
 			if (this->currentState==this->PARAMETERS){
 				lock.unlock();

@@ -926,7 +926,7 @@ class M12Window{
 							const char *key1[13]={"Escape","Alt","²","Tab","Backspace","F2","F3","F4","F5","F6","F7","F8","F9"};
 							const char *key2[13]={"Esc","Fnct","\'On/Off\'","Connex/Fin","Mem","Sommaire","Guide","Annulation","Correction","Retour","Suite","Répétition","Envoi"};
 							const char *key3[8]={"AltGr+P","AltGr+M","AltGr+A","AltGr+Z","AltGr+R","AltGr+B","AltGr+T","AltGr+I"};
-							const char *key4[8]={"Volume+","Volume-","Appel Annuaire","Appel Répertoire n°51","Appel Répertoire","Appel Bis","Décrochage téléphone (haut parleur)","Impr. (Shift+Appel Répertoire)"};
+							const char *key4[8]={"Volume+","Volume-","Appel Annuaire","Appel Express (n°51)","Appel Répertoire","Appel Bis","Décrochage téléphone (haut parleur)","Impr. (Shift+Appel Annuaire)"};
 							for (int i=0;i<13;i++){
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
