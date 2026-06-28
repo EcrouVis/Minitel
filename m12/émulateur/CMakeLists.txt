@@ -1,15 +1,21 @@
 cmake_minimum_required(VERSION 3.23)
 
+include(FetchContent)
+
+set(CMAKE_COLOR_DIAGNOSTICS On)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake;${CMAKE_MODULE_PATH}")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_COMPILER gcc)
 set( CMAKE_C_COMPILER gcc )
-set(CMAKE_RC_COMPILER windres)
 
-project(M12 VERSION 0.0.1 LANGUAGES CXX C RC)
+project(M12 VERSION 0.0.1 LANGUAGES CXX C)
 
-set(CMAKE_BUILD_TYPE Debug)
+
+
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
+
+
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}")
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/${CMAKE_BUILD_TYPE}")
@@ -19,53 +25,102 @@ file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/TS9347/TS9347_Texture_Ch
 file(MAKE_DIRECTORY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/rom")
 file(COPY_FILE "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/rom/Bz6.rom")
 
+
+
 add_executable(test)
 SET_TARGET_PROPERTIES(test PROPERTIES OUTPUT_NAME "M12")
 
-add_library(wicon OBJECT)
-set_target_properties(wicon PROPERTIES LINKER_LANGUAGE CXX)
 
-find_path(IXWEBSOCKET_INCLUDE_DIR ixwebsocket/IXWebSocket.h "C:/Program Files (x86)/ixwebsocket/include")
-find_library(IXWEBSOCKET_LIBRARY ixwebsocket "C:/Program Files (x86)/ixwebsocket/lib")
-add_library(ixwebsocket UNKNOWN IMPORTED)
-set_target_properties(
-	ixwebsocket
-	PROPERTIES
-		INTERFACE_INCLUDE_DIRECTORIES "${IXWEBSOCKET_INCLUDE_DIR}"
-		IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
-		IMPORTED_LOCATION "${IXWEBSOCKET_LIBRARY}"
-)
 
-set(LIBRESSL_ROOT_DIR "C:/Program Files (x86)/LibreSSL")
+
+
+set(OPT_LIB )
+
+
+
+
+
+option(USE_EXISTING_IXWEBSOCKET_LIB "Use existing IXWebSocket library" Off)
+
+
+
+
+
+#get libs
+
+set(CACHE{LIBRESSL_ROOT_DIR} TYPE PATH HELP "Install path of LibreSSL" VALUE "C:/Program Files (x86)/LibreSSL")
 find_package(LibreSSL REQUIRED)
+#LibreSSL package can be found at https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/
+#TODO: get / compile LibreSSL automatically
 
-target_sources(wicon
-	PRIVATE
-		include/icon/app.rc
-)
+if (USE_EXISTING_IXWEBSOCKET_LIB)
+	set(CACHE{IXWEBSOCKET_ROOT_DIR} TYPE PATH HELP "Install path of IXWebSocket (compiled with USE_ZLIB=0, USE_TLS=1 and USE_LIBRE_SSL=1)" VALUE "C:/Program Files (x86)/ixwebsocket")
+	find_package(IXWebSocket REQUIRED)
+else()
+	set(USE_ZLIB 0)
+	set(USE_TLS 1)
+	set(USE_LIBRE_SSL 1)
+	set(USE_TEST 0)
+	set(BUILD_SHARED_LIBS Off)
+	FetchContent_Declare(
+		IXWebSocket
+		GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
+	)
+	FetchContent_MakeAvailable(IXWebSocket)
+endif()
 
-target_compile_options(test PRIVATE -static -Wall -Wextra -O2 -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers -msse2 -mavx2 -flto -g -gdwarf-2)
+set(CACHE{GLFW3_ROOT_DIR} TYPE PATH HELP "Install path of Glfw3" VALUE "C:/Program Files (x86)/GLFW")
+find_package(Glfw3 REQUIRED)
+#GLFW3 package can be found at https://www.glfw.org/
+#TODO: get / compile GLFW automatically
 
-target_link_directories(test
-	PUBLIC
-		lib
-)
+
+
+if (WIN32)
+	set(CMAKE_RC_COMPILER windres)
+	enable_language(RC)
+	add_library(wicon OBJECT)
+	set_target_properties(wicon PROPERTIES LINKER_LANGUAGE CXX)
+	target_sources(wicon
+		PRIVATE
+			include/icon/app.rc
+	)
+	list(APPEND 
+		OPT_LIB 
+			wicon
+	)
+endif()
+
+
+
+
+
+if (WIN32)
+	list(APPEND 
+		OPT_LIB
+			crypt32
+			bcrypt
+			gdi32
+			Ws2_32
+	)
+endif()
+
+target_compile_options(test PRIVATE -static -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers -msse2 -mavx2)
 
 target_link_libraries(test
 	PRIVATE
 		ixwebsocket
+		
 		LibreSSL::TLS
 		LibreSSL::SSL
 		LibreSSL::Crypto
-		crypt32
-		bcrypt
 		
 		glfw3
-		gdi32
-		stdc++
-		Ws2_32
 		
-		wicon
+		stdc++
+		m
+		
+		${OPT_LIB}
 )
 
 target_compile_definitions(test
@@ -75,6 +130,8 @@ target_compile_definitions(test
 		
 		MA_NO_DECODING
 		MA_NO_ENCODING
+		MA_NO_RESOURCE_MANAGER
+		MA_NO_NODE_GRAPH
 		
 		CJSON_HIDE_SYMBOLS
 )
@@ -162,9 +219,6 @@ target_sources(test
 		include/cJSON/cJSON.h
 		
 		include/glad/glad.h
-		
-		include/GLFW/glfw3.h
-		include/GLFW/glfw3native.h
 		
 		include/imgui/imconfig.h
 		include/imgui/imgui.h
