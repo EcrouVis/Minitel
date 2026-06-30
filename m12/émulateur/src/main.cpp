@@ -7,6 +7,9 @@
 
 #include <ixwebsocket/IXNetSystem.h>
 
+//after because winsock2 should be include before windows
+#include "data_path.h"
+
 /*extern "C" {
     __declspec(dllexport) unsigned long NvOptimusEnablement = 1;
     __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
@@ -15,6 +18,8 @@
 int main(void){
 	setlocale(LC_ALL, "fr_FR.UTF-8");
 	setlocale(LC_NUMERIC, "en_US.UTF-8");
+	
+	setLocalDirectory();//set the working directory to the directory where the executable really exist (resolve symlink + move working directory if it is not the local directory)
 	
 	GlobalState gState;
 	Mailbox mb_circuit;

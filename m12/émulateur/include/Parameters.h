@@ -126,6 +126,7 @@ struct P_CRT{
 	const float height=250;
 	bool display_effects=false;
 	bool error_loading_texture=false;
+	void* ts9347=NULL;
 };
 constexpr P_CRT CRT_retro_preset{false,12.5,0.225,1./3.,true};
 constexpr P_CRT CRT_modern_preset{true,0.,0.,0.,false};
@@ -154,13 +155,21 @@ struct P_Debug{
 struct P_Info{
 	const char* title="Minitel 12 Philips";
 	const char* programmers="Yves Landemarre";
-	License lib_licenses[6]={
+	constexpr static License lib_licenses[]={
 		{lib_imgui,license_imgui},
 		{lib_glfw,license_glfw},
 		{lib_miniaudio,license_miniaudio},
 		{lib_cjson,license_cjson},
 		{lib_ixwebsocket,license_ixwebsocket},
-		{lib_libressl,license_libressl}
+#ifdef M12_USE_LIBRESSL
+		{lib_libressl,license_libressl},
+#endif
+#ifdef M12_USE_OPENSSL
+		{lib_openssl,license_openssl},
+#endif
+#ifdef M12_USE_MBEDTLS
+		{lib_mbedtls,license_mbedtls},
+#endif
 	};
 	License font_licenses[2]={
 		{font_proggyclean,license_proggyclean},

@@ -306,4 +306,107 @@ class RAMSelector{
 			return 1;
 		}
 };
+class CharsetSelector{
+	public:
+		CharsetSelector(const char* dir){
+			this->setDir(dir);
+		}
+		~CharsetSelector(){
+			if (this->searchDir!=NULL) free((void*)this->searchDir);
+			if (this->CharsetSelected!=NULL) free((void*)this->CharsetSelected);
+			std::for_each(this->CharsetCandidate.begin(), this->CharsetCandidate.end(), [](char* f) { free(f); });
+		}
+		void setDir(const char* dir){
+			if (this->searchDir!=NULL) free(this->searchDir);
+			this->searchDir=(char*)malloc(strlen(dir)+1);
+			strcpy(this->searchDir,dir);
+			if (!std::filesystem::is_directory(this->searchDir)) std::filesystem::create_directories(this->searchDir);
+			this->Select(NULL);
+		}
+		void Select(const char* f){
+			if (f==NULL){
+				if (this->CharsetSelected!=NULL) free(this->CharsetSelected);
+				this->CharsetSelected=NULL;
+				//callback
+				this->selectionCallback(this->CharsetSelected);
+			}
+			else if (this->isCandidate(f)){
+				if (this->CharsetSelected!=NULL) free(this->CharsetSelected);
+				this->CharsetSelected=(char*)malloc(strlen(f)+1);
+				strcpy(this->CharsetSelected,f);
+				this->CharsetSelected[strlen(f)]=0;
+				//callback
+				this->selectionCallback(this->CharsetSelected);
+			}
+		}
+		char* getSelected(){
+			return this->CharsetSelected;
+		}
+		
+		void widget(){
+			bool charset_combo_state;
+			if (this->CharsetSelected==NULL){
+				ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1,0,0,1));
+				charset_combo_state=ImGui::BeginCombo("##charset", "<Jeu de caractères introuvable>", 0);
+				ImGui::PopStyleColor();
+			}
+			else{
+				charset_combo_state=ImGui::BeginCombo("##charset", std::filesystem::path(this->CharsetSelected).filename().stem().string().c_str(), 0);
+			}
+			
+			if (charset_combo_state!=this->charset_combo_state_previous){
+				if(charset_combo_state) this->updateFileList();
+				
+				this->charset_combo_state_previous=charset_combo_state;
+			}
+			
+			if(charset_combo_state){
+				std::for_each(this->CharsetCandidate.begin(), this->CharsetCandidate.end(), [this](char* f) {
+					if (ImGui::Selectable(std::filesystem::path(f).filename().stem().string().c_str())){
+						this->Select(f);
+					}
+				});
+				ImGui::EndCombo();
+			}
+		}
+		
+		void setCallback(std::function<void(char*)> func){
+			this->selectionCallback=func;
+		}
+		
+	private:
+		char* searchDir=NULL;
+		
+		const char* ext[5]={".png",".jpg",".bmp",".jpeg",".gif"};
+		
+		char* CharsetSelected=NULL;
+		std::vector<char*> CharsetCandidate;
+		
+		bool charset_combo_state_previous=false;
+		
+		std::function<void(char*)> selectionCallback=[](char* f){};
+		
+		bool isCandidate(const char* f){
+			if (!std::filesystem::is_regular_file(f)) return false;
+			
+			for (long long unsigned int i=0;i<sizeof(this->ext)/sizeof(this->ext[0]);i++){
+				if (strcmp(this->ext[i],std::filesystem::path(f).extension().string().c_str())==0) return true;
+			}
+			return false;
+		}
+		void updateFileList(){
+			std::for_each(this->CharsetCandidate.begin(), this->CharsetCandidate.end(), [](char* f) { free(f); });
+			this->CharsetCandidate.clear();
+			if (!std::filesystem::is_directory(this->searchDir)) std::filesystem::create_directories(this->searchDir);
+			for (const auto& entry : std::filesystem::directory_iterator(this->searchDir)) {
+				if ((this->CharsetSelected==NULL||!std::filesystem::equivalent(entry.path(),this->CharsetSelected))&&this->isCandidate(entry.path().string().c_str())){
+					size_t s=strlen(entry.path().string().c_str());
+					char* f=(char*)malloc(s+1);
+					strcpy(f,entry.path().string().c_str());
+					f[s]=0;
+					this->CharsetCandidate.push_back(f);
+				}
+			}
+		}
+};
 #endif

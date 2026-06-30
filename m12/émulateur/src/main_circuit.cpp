@@ -80,7 +80,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	rtcn.subscribeService((RTCService*)&rtcmp);
 	PhoneLineWire phoneLine;
 	
+#ifdef M12_USE_DECOMP_TOOLS
 	RuntimeDecompiler rtd(&uc);
+#endif
 	
 	
 	
@@ -523,18 +525,17 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};*/
 	
 	//bool pause_emu=false;
+#ifdef M12_USE_DECOMP_TOOLS
 	uc.debug_signal_alu_before_exec=[p_gState,&CLKs,&rtd,&uc](){
-		//pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
+		rtd.update();
+#else
+	uc.debug_signal_alu_before_exec=[p_gState,&CLKs,&uc](){
+#endif
 		CLKs.setPause(p_gState->stepByStep.load(std::memory_order_relaxed));
-		/*if (p_gState->minitelOn.load(std::memory_order_relaxed)){
-			rtd.update();
-		}*/
 		if (p_gState->stepByStep.load(std::memory_order_relaxed)){
 			print_m12_alu_instruction(&uc);
 		}
-		//sm.updateState();
 	};
-	
 	//clock
 	
 	/*auto stopC=[p_gState](){

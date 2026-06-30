@@ -54,6 +54,8 @@
 
 #include "miniaudio/miniaudio.h"
 
+#include "data_path.h"
+
 
 struct audioContext{
 	Clocks* pCLKs=NULL;
@@ -85,18 +87,26 @@ class M12Window{
 			this->ROMS.setCallback([this](char* f){
 				if (f==NULL){
 					unloadM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->erom));
-					this->RAMS.setDir("./profils");
+					this->RAMS.setDir(RAM_PATH);
 				}
 				else{
 					loadROM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->erom),f);
-					std::filesystem::path p="./profils";
+					std::filesystem::path p=RAM_PATH;
 					p/=std::filesystem::path(f).filename();
 					this->RAMS.setDir(p.string().c_str());
 				}
 			});
+			this->CHRS.setCallback([this](char* f){
+				this->setCharset(f);
+			});
 			
 			//load parameters
-			const char *fn_config="./config.json";
+			
+			constexpr char p2[]="/config.json";
+			char* fn_config=(char*)malloc(sizeof(p2)+sizeof(DATA_PATH)+1);
+			strcpy(fn_config,DATA_PATH);
+			strcat(fn_config,p2);
+			//const char *fn_config="./config.json";
 			if (std::filesystem::is_regular_file(fn_config)){
 				FILE *f=fopen(fn_config,"r");
 				fseek(f,0,SEEK_END);
@@ -204,10 +214,15 @@ class M12Window{
 					else{
 						this->RAMS.Select(NULL);
 					}
+					//load rom
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"Character set file");
+					if (cJSON_IsString(c_param)){
+						this->CHRS.Select(c_param->valuestring);
+					}
 					//start if possible later when emulator ready
 				}
 			}
-			
+			free(fn_config);
 			
 			
 			//glfw
@@ -329,6 +344,8 @@ class M12Window{
 				else cJSON_AddStringToObject(JSONSubconfig1,"ROM file",this->ROMS.getSelected());
 				if (this->RAMS.getSelected()==NULL) cJSON_AddStringToObject(JSONSubconfig1,"RAM file","");
 				else cJSON_AddStringToObject(JSONSubconfig1,"RAM file",this->RAMS.getSelected());
+				if (this->CHRS.getSelected()==NULL) cJSON_AddStringToObject(JSONSubconfig1,"Character set file","");
+				else cJSON_AddStringToObject(JSONSubconfig1,"Character set file",this->CHRS.getSelected());
 			}
 			JSONSubconfig1=cJSON_AddObjectToObject(JSONConfigOut,"IO");
 			if (JSONSubconfig1!=NULL){
@@ -388,7 +405,12 @@ class M12Window{
 				}
 			}
 			char* configString=cJSON_Print(JSONConfigOut);
-			FILE *f=fopen("./config.json","w");
+			constexpr char p2[]="/config.json";
+			char* fn_config=(char*)malloc(sizeof(p2)+sizeof(DATA_PATH)+1);
+			strcpy(fn_config,DATA_PATH);
+			strcat(fn_config,p2);
+			FILE *f=fopen(fn_config,"w");
+			free(fn_config);
 			fwrite(configString,sizeof(char),strlen(configString),f);
 			fclose(f);
 			free((void*)configString);
@@ -470,48 +492,9 @@ class M12Window{
 							this->PARAMETERS.debug.vreg.PAT=&(((TS9347wVRAM*)ms.p)->PAT);
 							this->PARAMETERS.debug.vreg.MAT=&(((TS9347wVRAM*)ms.p)->MAT);
 							
-							static const char* path="./ressources/TS9347_Texture_Character_Set_Datasheet.bmp";
-							int width, height, nrChannels;
-							unsigned char *data = stbi_load(path, &width, &height, &nrChannels, 1);
-							if (data==NULL){
-								this->Notification.notify("La texture pour l'affichage vidéo n'a pas chargé correctement.",false,ImVec4(1,0,0,1));
-								this->PARAMETERS.io.crt.error_loading_texture=true;
-							}
-							else{
-								int nW=width/8;
-								int nH=height/10;
-								int n=288;
-								unsigned char d[n*10]={0};
-								if ((nW*nH)<n) n=nW*nH;
-								if (nH>nW){
-									for (int i=0;i<n;i++){//char i
-										int j=(i%nH)*10*width+(i/nH)*8;//char 0,0 position
-										for (int s=0;s<10;s++){//slice
-											unsigned char sd=0;
-											for (int k=0;k<8;k++){//pixel in slice
-												sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
-											}
-											d[i*10+s]=sd;
-										}
-									}
-								}
-								else{
-									for (int i=0;i<n;i++){//char i
-										int j=(i%nW)*8+(i/nW)*10*width;//char 0,0 position
-										for (int s=0;s<10;s++){//slice
-											unsigned char sd=0;
-											for (int k=0;k<8;k++){//pixel in slice
-												sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
-											}
-											d[i*10+s]=sd;
-										}
-									}
-								}
-								
-								((TS9347wVRAM*)ms.p)->setROMCharset(d);
-									
-								stbi_image_free(data);
-							}
+							this->PARAMETERS.io.crt.ts9347=ms.p;
+							
+							this->setCharset(this->CHRS.getSelected());
 							break;
 						}
 						case CRT_BUFFER:
@@ -733,8 +716,9 @@ class M12Window{
 		GLFWwindow* window;
 		Parameters PARAMETERS;
 		const Parameters default_parameters;
-		RAMSelector RAMS=RAMSelector("./profils/");
-		ROMSelector ROMS=ROMSelector("./rom/");
+		RAMSelector RAMS=RAMSelector(RAM_PATH);
+		ROMSelector ROMS=ROMSelector(ROM_PATH);
+		CharsetSelector CHRS=CharsetSelector(RESOURCE_PATH);
 		NotificationServer Notification;
 		CRTRenderer* p_CRTout;
 		KeyboardIndicator keyboardIndicator;
@@ -849,10 +833,6 @@ class M12Window{
 				if (ImGui::BeginTabItem("Emulation")){
 					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
-					if(this->PARAMETERS.io.crt.error_loading_texture){
-						ImGui::TextColored(ImVec4(1, 0, 0, 1), "La texture pour l'affichage vidéo n'a pas chargé.");
-						ImGui::TextColored(ImVec4(1, 0, 0, 1), "Veuillez vérifier que ./ressources/TS9347_Texture_Character_Set_Datasheet.bmp existe ou n'est pas corrompu.");
-					}
 					ImGui::SeparatorText("Contrôle de l'émulateur");
 					if(this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){
 						ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0,0.8,0,1));
@@ -891,6 +871,20 @@ class M12Window{
 						this->RAMS.widget();
 					
 					if (disable_load_memory) ImGui::EndDisabled();
+						
+					ImGui::SeparatorText("Jeu de caractères");
+					this->CHRS.widget();
+					if (this->CHRS.getSelected()!=NULL&&this->PARAMETERS.io.crt.error_loading_texture){
+						ImGui::TextColored(ImVec4(1, 0, 0, 1), "La texture pour l'affichage vidéo n'a pas chargé.");
+						constexpr char m1[]="Veuillez vérifier que ";
+						constexpr char m2[]=" existe ou n'est pas corrompu.";
+						char* message=(char*)malloc(sizeof(m1)+sizeof(m2)+strlen(this->CHRS.getSelected())*sizeof(char)+1);
+						strcpy(message,m1);
+						strcat(message,this->CHRS.getSelected());
+						strcat(message,m2);
+						ImGui::TextColored(ImVec4(1, 0, 0, 1), message);
+						free(message);
+					}
 					
 					ImGui::SeparatorText("Contrôle de l'application");
 					ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.8,0,0,1));
@@ -1221,14 +1215,13 @@ class M12Window{
 		}
 		
 		void takeScreenshot(){
-			constexpr char dir[]="./captures d'écran/";
-			if (!std::filesystem::is_directory(dir)) std::filesystem::create_directories(dir);
+			if (!std::filesystem::is_directory(SCREENSHOT_PATH)) std::filesystem::create_directories(SCREENSHOT_PATH);
 			time_t timestamp=time(NULL);
 			struct tm* pTime=localtime(&timestamp);
 			char filename[80];
 			strftime(filename,80,"minitel_%F_%H_%M_%S.png",pTime);
-			char* path=(char*)malloc(sizeof(dir)+strlen(filename)+1);
-			strcpy(path,dir);
+			char* path=(char*)malloc(sizeof(SCREENSHOT_PATH)+strlen(filename)+1);
+			strcpy(path,SCREENSHOT_PATH);
 			strcat(path,filename);
 			
 			int width, height;
@@ -1246,6 +1239,57 @@ class M12Window{
 			this->Notification.notify(notif,true,ImVec4(0,1,1,1));
 			
 			free(path);
+		}
+		
+		void setCharset(const char* cs){
+			//constexpr char p2[]="/TS9347_Texture_Character_Set_Datasheet.bmp";
+			//char* path=(char*)malloc(sizeof(p2)+sizeof(RESOURCE_PATH)+1);
+			//strcpy(path,RESOURCE_PATH);
+			//strcat(path,p2);
+			//static const char* path=DATA_PATH"/ressources/TS9347_Texture_Character_Set_Datasheet.bmp";
+			int width, height, nrChannels;
+			unsigned char *data = stbi_load(cs, &width, &height, &nrChannels, 1);
+			//free(path);
+			if (data==NULL){
+				this->Notification.notify("La texture pour l'affichage vidéo n'a pas chargé correctement.",false,ImVec4(1,0,0,1));
+				this->PARAMETERS.io.crt.error_loading_texture=true;
+			}
+			else{
+				this->PARAMETERS.io.crt.error_loading_texture=false;
+				int nW=width/8;
+				int nH=height/10;
+				int n=288;
+				unsigned char d[n*10]={0};
+				if ((nW*nH)<n) n=nW*nH;
+				if (nH>nW){
+					for (int i=0;i<n;i++){//char i
+						int j=(i%nH)*10*width+(i/nH)*8;//char 0,0 position
+						for (int s=0;s<10;s++){//slice
+							unsigned char sd=0;
+							for (int k=0;k<8;k++){//pixel in slice
+								sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+							}
+							d[i*10+s]=sd;
+						}
+					}
+				}
+				else{
+					for (int i=0;i<n;i++){//char i
+						int j=(i%nW)*8+(i/nW)*10*width;//char 0,0 position
+						for (int s=0;s<10;s++){//slice
+							unsigned char sd=0;
+							for (int k=0;k<8;k++){//pixel in slice
+								sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+							}
+							d[i*10+s]=sd;
+						}
+					}
+				}
+				if (this->PARAMETERS.io.crt.ts9347!=NULL) ((TS9347wVRAM*)this->PARAMETERS.io.crt.ts9347)->setROMCharset(d);
+					
+				stbi_image_free(data);
+			}
+			
 		}
 		
 		static void error_callback(int error, const char* description){

@@ -3,12 +3,18 @@
 #include <cstdio>
 #include "circuit/ROM_256k.h"
 #include "circuit/80C32.h"
+#include "data_path.h"
 
 class RuntimeDecompiler{
 	public:
 		RuntimeDecompiler(m80C32* uc){
 			this->uc=uc;
-			FILE* f=fopen("./rom_map.bin","rb");
+			constexpr char p2[]="/rom_map.bin";
+			char* path=(char*)malloc(sizeof(p2)+sizeof(DATA_PATH)+1);
+			strcpy(path,DATA_PATH);
+			strcat(path,p2);
+			FILE* f=fopen(path,"rb");
+			free(path);
 			if (f!=NULL){
 				fread( this->rom_map, 1, EROM_SIZE, f );
 				fclose(f);
