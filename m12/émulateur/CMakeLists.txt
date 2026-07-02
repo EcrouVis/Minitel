@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.23)
+cmake_policy(SET CMP0207 NEW)
 
 include(FetchContent)
 
@@ -11,11 +12,12 @@ set(CMAKE_CXX_COMPILER gcc)
 set(CMAKE_C_STANDARD 17)
 set( CMAKE_C_COMPILER gcc )
 
-project(M12 VERSION 0.0.1 LANGUAGES CXX C)
+project(M12 VERSION 0.0.1.1 LANGUAGES CXX C)
 
 
-
-set(CMAKE_BUILD_TYPE RelWithDebInfo)
+if(CMAKE_BUILD_TYPE_INITIALIZED_TO_DEFAULT)
+	set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/install/${CMAKE_BUILD_TYPE}" CACHE PATH "Force path to set CMAKE_INSTALL_PREFIX" FORCE)
 endif()
@@ -28,7 +30,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TY
 
 
 add_executable(m12)
-set_target_properties(m12 PROPERTIES OUTPUT_NAME "M12")
+set_target_properties(m12 PROPERTIES OUTPUT_NAME "${CMAKE_PROJECT_NAME}")
 add_library(miniaudio STATIC)
 add_library(cjson STATIC)
 add_library(glloader STATIC)
@@ -40,6 +42,7 @@ add_library(imgui STATIC)
 
 set(OPT_LIB )
 set(OPT_DEF )
+set(OPT_OPT )
 
 
 
@@ -51,10 +54,26 @@ option(USE_OPEN_SSL "Use OpenSSL" Off)
 option(USE_LIBRE_SSL "Use LibreSSL" Off)
 option(USE_MBED_TLS "Use MbedTLS" Off)
 option(USE_DECOMP_TOOLS "Whether to compile with tools to help decompile the ROM" Off)
+option(USE_SSE2 "Whether to use SSE2 for audio computation" On)
+option(USE_AVX2 "Whether to use AVX2 for audio computation" On)
 
 
 
 
+
+if (USE_SSE2)
+	list(APPEND 
+		OPT_OPT
+			-msse2
+	)
+endif()
+
+if (USE_AVX2)
+	list(APPEND 
+		OPT_OPT
+			-mavx2
+	)
+endif()
 
 if (USE_DECOMP_TOOLS)
 	list(APPEND 
@@ -86,6 +105,7 @@ if (USE_TLS)
 		set(MbedTLS_DIR "${MbedTLS_ROOT_DIR}/lib/cmake/MbedTLS/")
 		find_package(MbedTLS REQUIRED)
 		get_target_property(MBEDTLS_INCLUDE_DIRS MbedTLS::mbedtls INTERFACE_INCLUDE_DIRECTORIES)
+		find_path(MBEDTLS_VERSION_GREATER_THAN_3 mbedtls/build_info.h PATHS ${MBEDTLS_INCLUDE_DIRS})
 		find_library(MBEDTLS_LIBRARY
 			NAMES
 				libmbedtls
@@ -172,7 +192,6 @@ else()
 	FetchContent_Declare(
 		IXWebSocket
 		GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
-		CMAKE_ARGS -static
 	)
 	FetchContent_MakeAvailable(IXWebSocket)
 endif()
@@ -189,18 +208,25 @@ find_package(Glfw3 REQUIRED)
 
 
 if (WIN32)
+	configure_file(src/desktop/app.rc.in src/desktop/app.rc)#cleaner that way if built in source
+	file(COPY_FILE src/icon/M12_icon_square.ico "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/M12_icon_square.ico")#preferred compared to generating the file path to the icon in app.rc because of string encoding of .rc files
+	
 	set(CMAKE_RC_COMPILER windres)
 	enable_language(RC)
+	
 	add_library(wicon OBJECT)
 	set_target_properties(wicon PROPERTIES LINKER_LANGUAGE CXX)
 	target_sources(wicon
 		PRIVATE
-			include/icon/app.rc
+			"${CMAKE_CURRENT_BINARY_DIR}/src/desktop/app.rc"
 	)
 	list(APPEND 
 		OPT_LIB 
 			wicon
 	)
+elseif(LINUX)
+	configure_file(src/desktop/app.appimage.desktop.in "src/desktop/${CMAKE_PROJECT_NAME}.desktop")
+	file(COPY_FILE src/icon/M12_icon_square.png "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.png")
 endif()
 
 
@@ -221,7 +247,7 @@ endif()
 
 
 
-target_compile_options(miniaudio PRIVATE -static -msse2 -mavx2)
+target_compile_options(miniaudio PRIVATE ${OPT_OPT})
 
 target_compile_definitions(miniaudio
 	PRIVATE
@@ -247,8 +273,6 @@ target_sources(miniaudio
 
 
 
-target_compile_options(cjson PRIVATE -static)
-
 target_compile_definitions(cjson
 	PRIVATE
 		CJSON_HIDE_SYMBOLS
@@ -270,8 +294,6 @@ target_sources(cjson
 
 
 
-target_compile_options(glloader PRIVATE -static)
-
 target_compile_definitions(glloader
 	PRIVATE
 		${OPT_DEF}
@@ -292,8 +314,6 @@ target_sources(glloader
 )
 
 
-
-target_compile_options(imgui PRIVATE -static)
 
 target_link_libraries(imgui
 	PRIVATE
@@ -333,7 +353,7 @@ target_sources(imgui
 
 
 
-target_compile_options(m12 PRIVATE -static -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers -msse2 -mavx2)
+target_compile_options(m12 PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers  ${OPT_OPT})
 
 target_link_libraries(m12
 	PRIVATE
@@ -341,13 +361,12 @@ target_link_libraries(m12
 		cjson
 		glloader
 		imgui
-		
 		ixwebsocket
-		
 		glfw3
 		
-		stdc++
 		m
+		stdc++
+		pthread
 		
 		${OPT_LIB}
 )
@@ -447,26 +466,51 @@ target_sources(m12
 
 
 if(WIN32)
-	get_target_property(M12_OUTPUT_NAME m12 OUTPUT_NAME)
-	install(PROGRAMS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${M12_OUTPUT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
+	install(IMPORTED_RUNTIME_ARTIFACTS m12 
+		RUNTIME_DEPENDENCY_SET _dependency_set 
 		DESTINATION "/"
 	)
+	#TODO: rewrite more flexible (if mingw we could use: gcc -print-file-name=libwinpthread-1.dll to have the full path)
+	install(
+		RUNTIME_DEPENDENCY_SET _dependency_set
+		DIRECTORIES "C:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/lib/../lib/"
+		PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
+		POST_EXCLUDE_REGEXES  ".*system32/.*\\.dll"
+		UNRESOLVED_DEPENDENCIES_VAR UNRES
+		RUNTIME DESTINATION "/"
+	)
+	
+	install(CODE [[
+		foreach(UR ${UNRES})
+			message(WARNING "${UR} dependency not resolved !")
+			message(WARNING "Try 'gcc -print-file-name=${UR}' to get the path")
+		endforeach()
+	]])
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/TS9347/TS9347_Texture_Character_Set_Datasheet.bmp"
 		DESTINATION "ressources"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
 		DESTINATION "rom"
 	)
-else()
-	get_target_property(M12_OUTPUT_NAME m12 OUTPUT_NAME)
-	install(PROGRAMS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${M12_OUTPUT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
-		TYPE BIN
+elseif(LINUX)
+	set(CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}/${CMAKE_PROJECT_NAME}.AppDir")
+	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.desktop" "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.png"
+		DESTINATION "/"
 	)
+	install(PROGRAMS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
+		DESTINATION "usr/bin"
+	)
+	install(CODE [[
+		execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
+			"usr/bin/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
+			"AppRun"
+		)
+	]])
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/TS9347/TS9347_Texture_Character_Set_Datasheet.bmp"
-		DESTINATION "com/M12/ressources"
+		DESTINATION "usr/share/M12/ressources"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
-		DESTINATION "com/M12/rom"
+		DESTINATION "usr/share/M12/rom"
 	)
 endif()
 

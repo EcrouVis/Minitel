@@ -1151,6 +1151,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					case ix::WebSocketMessageType::Error:
 						{
 							std::lock_guard<std::mutex> lock(this->pMQMutex);
+							printf(msg->errorInfo.reason.c_str());
 							this->subState=3;
 							this->CONNECTEDSendCMD();
 						}

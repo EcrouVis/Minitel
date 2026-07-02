@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=${CMAKE_PROJECT_NAME}
+Type=Application
+Terminal=true
+Exec=${CMAKE_PROJECT_NAME}
+Icon=${CMAKE_PROJECT_NAME}
+Categories=Game;
