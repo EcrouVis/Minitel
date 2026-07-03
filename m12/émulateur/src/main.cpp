@@ -19,7 +19,9 @@ int main(void){
 	setlocale(LC_ALL, "fr_FR.UTF-8");
 	setlocale(LC_NUMERIC, "en_US.UTF-8");
 	
-	setLocalDirectory();//set the working directory to the directory where the executable really exist (resolve symlink + move working directory if it is not the local directory)
+	setLocalDirectoryExe();//set the working directory to the directory where the executable really exist (resolve symlink + move working directory if it is not the local directory)
+	
+	setupWorkingDirectory();
 	
 	GlobalState gState;
 	Mailbox mb_circuit;

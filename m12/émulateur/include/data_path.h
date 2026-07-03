@@ -10,22 +10,26 @@
 #elif defined(__APPLE__) && defined(__MACH__)
 #include <mach-o/dyld.h>
 #elif defined(unix) || defined(__unix__)
+#include <stdlib.h>
 #include <unistd.h>
 #endif
 
-#if defined(_WIN32)
 constexpr char DATA_PATH[]=".";
 constexpr char ROM_PATH[]="./rom";
 constexpr char RAM_PATH[]="./profils";
 constexpr char SCREENSHOT_PATH[]="./captures d'écran";
 constexpr char RESOURCE_PATH[]="./ressources";
-#else
-constexpr char DATA_PATH[]="./../share/M12";
-constexpr char ROM_PATH[]="./../share/M12/rom";
-constexpr char RAM_PATH[]="./../share/M12/profils";
-constexpr char SCREENSHOT_PATH[]="./../share/M12/captures d'écran";
-constexpr char RESOURCE_PATH[]="./../share/M12/ressources";
+#if defined(_WIN32)
+
+#elif defined(unix) || defined(__unix__)
+
+constexpr char RO_DATA_PATH[]="./../share";
+constexpr char HOME_DATA_PATH[]=".config/M12";
+constexpr char FALLBACK_DATA_PATH[]="/var/lib/M12";
+
 #endif
 
-void setLocalDirectory();
+void setLocalDirectoryExe();
+
+void setupWorkingDirectory();
 #endif

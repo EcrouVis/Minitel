@@ -148,6 +148,11 @@ if (USE_TLS)
 		endif()
 		find_package(OpenSSL REQUIRED)
 		list(APPEND 
+			OPT_LIB
+				OpenSSL::SSL
+				OpenSSL::Crypto
+		)
+		list(APPEND 
 			OPT_DEF
 				M12_USE_OPENSSL
 		)
@@ -227,6 +232,7 @@ if (WIN32)
 elseif(LINUX)
 	configure_file(src/desktop/app.appimage.desktop.in "src/desktop/${CMAKE_PROJECT_NAME}.desktop")
 	file(COPY_FILE src/icon/M12_icon_square.png "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.png")
+	configure_file(src/desktop/AppRun.in src/desktop/AppRun)
 endif()
 
 
@@ -493,24 +499,23 @@ if(WIN32)
 		DESTINATION "rom"
 	)
 elseif(LINUX)
-	set(CMAKE_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}/${CMAKE_PROJECT_NAME}.AppDir")
-	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.desktop" "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.png"
-		DESTINATION "/"
+	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.desktop"
+		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir"
+	)
+	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.png"
+		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir"
 	)
 	install(PROGRAMS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
-		DESTINATION "usr/bin"
+		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/bin"
 	)
-	install(CODE [[
-		execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink
-			"usr/bin/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
-			"AppRun"
-		)
-	]])
+	install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/AppRun"
+		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir"
+	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/TS9347/TS9347_Texture_Character_Set_Datasheet.bmp"
-		DESTINATION "usr/share/M12/ressources"
+		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/share/ressources"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
-		DESTINATION "usr/share/M12/rom"
+		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/share/rom"
 	)
 endif()
 

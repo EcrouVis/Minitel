@@ -1,5 +1,6 @@
 [Desktop Entry]
 Name=${CMAKE_PROJECT_NAME}
+Comment=Minitel 12 Philips
 Type=Application
 Terminal=true
 Exec=${CMAKE_PROJECT_NAME}
