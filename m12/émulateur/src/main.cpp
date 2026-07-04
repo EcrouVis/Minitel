@@ -30,8 +30,8 @@ int main(void){
 	
 	ix::initNetSystem();
 	
-	std::thread thrd_v(thread_video_main,&mb_circuit,&mb_video,&gState);
-	//std::thread thrd_a(thread_audio_main,&mb_circuit,&mb_audio,&gState);
+	//std::thread thrd_v(thread_video_main,&mb_circuit,&mb_video,&gState);
+	std::thread thrd_e(thread_circuit_main,&mb_circuit,&mb_video,&gState);
 	
 	//set thread priority
 	/*sched_param sch;
@@ -42,10 +42,12 @@ int main(void){
     int result = pthread_setschedparam(pthread_self(), SCHED_OTHER, &sch);
 	printf("sched %i\n",result);*/
 	
-	thread_circuit_main(&mb_circuit,&mb_video,&gState);
+	//thread_circuit_main(&mb_circuit,&mb_video,&gState);
+	thread_video_main(&mb_circuit,&mb_video,&gState);
 	
 	//thrd_a.join();
-	thrd_v.join();
+	//thrd_v.join();
+	thrd_e.join();
 	
 	ix::uninitNetSystem();
 	

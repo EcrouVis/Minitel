@@ -31,7 +31,7 @@ void readM(std::mutex* mtx, FILE* pf, unsigned char* array, size_t size){
 	std::fill_n(array,size,0);
 	if (pf!=NULL){
 		fseek(pf,0,SEEK_SET);
-		fread(array,sizeof(char),size,pf);
+		if (fread(array,sizeof(char),size,pf)!=size) printf("fail to read all the content of the file\n");
 	}
 }
 

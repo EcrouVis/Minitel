@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.23)
-cmake_policy(SET CMP0207 NEW)
+cmake_policy(SET CMP0207 NEW)#path separator
+cmake_policy(SET CMP0135 NEW)#FetchContent timestamp
 
 include(FetchContent)
 
@@ -19,7 +20,7 @@ if(CMAKE_BUILD_TYPE_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/install/${CMAKE_BUILD_TYPE}" CACHE PATH "Force path to set CMAKE_INSTALL_PREFIX" FORCE)
+    set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/install/" CACHE PATH "Force path to set CMAKE_INSTALL_PREFIX" FORCE)
 endif()
 
 
@@ -48,14 +49,15 @@ set(OPT_OPT )
 
 
 
-option(USE_EXISTING_IXWEBSOCKET_LIB "Use existing IXWebSocket library" Off)
-option(USE_TLS "Use TLS for secure websockets" Off)
+option(USE_TLS "Use TLS for secure websockets" On)
 option(USE_OPEN_SSL "Use OpenSSL" Off)
 option(USE_LIBRE_SSL "Use LibreSSL" Off)
 option(USE_MBED_TLS "Use MbedTLS" Off)
 option(USE_DECOMP_TOOLS "Whether to compile with tools to help decompile the ROM" Off)
 option(USE_SSE2 "Whether to use SSE2 for audio computation" On)
 option(USE_AVX2 "Whether to use AVX2 for audio computation" On)
+option(USE_EXISTING_IXWEBSOCKET_LIB "Use existing IXWebSocket library" Off)
+option(USE_EXISTING_GLFW_LIB "Use existing GLFW library" Off)
 
 
 
@@ -197,18 +199,30 @@ else()
 	FetchContent_Declare(
 		IXWebSocket
 		GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
+		GIT_TAG master
 	)
 	FetchContent_MakeAvailable(IXWebSocket)
 endif()
 
-if (WIN32)
-	set(CACHE{GLFW3_ROOT_DIR} TYPE PATH HELP "Install path of Glfw3" VALUE "C:/Program Files (x86)/GLFW")
+if (USE_EXISTING_GLFW_LIB)
+	if (WIN32)
+		set(CACHE{GLFW3_ROOT_DIR} TYPE PATH HELP "Install path of Glfw3" VALUE "C:/Program Files (x86)/GLFW")
+	else()
+		set(CACHE{GLFW3_ROOT_DIR} TYPE PATH HELP "Install path of Glfw3" VALUE)
+	endif()
+	find_package(Glfw3 REQUIRED)
 else()
-	set(CACHE{GLFW3_ROOT_DIR} TYPE PATH HELP "Install path of Glfw3" VALUE)
+	set(GLFW_LIBRARY_TYPE STATIC)
+	set(GLFW_BUILD_EXAMPLES Off)
+	set(GLFW_BUILD_TESTS Off)
+	set(GLFW_BUILD_DOCS Off)
+	FetchContent_Declare(Glfw3
+		GIT_REPOSITORY https://github.com/glfw/glfw.git
+		GIT_TAG master
+		EXCLUDE_FROM_ALL
+	)
+	FetchContent_MakeAvailable(Glfw3)
 endif()
-find_package(Glfw3 REQUIRED)
-#GLFW3 package can be found at https://www.glfw.org/
-#TODO: get / compile GLFW automatically
 
 
 
@@ -231,7 +245,7 @@ if (WIN32)
 	)
 elseif(LINUX)
 	configure_file(src/desktop/app.appimage.desktop.in "src/desktop/${CMAKE_PROJECT_NAME}.desktop")
-	file(COPY_FILE src/icon/M12_icon_square.png "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.png")
+	file(COPY_FILE src/icon/M12_icon_square.svg "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.svg")
 	configure_file(src/desktop/AppRun.in src/desktop/AppRun)
 endif()
 
@@ -323,7 +337,7 @@ target_sources(glloader
 
 target_link_libraries(imgui
 	PRIVATE
-		glfw3
+		glfw
 )
 
 target_compile_definitions(imgui
@@ -368,7 +382,7 @@ target_link_libraries(m12
 		glloader
 		imgui
 		ixwebsocket
-		glfw3
+		glfw
 		
 		m
 		stdc++
@@ -498,11 +512,13 @@ if(WIN32)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
 		DESTINATION "rom"
 	)
+
+	include(CPack)
 elseif(LINUX)
 	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.desktop"
 		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir"
 	)
-	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.png"
+	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.svg"
 		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir"
 	)
 	install(PROGRAMS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
@@ -512,11 +528,9 @@ elseif(LINUX)
 		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/TS9347/TS9347_Texture_Character_Set_Datasheet.bmp"
-		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/share/ressources"
+		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/share/M12/ressources"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
-		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/share/rom"
+		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/share/M12/rom"
 	)
 endif()
-
-include(CPack)

@@ -57,12 +57,12 @@ find_package_handle_standard_args(Glfw3
 
 if(GLFW3_FOUND)
 
-    if(NOT TARGET glfw3 AND EXISTS "${GLFW3_LIBRARY}")
+    if(NOT TARGET glfw AND EXISTS "${GLFW3_LIBRARY}")
 
-        add_library(glfw3 UNKNOWN IMPORTED)
+        add_library(glfw UNKNOWN IMPORTED)
 
         set_target_properties(
-            glfw3
+            glfw
             PROPERTIES
                 INTERFACE_INCLUDE_DIRECTORIES "${GLFW3_INCLUDE_DIR}"
                 IMPORTED_LINK_INTERFACE_LANGUAGES "C"

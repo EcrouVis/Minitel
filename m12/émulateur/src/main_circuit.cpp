@@ -716,9 +716,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	CLKs.start();
 	
 	//save ram if possible
-	unsigned char eram_cpy[ERAM_SIZE];
-	eram.copy((unsigned char*)eram_cpy);
-	writeM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
+	//unsigned char eram_cpy[ERAM_SIZE];
+	//eram.copy((unsigned char*)eram_cpy);
+	//writeM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
 	
 	//signal emulation end
 	p_gState->minitelOn.store(false,std::memory_order_relaxed);

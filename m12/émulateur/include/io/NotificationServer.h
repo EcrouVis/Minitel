@@ -47,7 +47,7 @@ class NotificationServer{
 					else{
 						ImGui::PushStyleColor(ImGuiCol_Text,tmp->color);
 					}
-					ImGui::Text(tmp->message);
+					ImGui::Text("%s",tmp->message);
 					ImGui::PopStyleColor();
 					tmp=tmp->older;
 				}

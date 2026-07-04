@@ -91,7 +91,7 @@ class M12Window{
 				}
 				else{
 					loadROM(this->PARAMETERS.p_gState->p_thread_mutex,&(this->PARAMETERS.p_gState->erom),f);
-					std::filesystem::path p=RAM_PATH;
+					std::filesystem::path p(RAM_PATH);
 					p/=std::filesystem::path(f).filename();
 					this->RAMS.setDir(p.string().c_str());
 				}
@@ -102,18 +102,16 @@ class M12Window{
 			
 			//load parameters
 			
-			constexpr char p2[]="/config.json";
-			char* fn_config=(char*)malloc(sizeof(p2)+sizeof(DATA_PATH)+1);
-			strcpy(fn_config,DATA_PATH);
-			strcat(fn_config,p2);
-			//const char *fn_config="./config.json";
+			constexpr char p2[]="config.json";
+			std::filesystem::path fn_config(DATA_PATH);
+			fn_config/=std::filesystem::path(p2);
 			if (std::filesystem::is_regular_file(fn_config)){
-				FILE *f=fopen(fn_config,"r");
+				FILE *f=fopen(fn_config.u8string().c_str(),"r");
 				fseek(f,0,SEEK_END);
-				long fsize=ftell(f);
+				size_t fsize=ftell(f);
 				fseek(f,0,SEEK_SET);
 				char* config_raw=(char*)malloc(fsize);
-				fread(config_raw,fsize,1,f);
+				if (fread(config_raw,1,fsize,f)!=fsize) printf("fail to read all the content of config.json\n");
 				fclose(f);
 				
 				this->JSONConfig=cJSON_ParseWithLength(config_raw,fsize);
@@ -222,7 +220,6 @@ class M12Window{
 					//start if possible later when emulator ready
 				}
 			}
-			free(fn_config);
 			
 			
 			//glfw
@@ -405,12 +402,10 @@ class M12Window{
 				}
 			}
 			char* configString=cJSON_Print(JSONConfigOut);
-			constexpr char p2[]="/config.json";
-			char* fn_config=(char*)malloc(sizeof(p2)+sizeof(DATA_PATH)+1);
-			strcpy(fn_config,DATA_PATH);
-			strcat(fn_config,p2);
-			FILE *f=fopen(fn_config,"w");
-			free(fn_config);
+			constexpr char p2[]="config.json";
+			std::filesystem::path fn_config(DATA_PATH);
+			fn_config/=std::filesystem::path(p2);
+			FILE *f=fopen(fn_config.u8string().c_str(),"w");
 			fwrite(configString,sizeof(char),strlen(configString),f);
 			fclose(f);
 			free((void*)configString);
@@ -429,9 +424,9 @@ class M12Window{
 			while (this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){
 				this->AC.pCLKs->requestSamples(512,512);//don't wait that a timout occur in clocks.h ->speed up shutdown
 			}
-			
+			//past this point we do not interact with object from the emulation thread, they may not exist anymore
 			//shutdown emulator
-			ms.cmd=EMU_SHUTDOWN;
+			ms.cmd=EMU_SHUTDOWN;//if there is samples to proceed, the emulation thread continue and exit, else it timeout then exit
 			this->p_mb_circuit->send(&ms);
 			//this->PARAMETERS.p_gState->shutdown.store(true,std::memory_order_relaxed);
 			
@@ -452,7 +447,7 @@ class M12Window{
 				this->PARAMETERS.io.peri.printer.last_print=NULL;
 			}
 			//glfw
-			glfwDestroyWindow(this->window);
+			//glfwDestroyWindow(this->window);//not necessary
 			glfwTerminate();
 		}
 		void Loop(){
@@ -882,7 +877,7 @@ class M12Window{
 						strcpy(message,m1);
 						strcat(message,this->CHRS.getSelected());
 						strcat(message,m2);
-						ImGui::TextColored(ImVec4(1, 0, 0, 1), message);
+						ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", message);
 						free(message);
 					}
 					
@@ -922,14 +917,14 @@ class M12Window{
 							for (int i=0;i<13;i++){
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
-								ImGui::Text(key1[i]);
+								ImGui::Text("%s",key1[i]);
 								ImGui::TableSetColumnIndex(1);
-								ImGui::Text(key2[i]);
+								ImGui::Text("%s",key2[i]);
 								if (i<8){
 									ImGui::TableSetColumnIndex(2);
-									ImGui::Text(key3[i]);
+									ImGui::Text("%s",key3[i]);
 									ImGui::TableSetColumnIndex(3);
-									ImGui::Text(key4[i]);
+									ImGui::Text("%s",key4[i]);
 								}
 							}
 							
@@ -1168,7 +1163,10 @@ class M12Window{
 					ImGui::Text("Rafraichissement d'image: %.1f FPS",ImGui::GetIO().Framerate);
 					ImGui::Text("Tampon audio (échantillons restants après lecture):");
 					ImGui::PlotLines("##audio_buffer", this->AC.samplesRemaining, sizeof(this->AC.samplesRemaining)/sizeof(this->AC.samplesRemaining[0]),0,NULL,0,(float)this->AC.maxSamplesRemaining, ImVec2(-1, 80.0f));
-					//ImGui::Text("Retard audio (max: %lu): %lu",this->AC.maxSamplesPending,this->AC.samplesPending);
+					ImGui::Text("Répertoire de travail:");
+					ImGui::Indent();
+					ImGui::Text("%s",std::filesystem::current_path().u8string().c_str());
+					ImGui::Unindent();
 					
 					ImGui::EndChild();
 					ImGui::EndTabItem();
@@ -1176,9 +1174,9 @@ class M12Window{
 				if (ImGui::BeginTabItem("À propos")){
 					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
-					ImGui::Text(this->PARAMETERS.info.title);
+					ImGui::Text("%s",this->PARAMETERS.info.title);
 					ImGui::SeparatorText("Développeurs");
-					ImGui::Text(this->PARAMETERS.info.programmers);
+					ImGui::Text("%s",this->PARAMETERS.info.programmers);
 					ImGui::SeparatorText("Bibliothèques");
 					for (License l:this->PARAMETERS.info.lib_licenses){
 						if (ImGui::TreeNode(l.title)){
@@ -1220,25 +1218,27 @@ class M12Window{
 			struct tm* pTime=localtime(&timestamp);
 			char filename[80];
 			strftime(filename,80,"minitel_%F_%H_%M_%S.png",pTime);
-			char* path=(char*)malloc(sizeof(SCREENSHOT_PATH)+strlen(filename)+1);
-			strcpy(path,SCREENSHOT_PATH);
-			strcat(path,filename);
+			std::filesystem::path path=std::filesystem::path(SCREENSHOT_PATH);
+			path/=std::filesystem::path(filename);
+			//char* path=(char*)malloc(sizeof(SCREENSHOT_PATH)+strlen(filename)+1);
+			//strcpy(path,SCREENSHOT_PATH);
+			//strcat(path,filename);
 			
 			int width, height;
 			glfwGetFramebufferSize(this->window, &width, &height);
 			unsigned char* pixels=(unsigned char*)malloc(3*width*height*sizeof(unsigned char));
 			glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels);
 			stbi_flip_vertically_on_write(1);
-			stbi_write_png(path, width, height, 3, pixels, 3*width);
+			stbi_write_png(path.u8string().c_str(), width, height, 3, pixels, 3*width);
 			free(pixels);
 			
 			constexpr char screenshot[]="Capture d'écran enregistrée dans le fichier:\n";
-			char* notif=(char*)malloc(sizeof(screenshot)+strlen(path)+1);
+			char* notif=(char*)malloc(sizeof(screenshot)+strlen(path.u8string().c_str())+1);
 			strcpy(notif,screenshot);
-			strcat(notif,path);
+			strcat(notif,path.u8string().c_str());
 			this->Notification.notify(notif,true,ImVec4(0,1,1,1));
 			
-			free(path);
+			//free(path);
 		}
 		
 		void setCharset(const char* cs){

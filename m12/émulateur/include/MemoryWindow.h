@@ -95,8 +95,8 @@ void memoryWindow(const char* w_title,imguiMemoryView* memView){
 						ImGui::TableSetColumnIndex(j+1);
 						unsigned char c=p_mem[i*16+j].load(std::memory_order_relaxed);
 						const char hx[3]={nibble_table[c>>4],nibble_table[c&0x0F],0};
-						if (((unsigned int)i*16+j)==addr&&mem_op!=NULL)ImGui::TextColored(RW?ImVec4(1,0,0,1):ImVec4(0,1,0,1),hx);
-						else ImGui::Text(hx);
+						if (((unsigned int)i*16+j)==addr&&mem_op!=NULL)ImGui::TextColored(RW?ImVec4(1,0,0,1):ImVec4(0,1,0,1),"%s",hx);
+						else ImGui::Text("%s",hx);
 						ld[j]=printable_ascii(c);//ascii_table[c];
 					}
 					else{
@@ -124,13 +124,13 @@ void sfr80C32Window(imgui80C32SFRView* sfrView){
 								sfrView->PSW,sfrView->RCAP2H,sfrView->RCAP2L,sfrView->SBUF,sfrView->SCON,sfrView->SP,sfrView->TCON,sfrView->T2CON,sfrView->TH0,sfrView->TH1,
 								sfrView->TH2,sfrView->TL0,sfrView->TL1,sfrView->TL2,sfrView->TMOD};
 	for (unsigned int i=0;i<sizeof(n_sfr)/sizeof(*n_sfr);i++){
-		ImGui::Text(n_sfr[i]);
+		ImGui::Text("%s",n_sfr[i]);
 		if (p_sfr[i]!=NULL){
 			ImGui::SameLine();
 			v_sfr=p_sfr[i]->load(std::memory_order_relaxed);
 			b[4]=nibble_table[v_sfr>>4];
 			b[5]=nibble_table[v_sfr&0x0F];
-			ImGui::Text(b);
+			ImGui::Text("%s",b);
 		}
 	}
 	ImGui::End();
@@ -145,13 +145,13 @@ void regTS9347Window(imguiTS9347REGView* regView){
 	const char* n_reg[]={"STATUS","COMMAND","R1","R2","R3","R4","R5","R6","R7","DOR","ROR","TGS","PAT","MAT"};
 	std::atomic_uchar* p_reg[]={regView->STATUS,regView->COMMAND,regView->R1,regView->R2,regView->R3,regView->R4,regView->R5,regView->R6,regView->R7,regView->DOR,regView->ROR,regView->TGS,regView->PAT,regView->MAT};
 	for (unsigned int i=0;i<sizeof(n_reg)/sizeof(*n_reg);i++){
-		ImGui::Text(n_reg[i]);
+		ImGui::Text("%s",n_reg[i]);
 		if (p_reg[i]!=NULL){
 			ImGui::SameLine();
 			v_reg=p_reg[i]->load(std::memory_order_relaxed);
 			b[4]=nibble_table[v_reg>>4];
 			b[5]=nibble_table[v_reg&0x0F];
-			ImGui::Text(b);
+			ImGui::Text("%s",b);
 		}
 	}
 	ImGui::End();
@@ -166,13 +166,13 @@ void regTS7514Window(imguiTS7514REGView* regView){
 	const char* n_reg[]={"RPROG","RDTMF","RATE","RWLO","RPTF","RPRF","RHDL","RPRX"};
 	std::atomic_uchar* p_reg[]={regView->RPROG,regView->RDTMF,regView->RATE,regView->RWLO,regView->RPTF,regView->RPRF,regView->RHDL,regView->RPRX};
 	for (unsigned int i=0;i<sizeof(n_reg)/sizeof(*n_reg);i++){
-		ImGui::Text(n_reg[i]);
+		ImGui::Text("%s",n_reg[i]);
 		if (p_reg[i]!=NULL){
 			ImGui::SameLine();
 			v_reg=p_reg[i]->load(std::memory_order_relaxed);
 			b[4]=nibble_table[v_reg>>4];
 			b[5]=nibble_table[v_reg&0x0F];
-			ImGui::Text(b);
+			ImGui::Text("%s",b);
 		}
 	}
 	ImGui::End();

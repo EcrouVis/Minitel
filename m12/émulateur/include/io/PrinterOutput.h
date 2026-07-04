@@ -11,7 +11,7 @@ void PrinterOutput(GLFWwindow* window,NotificationServer* notif, P_Peri_Printer*
 	}
 	ImGui::SetNextWindowSizeConstraints(ImVec2(-1,-1),ImVec2(-1,-1));
 	ImGui::Begin("Imprimante",&(config->show),ImGuiWindowFlags_AlwaysAutoResize);
-	ImGui::Text(config->last_print);
+	ImGui::Text("%s",config->last_print);
 	constexpr char btxt[]="Copier dans le presse-papier";
 	int min_size=ImGui::CalcTextSize(btxt).x+2*ImGui::GetStyle().FramePadding.x;
 	int w_size=ImGui::CalcTextSize(config->last_print).x;

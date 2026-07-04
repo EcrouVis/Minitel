@@ -23,7 +23,7 @@ constexpr char RESOURCE_PATH[]="./ressources";
 
 #elif defined(unix) || defined(__unix__)
 
-constexpr char RO_DATA_PATH[]="./../share";
+constexpr char RO_DATA_PATH[]="./../share/M12";
 constexpr char HOME_DATA_PATH[]=".config/M12";
 constexpr char FALLBACK_DATA_PATH[]="/var/lib/M12";
 

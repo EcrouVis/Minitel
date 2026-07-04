@@ -858,14 +858,14 @@ void print_m12_alu_instruction(m80C32* uc){
 		case 0xF7:
 			printf("@R%i=>",uc->instruction[0]&1);
 			printf("@");
-			printf(getDirectAddressName(uc->getR(uc->instruction[0]&1)));
+			printf("%s",getDirectAddressName(uc->getR(uc->instruction[0]&1)));
 			printf("=>i:%02X",uc->getRAMByte(uc->getR(uc->instruction[0]&1)));
 			break;
 		case 0xF2:
 		case 0xF3:
 			printf("@R%i=>",uc->instruction[0]&1);
 			printf("@");
-			printf(getDirectAddressName(uc->getR(uc->instruction[0]&1)));
+			printf("%s",getDirectAddressName(uc->getR(uc->instruction[0]&1)));
 			printf("=>e:%04X",(((unsigned short)uc->PX_out[2])<<8)|((unsigned short)uc->getRAMByte(uc->getR(uc->instruction[0]&1))));
 			break;
 		//Rn
@@ -926,7 +926,7 @@ void print_m12_alu_instruction(m80C32* uc){
 		case 0xFE:
 		case 0xFF:
 			printf("R%i=>",uc->instruction[0]&7);
-			printf(getDirectAddressName(uc->getR(uc->instruction[0]&7)));break;
+			printf("%s",getDirectAddressName(uc->getR(uc->instruction[0]&7)));break;
 		//direct
 		case 0x05:
 		case 0x15:
@@ -957,7 +957,7 @@ void print_m12_alu_instruction(m80C32* uc){
 				if ((bool)(uc->instruction[1]&0x80)) printf("s:%02X",uc->instruction[1]);
 				else printf("i:%02X",uc->instruction[1]);
 			}
-			else printf(an);
+			else printf("%s",an);
 			break;
 		}
 		case 0x85://///////////
@@ -967,7 +967,7 @@ void print_m12_alu_instruction(m80C32* uc){
 				if ((bool)(uc->instruction[2]&0x80)) printf("s:%02X",uc->instruction[2]);
 				else printf("i:%02X",uc->instruction[2]);
 			}
-			else printf(an);
+			else printf("%s",an);
 			break;
 		}
 		//bit
@@ -987,11 +987,11 @@ void print_m12_alu_instruction(m80C32* uc){
 					else printf("i:%02X.%i",0x20+(uc->instruction[1]>>3),uc->instruction[1]&7);
 				}
 				else{
-					printf(an);
+					printf("%s",an);
 					printf(".%i",uc->instruction[1]&7);
 				}
 			}
-			else printf(an);
+			else printf("%s",an);
 			break;
 		}
 	}
@@ -1005,7 +1005,7 @@ void print_m12_alu_instruction(m80C32* uc){
 			}
 			else{
 				printf(", ");
-				printf(an);
+				printf("%s",an);
 			}
 		}
 		else printf(", #0x%02X",uc->instruction[1]);
@@ -1040,7 +1040,7 @@ void print_m12_alu_instruction(m80C32* uc){
 			}
 			else{
 				printf(", ");
-				printf(an);
+				printf("%s",an);
 			}
 			break;
 		}
@@ -1116,14 +1116,14 @@ void print_m12_alu_instruction(m80C32* uc){
 		case 0xE7:
 			printf(", @R%i=>",uc->instruction[0]&1);
 			printf("@");
-			printf(getDirectAddressName(uc->getR(uc->instruction[0]&1)));
+			printf("%s",getDirectAddressName(uc->getR(uc->instruction[0]&1)));
 			printf("=>i:%02X",uc->getRAMByte(uc->getR(uc->instruction[0]&1)));
 			break;
 		case 0xE2:
 		case 0xE3:
 			printf(", @R%i=>",uc->instruction[0]&1);
 			printf("@");
-			printf(getDirectAddressName(uc->getR(uc->instruction[0]&1)));
+			printf("%s",getDirectAddressName(uc->getR(uc->instruction[0]&1)));
 			printf("=>e:%04X",(((unsigned short)uc->PX_out[2])<<8)|((unsigned short)uc->getRAMByte(uc->getR(uc->instruction[0]&1))));
 			break;
 		//Rn
@@ -1200,7 +1200,7 @@ void print_m12_alu_instruction(m80C32* uc){
 		case 0xEE:
 		case 0xEF:
 			printf(", R%i=>",uc->instruction[0]&7);
-			printf(getDirectAddressName(uc->getR(uc->instruction[0]&7)));
+			printf("%s",getDirectAddressName(uc->getR(uc->instruction[0]&7)));
 			break;
 		//A
 		case 0x42:
@@ -1236,11 +1236,11 @@ void print_m12_alu_instruction(m80C32* uc){
 					else printf("i:%02X.%i",0x20+(uc->instruction[1]>>3),uc->instruction[1]&7);
 				}
 				else{
-					printf(an);
+					printf("%s",an);
 					printf(".%i",uc->instruction[1]&7);
 				}
 			}
-			else printf(an);
+			else printf("%s",an);
 			break;
 		}
 		//nbit
@@ -1256,11 +1256,11 @@ void print_m12_alu_instruction(m80C32* uc){
 					else printf("i:%02X.%i",0x20+(uc->instruction[1]>>3),uc->instruction[1]&7);
 				}
 				else{
-					printf(an);
+					printf("%s",an);
 					printf(".%i",uc->instruction[1]&7);
 				}
 			}
-			else printf(an);
+			else printf("%s",an);
 			break;
 		}
 		//@A+PC
