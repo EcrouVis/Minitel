@@ -1306,9 +1306,8 @@ class M12Window{
 				p_M12Window->p_mb_circuit->send(&ms);
 			}
 			ImGuiIO& io=ImGui::GetIO();
-			p_M12Window->keyboardInput.InputTranslate(!io.WantCaptureKeyboard,scancode,action,mods);
+			p_M12Window->keyboardInput.InputTranslate(!io.WantCaptureKeyboard,key,action,mods);
 			p_M12Window->PARAMETERS.io.keyboard.num_lock=(bool)(mods&GLFW_MOD_NUM_LOCK);
-			//printf("scancode %i %s\n",scancode,glfwGetKeyName(GLFW_KEY_UNKNOWN,scancode));
 		}
 		/*static void char_callback(GLFWwindow* window, unsigned int codepoint){
 			printf("UTF-32 %08X\n",codepoint);

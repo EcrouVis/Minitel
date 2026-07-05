@@ -3,6 +3,103 @@
 #include <atomic>
 #include "circuit/Keyboard.h"
 
+constexpr int M12_KEY_ESCAPE=256;
+
+constexpr int M12_KEY_F2=291;
+constexpr int M12_KEY_F3=292;
+constexpr int M12_KEY_F4=293;
+constexpr int M12_KEY_F5=294;
+constexpr int M12_KEY_F6=295;
+constexpr int M12_KEY_F7=296;
+constexpr int M12_KEY_F8=297;
+constexpr int M12_KEY_F9=298;
+
+constexpr int M12_KEY_SQUARE=96;
+constexpr int M12_KEY_1=49;
+constexpr int M12_KEY_2=50;
+constexpr int M12_KEY_3=51;
+constexpr int M12_KEY_4=52;
+constexpr int M12_KEY_5=53;
+constexpr int M12_KEY_6=54;
+constexpr int M12_KEY_7=55;
+constexpr int M12_KEY_8=56;
+constexpr int M12_KEY_9=57;
+constexpr int M12_KEY_0=48;
+constexpr int M12_KEY_DEGREE=45;
+constexpr int M12_KEY_PLUS=61;
+constexpr int M12_KEY_BACKSPACE=259;
+
+constexpr int M12_KEY_TAB=258;
+constexpr int M12_KEY_A=81;
+constexpr int M12_KEY_Z=87;
+constexpr int M12_KEY_E=69;
+constexpr int M12_KEY_R=82;
+constexpr int M12_KEY_T=84;
+constexpr int M12_KEY_Y=89;
+constexpr int M12_KEY_U=85;
+constexpr int M12_KEY_I=73;
+constexpr int M12_KEY_O=79;
+constexpr int M12_KEY_P=80;
+constexpr int M12_KEY_DIAERESIS=91;
+constexpr int M12_KEY_POUND=93;
+constexpr int M12_KEY_ENTER=257;
+
+constexpr int M12_KEY_CAPS_LOCK=280;
+constexpr int M12_KEY_Q=65;
+constexpr int M12_KEY_S=83;
+constexpr int M12_KEY_D=68;
+constexpr int M12_KEY_F=70;
+constexpr int M12_KEY_G=71;
+constexpr int M12_KEY_H=72;
+constexpr int M12_KEY_J=74;
+constexpr int M12_KEY_K=75;
+constexpr int M12_KEY_L=76;
+constexpr int M12_KEY_M=59;
+constexpr int M12_KEY_PERCENT=39;
+constexpr int M12_KEY_MU=92;
+
+constexpr int M12_KEY_LEFT_SHIFT=340;
+constexpr int M12_KEY_GREATER_THAN=162;
+constexpr int M12_KEY_W=90;
+constexpr int M12_KEY_X=88;
+constexpr int M12_KEY_C=67;
+constexpr int M12_KEY_V=86;
+constexpr int M12_KEY_B=66;
+constexpr int M12_KEY_N=78;
+constexpr int M12_KEY_QUESTION=77;
+constexpr int M12_KEY_PERIOD=44;
+constexpr int M12_KEY_SLASH=46;
+constexpr int M12_KEY_SECTION=47;
+constexpr int M12_KEY_RIGHT_SHIFT=344;
+
+constexpr int M12_KEY_LEFT_CONTROL=341;
+constexpr int M12_KEY_ALT=342;
+constexpr int M12_KEY_SPACE=32;
+constexpr int M12_KEY_ALTGR=346;
+constexpr int M12_KEY_RIGHT_CONTROL=345;
+constexpr int M12_KEY_UP=265;
+constexpr int M12_KEY_LEFT=263;
+constexpr int M12_KEY_DOWN=264;
+constexpr int M12_KEY_RIGHT=262;
+
+constexpr int M12_KEY_KP_0=320;
+constexpr int M12_KEY_KP_1=321;
+constexpr int M12_KEY_KP_2=322;
+constexpr int M12_KEY_KP_3=323;
+constexpr int M12_KEY_KP_4=324;
+constexpr int M12_KEY_KP_5=325;
+constexpr int M12_KEY_KP_6=326;
+constexpr int M12_KEY_KP_7=327;
+constexpr int M12_KEY_KP_8=328;
+constexpr int M12_KEY_KP_9=329;
+constexpr int M12_KEY_KP_DECIMAL=330;
+constexpr int M12_KEY_KP_DIVIDE=331;
+constexpr int M12_KEY_KP_MULTIPLY=332;
+constexpr int M12_KEY_KP_SUBSTRACT=333;
+constexpr int M12_KEY_KP_ADD=334;
+constexpr int M12_KEY_KP_ENTER=335;
+constexpr int M12_KEY_KP_EQUAL=336;
+
 class KeyboardInput{
 	public:
 		void KeyboardAzertyWindow(){
@@ -840,7 +937,7 @@ class KeyboardInput{
 			this->p_keyboard=kb;
 		}
 		
-		void InputTranslate(bool focus, int scancode, int action, int mods){
+		void InputTranslate(bool focus, int key, int action, int mods){
 			if (focus||action==GLFW_RELEASE){//||action==GLFW_RELEASE temporary fix to avoid being stuck when ctrl+click on imgui slider
 				if (action==GLFW_PRESS||action==GLFW_RELEASE){
 					bool keyPressed=(action==GLFW_PRESS);
@@ -851,190 +948,190 @@ class KeyboardInput{
 					kbs.shift=(bool)(mods&GLFW_MOD_SHIFT);
 					kbs.key=0;
 					
-					if (scancode==29||scancode==285||scancode==56||scancode==312||scancode==42||scancode==54){
+					if (key==M12_KEY_LEFT_CONTROL||key==M12_KEY_RIGHT_CONTROL||key==M12_KEY_LEFT_SHIFT||key==M12_KEY_RIGHT_SHIFT||key==M12_KEY_ALT||key==M12_KEY_ALTGR){
 						kbs.key=this->currentKeyboardState.key;
 					}
 					else if (keyPressed){
 						if (altgr){
-							switch (scancode){
+							switch (key){
 								//compatibility
-								case 11://à
+								case M12_KEY_0://à
 									kbs.key=0x73;//Suite
 									kbs.ctrl=true;
 									break;
 									
-								case 5://'
+								case M12_KEY_4://'
 									kbs.key=0x27;//numpad 1
 									kbs.ctrl=true;
 									break;
 									
-								case 13://=
+								case M12_KEY_PLUS://=
 									kbs.key=0x21;//numpad 3
 									kbs.ctrl=true;
 									break;
 									
-								case 7://-
+								case M12_KEY_6://-
 									kbs.key=0x17;//numpad 2
 									kbs.ctrl=true;
 									break;
 									
-								case 3://é
+								case M12_KEY_2://é
 									kbs.key=0x19;//numpad 4
 									kbs.ctrl=true;
 									break;
 									
-								case 8://è
+								case M12_KEY_7://è
 									kbs.key=0x29;//numpad 5
 									kbs.ctrl=true;
 									break;
 									
-								case 4://"
+								case M12_KEY_3://"
 									kbs.key=0x1D;//#
 									break;
 									
-								case 6://(
+								case M12_KEY_5://(
 									kbs.key=0x1F;// *
 									kbs.shift=true;
 									break;
 									
-								case 10://ç
+								case M12_KEY_9://ç
 									kbs.key=0x2F;//numpad 0
 									kbs.shift=true;
 									break;
 									
-								case 12://)
+								case M12_KEY_DEGREE://)
 									kbs.key=0x1D;//#
 									kbs.shift=true;
 									break;
 									
-								case 9://_
+								case M12_KEY_8://_
 									kbs.key=0x21;//numpad 3
 									kbs.shift=true;
 									break;
 									
 								//special phone keys
-								case 25://P
+								case M12_KEY_P://P
 									kbs.key=0x23;//Volume +
 									break;
 									
-								case 39://M
+								case M12_KEY_M://M
 									kbs.key=0x13;//Volume -
 									break;
 									
-								case 16://A
+								case M12_KEY_A://A
 									kbs.key=0x45;//appel Annuaire
 									break;
 									
-								case 17://Z
+								case M12_KEY_Z://Z
 									kbs.key=0x25;//appel n°51
 									break;
 									
-								case 19://R
+								case M12_KEY_R://R
 									kbs.key=0x33;//appel Répertoire
 									break;
 									
-								case 48://B
+								case M12_KEY_B://B
 									kbs.key=0x15;//appel Bis
 									break;
 									
-								case 20://T
+								case M12_KEY_T://T
 									kbs.key=0x35;//téléphone
 									break;
 									
-								case 23://I
+								case M12_KEY_I://I
 									kbs.key=0x45;//Impr.
 									kbs.shift=true;
 									break;
 							}
 						}
 						else{
-							switch (scancode){
-								case 16:kbs.key=0xBB;break;//A
-								case 17:kbs.key=0xB7;break;//Z
-								case 18:kbs.key=0xB9;break;//E
-								case 19:kbs.key=0xA9;break;//R
-								case 20:kbs.key=0x97;break;//T
-								case 21:kbs.key=0x87;break;//Y
-								case 22:kbs.key=0x77;break;//U
-								case 23:kbs.key=0x67;break;//I
-								case 24:kbs.key=0x69;break;//O
-								case 25:kbs.key=0x57;break;//P
-								case 30:kbs.key=0xBF;break;//Q
-								case 31:kbs.key=0xBD;break;//S
-								case 32:kbs.key=0xAB;break;//D
-								case 33:kbs.key=0x99;break;//F
-								case 34:kbs.key=0x8B;break;//G
-								case 35:kbs.key=0x89;break;//H
-								case 36:kbs.key=0x79;break;//J
-								case 37:kbs.key=0x6B;break;//K
-								case 38:kbs.key=0x59;break;//L
-								case 39:kbs.key=0x3B;break;//M
-								case 44:kbs.key=0xAD;break;//W
-								case 45:kbs.key=0x9B;break;//X
-								case 46:kbs.key=0x8D;break;//C
-								case 47:kbs.key=0x8F;break;//V
-								case 48:kbs.key=0x7D;break;//B
-								case 49:kbs.key=0x7B;break;//N
-								case 57:kbs.key=0x7F;break;//espace
-								case 284:
-								case 28:kbs.key=0x39;break;//entrée
-								case 50:kbs.key=0x6F;break;//,
-								case 83:
+							switch (key){
+								case M12_KEY_A:kbs.key=0xBB;break;//A
+								case M12_KEY_Z:kbs.key=0xB7;break;//Z
+								case M12_KEY_E:kbs.key=0xB9;break;//E
+								case M12_KEY_R:kbs.key=0xA9;break;//R
+								case M12_KEY_T:kbs.key=0x97;break;//T
+								case M12_KEY_Y:kbs.key=0x87;break;//Y
+								case M12_KEY_U:kbs.key=0x77;break;//U
+								case M12_KEY_I:kbs.key=0x67;break;//I
+								case M12_KEY_O:kbs.key=0x69;break;//O
+								case M12_KEY_P:kbs.key=0x57;break;//P
+								case M12_KEY_Q:kbs.key=0xBF;break;//Q
+								case M12_KEY_S:kbs.key=0xBD;break;//S
+								case M12_KEY_D:kbs.key=0xAB;break;//D
+								case M12_KEY_F:kbs.key=0x99;break;//F
+								case M12_KEY_G:kbs.key=0x8B;break;//G
+								case M12_KEY_H:kbs.key=0x89;break;//H
+								case M12_KEY_J:kbs.key=0x79;break;//J
+								case M12_KEY_K:kbs.key=0x6B;break;//K
+								case M12_KEY_L:kbs.key=0x59;break;//L
+								case M12_KEY_M:kbs.key=0x3B;break;//M
+								case M12_KEY_W:kbs.key=0xAD;break;//W
+								case M12_KEY_X:kbs.key=0x9B;break;//X
+								case M12_KEY_C:kbs.key=0x8D;break;//C
+								case M12_KEY_V:kbs.key=0x8F;break;//V
+								case M12_KEY_B:kbs.key=0x7D;break;//B
+								case M12_KEY_N:kbs.key=0x7B;break;//N
+								case M12_KEY_SPACE:kbs.key=0x7F;break;//espace
+								case M12_KEY_KP_ENTER:
+								case M12_KEY_ENTER:kbs.key=0x39;break;//entrée
+								case M12_KEY_QUESTION:kbs.key=0x6F;break;//,
+								case M12_KEY_KP_DECIMAL:
 									kbs.shift=true;
 									[[fallthrough]];
-								case 51:kbs.key=0x6D;break;//;
-								case 309:
+								case M12_KEY_PERIOD:kbs.key=0x6D;break;//;
+								case M12_KEY_KP_DIVIDE:
 									kbs.shift=true;
 									[[fallthrough]];
-								case 52:kbs.key=0x3D;break;//:
+								case M12_KEY_SLASH:kbs.key=0x3D;break;//:
 								
-								case 82:kbs.key=0x2F;break;//numpad 0
-								case 79:kbs.key=0x27;break;//numpad 1
-								case 80:kbs.key=0x17;break;//numpad 2
-								case 81:kbs.key=0x21;break;//numpad 3
-								case 75:kbs.key=0x19;break;//numpad 4
-								case 76:kbs.key=0x29;break;//numpad 5
-								case 77:kbs.key=0x11;break;//numpad 6
-								case 71:kbs.key=0x2B;break;//numpad 7
-								case 72:kbs.key=0x1B;break;//numpad 8
-								case 73:kbs.key=0x2D;break;//numpad 9
+								case M12_KEY_KP_0:kbs.key=0x2F;break;//numpad 0
+								case M12_KEY_KP_1:kbs.key=0x27;break;//numpad 1
+								case M12_KEY_KP_2:kbs.key=0x17;break;//numpad 2
+								case M12_KEY_KP_3:kbs.key=0x21;break;//numpad 3
+								case M12_KEY_KP_4:kbs.key=0x19;break;//numpad 4
+								case M12_KEY_KP_5:kbs.key=0x29;break;//numpad 5
+								case M12_KEY_KP_6:kbs.key=0x11;break;//numpad 6
+								case M12_KEY_KP_7:kbs.key=0x2B;break;//numpad 7
+								case M12_KEY_KP_8:kbs.key=0x1B;break;//numpad 8
+								case M12_KEY_KP_9:kbs.key=0x2D;break;//numpad 9
 								
-								case 60:kbs.key=0x95;break;//F2=Sommaire
-								case 61:kbs.key=0x93;break;//F3=Guide
-								case 62:kbs.key=0x85;break;//F4=Annulation
-								case 63:kbs.key=0x83;break;//F5=Correction
-								case 64:kbs.key=0x75;break;//F6=Retour
-								case 65:kbs.key=0x73;break;//F7=Suite
-								case 66:kbs.key=0x65;break;//F8=Répétition
-								case 67:kbs.key=0x63;break;//F9=Envoi
+								case M12_KEY_F2:kbs.key=0x95;break;//F2=Sommaire
+								case M12_KEY_F3:kbs.key=0x93;break;//F3=Guide
+								case M12_KEY_F4:kbs.key=0x85;break;//F4=Annulation
+								case M12_KEY_F5:kbs.key=0x83;break;//F5=Correction
+								case M12_KEY_F6:kbs.key=0x75;break;//F6=Retour
+								case M12_KEY_F7:kbs.key=0x73;break;//F7=Suite
+								case M12_KEY_F8:kbs.key=0x65;break;//F8=Répétition
+								case M12_KEY_F9:kbs.key=0x63;break;//F9=Envoi
 								
-								case 41:kbs.key=0x55;break;//²=on/off            ///////////////////////////////////////////////////////////////////////
-								case 14:kbs.key=0x31;break;//backspace=mem       ///////////////////////////////////////////////////////////////////////
-								case 15:kbs.key=0xB5;break;//tab=Connex/Fin      ///////////////////////////////////////////////////////////////////////
-								case 1:kbs.key=0xA5;break;//échap=Esc
-								case 58:kbs.key=0x9F;break;//min/maj
+								case M12_KEY_SQUARE:kbs.key=0x55;break;//²=on/off            ///////////////////////////////////////////////////////////////////////
+								case M12_KEY_BACKSPACE:kbs.key=0x31;break;//backspace=mem       ///////////////////////////////////////////////////////////////////////
+								case M12_KEY_TAB:kbs.key=0xB5;break;//tab=Connex/Fin      ///////////////////////////////////////////////////////////////////////
+								case M12_KEY_ESCAPE:kbs.key=0xA5;break;//échap=Esc
+								case M12_KEY_CAPS_LOCK:kbs.key=0x9F;break;//min/maj
 						
-								case 328:kbs.key=0x5B;break;//flèche haut
-								case 331:kbs.key=0x5D;break;//flèche gauche
-								case 336:kbs.key=0x5F;break;//flèche bas
-								case 333:kbs.key=0x3F;break;//flèche droite
+								case M12_KEY_UP:kbs.key=0x5B;break;//flèche haut
+								case M12_KEY_LEFT:kbs.key=0x5D;break;//flèche gauche
+								case M12_KEY_DOWN:kbs.key=0x5F;break;//flèche bas
+								case M12_KEY_RIGHT:kbs.key=0x3F;break;//flèche droite
 								
-								case 2:kbs.key=0xB3;break;//&
-								case 3:kbs.key=0xB1;break;//é
-								case 4:kbs.key=0xA7;break;//"
-								case 5:kbs.key=0xA1;break;//'
-								case 6:kbs.key=0x91;break;//(
-								case 74:
+								case M12_KEY_1:kbs.key=0xB3;break;//&
+								case M12_KEY_2:kbs.key=0xB1;break;//é
+								case M12_KEY_3:kbs.key=0xA7;break;//"
+								case M12_KEY_4:kbs.key=0xA1;break;//'
+								case M12_KEY_5:kbs.key=0x91;break;//(
+								case M12_KEY_KP_SUBSTRACT:
 									kbs.shift=false;
 									[[fallthrough]];
-								case 7:kbs.key=0x81;break;//-
-								case 8:kbs.key=0x71;break;//è
-								case 10:kbs.key=0x51;break;//ç
-								case 11:kbs.key=0x53;break;//à
-								case 12:kbs.key=0x37;break;//)
+								case M12_KEY_6:kbs.key=0x81;break;//-
+								case M12_KEY_7:kbs.key=0x71;break;//è
+								case M12_KEY_9:kbs.key=0x51;break;//ç
+								case M12_KEY_0:kbs.key=0x53;break;//à
+								case M12_KEY_DEGREE:kbs.key=0x37;break;//)
 								
 								//compatibility
-								case 9://_
+								case M12_KEY_8://_
 									if (kbs.ctrl||kbs.shift) kbs.key=0x61;// !
 									else{
 										kbs.key=0x2D;//numpad 9
@@ -1042,21 +1139,21 @@ class KeyboardInput{
 									}
 									break;
 								
-								case 53:// !
+								case M12_KEY_SECTION:// !
 									if (kbs.shift) kbs.key=0x11;//numpad 6
 									else kbs.key=0x61;// !
 									break;
 								
-								case 55:
+								case M12_KEY_KP_MULTIPLY:
 									kbs.shift=false;
 									[[fallthrough]];
-								case 43:// *
+								case M12_KEY_MU:// *
 									if (!kbs.shift){
 										kbs.key=0x1F;// *
 									}
 									break;
 									
-								case 26://^
+								case M12_KEY_DIAERESIS://^
 									if (kbs.shift){
 										kbs.key=0x93;//Guide
 										kbs.shift=false;
@@ -1068,7 +1165,7 @@ class KeyboardInput{
 									}
 									break;
 									
-								case 27://$
+								case M12_KEY_POUND://$
 									if (kbs.shift){
 										kbs.key=0x85;//Annulation
 										kbs.shift=false;
@@ -1080,7 +1177,7 @@ class KeyboardInput{
 									}
 									break;
 									
-								case 40://ù
+								case M12_KEY_PERCENT://ù
 									if (kbs.shift) kbs.key=0x29;//numpad 5
 									else{
 										kbs.key=0x83;//Correction
@@ -1088,10 +1185,14 @@ class KeyboardInput{
 									}
 									break;
 								
-								case 78:
+								case M12_KEY_KP_EQUAL:
+									kbs.key=0x1B;//numpad 8
+									kbs.shift=true;
+									break;
+								case M12_KEY_KP_ADD:
 									kbs.shift=true;
 									[[fallthrough]];
-								case 13://=
+								case M12_KEY_PLUS://=
 									if (kbs.shift) kbs.key=0x2B;//numpad 7
 									else{
 										kbs.key=0x1B;//numpad 8
@@ -1099,7 +1200,7 @@ class KeyboardInput{
 									}
 									break;
 									
-								case 86://<
+								case M12_KEY_GREATER_THAN://<
 									if (kbs.shift) kbs.key=0x17;//numpad 2
 									else{
 										kbs.key=0x27;//numpad 1
@@ -1110,101 +1211,6 @@ class KeyboardInput{
 						}
 					}
 					this->keyboardTransition(kbs);
-					/*switch (scancode){
-						case 16:this->setKey(0xBB,keyPressed);break;//A
-						case 17:this->setKey(0xB7,keyPressed);break;//Z
-						case 18:this->setKey(0xB9,keyPressed);break;//E
-						case 19:this->setKey(0xA9,keyPressed);break;//R
-						case 20:this->setKey(0x97,keyPressed);break;//T
-						case 21:this->setKey(0x87,keyPressed);break;//Y
-						case 22:this->setKey(0x77,keyPressed);break;//U
-						case 23:this->setKey(0x67,keyPressed);break;//I
-						case 24:this->setKey(0x69,keyPressed);break;//O
-						case 25:this->setKey(0x57,keyPressed);break;//P
-						case 30:this->setKey(0xBF,keyPressed);break;//Q
-						case 31:this->setKey(0xBD,keyPressed);break;//S
-						case 32:this->setKey(0xAB,keyPressed);break;//D
-						case 33:this->setKey(0x99,keyPressed);break;//F
-						case 34:this->setKey(0x8B,keyPressed);break;//G
-						case 35:this->setKey(0x89,keyPressed);break;//H
-						case 36:this->setKey(0x79,keyPressed);break;//J
-						case 37:this->setKey(0x6B,keyPressed);break;//K
-						case 38:this->setKey(0x59,keyPressed);break;//L
-						case 39:this->setKey(0x3B,keyPressed);break;//M
-						case 44:this->setKey(0xAD,keyPressed);break;//W
-						case 45:this->setKey(0x9B,keyPressed);break;//X
-						case 46:this->setKey(0x8D,keyPressed);break;//C
-						case 47:this->setKey(0x8F,keyPressed);break;//V
-						case 48:this->setKey(0x7D,keyPressed);break;//B
-						case 49:this->setKey(0x7B,keyPressed);break;//N
-						case 57:this->setKey(0x7F,keyPressed);break;//espace
-						case 28:this->setKey(0x39,keyPressed);break;//entrée
-						case 50:this->setKey(0x6F,keyPressed);break;//,
-						case 51:this->setKey(0x6D,keyPressed);break;//;
-						case 52:this->setKey(0x3D,keyPressed);break;//:
-						
-						case 82:this->setKey(0x2F,keyPressed);break;//numpad 0
-						case 79:this->setKey(0x27,keyPressed);break;//numpad 1
-						case 80:this->setKey(0x17,keyPressed);break;//numpad 2
-						case 81:this->setKey(0x21,keyPressed);break;//numpad 3
-						case 75:this->setKey(0x19,keyPressed);break;//numpad 4
-						case 76:this->setKey(0x29,keyPressed);break;//numpad 5
-						case 77:this->setKey(0x11,keyPressed);break;//numpad 6
-						case 71:this->setKey(0x2B,keyPressed);break;//numpad 7
-						case 72:this->setKey(0x1B,keyPressed);break;//numpad 8
-						case 73:this->setKey(0x2D,keyPressed);break;//numpad 9
-						
-						case 2:this->setKey(0xB3,keyPressed);break;//&
-						case 3:this->setKey(0xB1,keyPressed);break;//é
-						case 4:this->setKey(0xA7,keyPressed);break;//"
-						case 5:this->setKey(0xA1,keyPressed);break;//'
-						case 6:this->setKey(0x91,keyPressed);break;//(
-						case 7:this->setKey(0x81,keyPressed);break;//-
-						case 8:this->setKey(0x71,keyPressed);break;//è
-						case 9:this->setKey(0x61,keyPressed);break;//_=!
-						case 10:this->setKey(0x51,keyPressed);break;//ç
-						case 11:this->setKey(0x53,keyPressed);break;//à
-						case 12:this->setKey(0x37,keyPressed);break;//)
-						
-						case 43:this->setKey(0x1F,keyPressed);break;// *
-						case 40:this->setKey(0x1D,keyPressed);break;//ù=#
-						
-						case 328:this->setKey(0x5B,keyPressed);break;//flèche haut
-						case 331:this->setKey(0x5D,keyPressed);break;//flèche gauche
-						case 336:this->setKey(0x5F,keyPressed);break;//flèche bas
-						case 333:this->setKey(0x3F,keyPressed);break;//flèche droite
-						
-						case 54:
-						case 42:this->setKey(0xAF,keyPressed);break;//shift
-						case 58:this->setKey(0x9F,keyPressed);break;//min/maj
-						case 285:
-						case 29:this->setKey(0x9D,keyPressed);break;//ctrl
-						
-						case 56:this->setKey(0xA3,keyPressed);break;//alt=fnct
-						case 1:this->setKey(0xA5,keyPressed);break;//échap=Esc
-						
-						case 41:this->setKey(0x55,keyPressed);break;//²=on/off
-						case 13:this->setKey(0x31,keyPressed);break;//==mem
-						case 15:this->setKey(0xB5,keyPressed);break;//tab=Connex/Fin
-						case 78:this->setKey(0x23,keyPressed);break;//numpad +=HP+
-						case 74:this->setKey(0x13,keyPressed);break;//numpad -=HP-
-						case 14:this->setKey(0x35,keyPressed);break;//backspace=HP
-						case 55:this->setKey(0x1F,keyPressed);break;//numpad *=*
-						case 309:this->setKey(0x1D,keyPressed);break;//numpad /=#
-						//.../... bis repertoire annuaire decrochage
-						
-						case 60:this->setKey(0x95,keyPressed);break;//F2=Sommaire
-						case 61:this->setKey(0x93,keyPressed);break;//F3=Guide
-						case 62:this->setKey(0x85,keyPressed);break;//F4=Annulation
-						case 63:this->setKey(0x83,keyPressed);break;//F5=Correction
-						case 64:this->setKey(0x75,keyPressed);break;//F6=Retour
-						case 65:this->setKey(0x73,keyPressed);break;//F7=Suite
-						case 66:this->setKey(0x65,keyPressed);break;//F8=Répétition
-						case 67:this->setKey(0x63,keyPressed);break;//F9=Envoi
-						
-						case 0x153:this->setKey(0x33,keyPressed);break;
-						default:printf("key pressed: %02X\n",scancode);break;
-					}*/
 				}
 			}
 		}
