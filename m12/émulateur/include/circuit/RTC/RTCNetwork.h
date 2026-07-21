@@ -2,8 +2,13 @@
 #define RTCNETWORK_H
 #include <functional>
 #include <cmath>
+#ifndef M_PI
+#define M_PI (3.14159265358979323846264338327950288)
+#endif
 #include "circuit/PhoneLine.h"
 #include "encoding.h"
+#include <mutex>
+#include <ixwebsocket/IXWebSocket.h>
 enum PhoneNumberState{
 	NOT_PHONE_NUMBER=0,
 	PHONE_NUMBER_ONGOING=1,
@@ -15,6 +20,9 @@ class RTCService{
 		std::function<void(unsigned short)> sendPhoneLine=[](unsigned short s){};
 		virtual void phoneLineChangeIn(unsigned short s){};
 		virtual void CLKTickIn9600Hz(){};
+		
+		virtual float getPhoneLineSample(unsigned long sr){return 0;};
+		virtual void setPhoneLineSample(float s){};
 		
 };
 class RTCNetwork{
@@ -74,6 +82,7 @@ class RTCNetwork{
 						this->timer=0;
 						this->phoneLineStateOut=0;
 						this->sendPhoneLine(this->phoneLineStateOut);
+						if (this->ServiceLinked!=NULL) this->ServiceLinked->phoneLineChangeIn(this->phoneLineStateIn);
 						break;
 				}
 			}
@@ -218,14 +227,25 @@ class RTCNetwork{
 		}
 		
 		float getPhoneLineSample(unsigned long sampleRate){
-			if ((bool)(this->phoneLineStateOut&line_Ringing)) this->sample_phase+=50;
-			else if ((bool)(this->phoneLineStateOut&line_call_progress_tone)) this->sample_phase+=440;
-			else{
-				this->sample_phase=0;
-				return 0;
+			if (this->ServiceLinked!=NULL){
+				return this->ServiceLinked->getPhoneLineSample(sampleRate);
 			}
-			if (this->sample_phase>sampleRate) this->sample_phase-=sampleRate;
-			return std::sin(2*M_PI*((float)this->sample_phase)/((float)sampleRate));
+			else{
+				if ((bool)(this->phoneLineStateOut&line_Ringing)) this->sample_phase+=50;
+				else if ((bool)(this->phoneLineStateOut&line_call_progress_tone)) this->sample_phase+=440;
+				else{
+					this->sample_phase=0;
+					return 0;
+				}
+				if (this->sample_phase>sampleRate) this->sample_phase-=sampleRate;
+				return std::sin(2*M_PI*((float)this->sample_phase)/((float)sampleRate));
+			}
+		}
+		
+		void setPhoneLineSample(float s){
+			if (this->ServiceLinked!=NULL && (bool)(this->phoneLineStateIn&line_analog)){
+				return this->ServiceLinked->setPhoneLineSample(s);
+			}
 		}
 		
 	private:
@@ -261,7 +281,52 @@ class RTCNetwork{
 		enum State currentState=this->IDLE;
 };
 
-class RTCServiceMinipavi: public RTCService{
+class RTCServiceAudio: public RTCService{
+	public:
+		virtual enum PhoneNumberState isCalled(std::vector<unsigned char>* pPhoneNumber) override final {
+			constexpr unsigned char N[]={0,0,0,0};
+			if (pPhoneNumber->size()>sizeof(N)/sizeof(N[0])) return NOT_PHONE_NUMBER;
+			for (size_t i=0;i<pPhoneNumber->size();i++){
+				if (N[i]!=(*pPhoneNumber)[i]) return NOT_PHONE_NUMBER;
+			}
+			if (pPhoneNumber->size()==sizeof(N)/sizeof(N[0])) return PHONE_NUMBER_FINISHED;
+			return PHONE_NUMBER_ONGOING;
+		}
+		
+		virtual void phoneLineChangeIn(unsigned short s) final override{
+			if (((bool)(s&line_Closed))!=this->selected){
+				this->selected=!this->selected;
+				this->sendIOState(this->selected);
+				if (this->selected) this->sendPhoneLine(line_analog);
+			}
+		}
+		virtual float getPhoneLineSample(unsigned long sr) override final{
+			return this->sampleIn;
+		}
+		virtual void setPhoneLineSample(float s) override final{
+			this->sampleOut=s-this->sampleIn;//reduce echo
+		};
+		float getServiceSample(){
+			return this->sampleOut;
+		}
+		void setServiceSample(float s){
+			this->sampleIn=s;
+		}
+		
+		void subscribeIOState(std::function<void(bool)> f){
+			this->sendIOState=f;
+		}
+	
+	private:
+		bool selected=false;
+		
+		std::function<void(bool)> sendIOState=[](bool b){};
+		float sampleIn=0;
+		float sampleOut=0;
+		
+};
+
+class RTCServiceMinipavi: public RTCService{//TODO: make it more robust
 	public:
 		virtual enum PhoneNumberState isCalled(std::vector<unsigned char>* pPhoneNumber) override final {
 			constexpr unsigned char N[]={0,9,7,2,1,0,1,7,2,1};
@@ -274,14 +339,13 @@ class RTCServiceMinipavi: public RTCService{
 		}
 		
 		virtual void phoneLineChangeIn(unsigned short s) final override{
-			//printf("minipavi: %04X\n",s);
 			if (((bool)(s&line_Closed))!=this->selected){
 				this->selected=!this->selected;
 				if (this->selected){
-					this->sendPhoneLine(this->OPPO?line_v23_75bps_1:line_v23_1200bps_1);
+					this->Init();
 				}
 				else{
-					
+					this->Reset();
 				}
 			}
 			this->phoneLineStateIn=s;
@@ -290,41 +354,44 @@ class RTCServiceMinipavi: public RTCService{
 		virtual void CLKTickIn9600Hz() final override {
 			this->Clk++;
 			if ((this->Clk&ClkDivMask75)==0){
-				if (this->OPPO) this->TxClkTick();
-				else this->RxClkTick();
+				this->RxClkTick();
 			}
 			if ((this->Clk&ClkDivMask1200)==0){
-				if (this->OPPO) this->RxClkTick();
-				else this->TxClkTick();
+				this->TxClkTick();
 			}
+		}
+		
+		virtual float getPhoneLineSample(unsigned long sr) override final{
+			if ((this->phoneLineStateOut&(line_v23_1200bps_0|line_v23_1200bps_1))==line_v23_1200bps_0){
+				this->v23Phase+=2100;
+			}
+			else if ((this->phoneLineStateOut&(line_v23_1200bps_0|line_v23_1200bps_1))==line_v23_1200bps_1){
+				this->v23Phase+=1300;
+			}
+			else{
+				this->v23Phase=0;
+			}
+			if (this->v23Phase>sr) this->v23Phase-=sr;
+			return pow(10.,-0.5)*sin(2*M_PI*((float)this->v23Phase)/((float)sr));
 		}
 	private:
 		bool selected=false;
 		unsigned short phoneLineStateIn=0;
+		unsigned short phoneLineStateOut=0;
 		unsigned char Clk;
-		bool OPPO=true;
 		constexpr static unsigned char ClkDivMask75=0x7F;
 		constexpr static unsigned char ClkDivMask1200=0x07;
 		unsigned char RxState=0;
 		unsigned char RxBuf=0;
-		std::vector<unsigned char> Rxq;
+		std::vector<unsigned char> qRx;
 		unsigned char TxState=0;
 		unsigned char TxBuf=0;
-		std::queue<unsigned char> Txq;
-		constexpr static char test[]="\x1B\x20\x20\x31"
-									 "\x1B\x20\x21\x31""Exp\x19""Bediteur"
-									 "\x1B\x20\x22\x31""Nom"
-									 "\x1B\x20\x23\x31""0123456789"
-									 "\x1B\x20\x24\x31""Destinataire"
-									 "\x1B\x20\x25\x31""Objet"
-									 "\x1B\x20\x26\x31""Corps"
-									 "\x1B\x21\x20\x31";
-									 
-		bool PCE=false;
-		unsigned char PCEBuffer[15]={0};
-		unsigned char PCEIndex=0;
-		unsigned char PCECRC=0;
-		constexpr static unsigned char PCECRCG=0x09<<1;
+		std::queue<unsigned char> qTx;
+		
+		unsigned long v23Phase=0;
+		
+		ix::WebSocket webSocket;
+		std::mutex wsMutex;
 		
 		enum Const{
 			
@@ -334,212 +401,119 @@ class RTCServiceMinipavi: public RTCService{
 		};
 		
 		void TxClkTick(){
-			unsigned short logical_0=this->OPPO?line_v23_75bps_0:line_v23_1200bps_0;
-			unsigned short logical_1=this->OPPO?line_v23_75bps_1:line_v23_1200bps_1;
 			switch (this->TxState){
 				case 0:
-					if ((bool)this->Txq.size()){
-						this->sendPhoneLine(logical_0);
-						this->TxBuf=this->Txq.front();
-						this->Txq.pop();
+				{
+					std::lock_guard<std::mutex> lock(this->wsMutex);
+					if ((bool)this->qTx.size()&&(bool)(this->phoneLineStateIn&(line_v23_75bps_0|line_v23_75bps_1))){
+						this->phoneLineStateOut=line_v23_1200bps_0;
+						this->sendPhoneLine(this->phoneLineStateOut);
+						this->TxBuf=this->qTx.front();
+						this->qTx.pop();
 						constexpr unsigned short P=0b0110100110010110;
 						this->TxBuf^=((P>>(this->TxBuf&0x0F))^(P>>(this->TxBuf>>4)))<<7;
 						this->TxState=1;
 					}
+				}
 					break;
 				default:
-					this->sendPhoneLine(((bool)(this->TxBuf&0x01))?logical_1:logical_0);
+					this->phoneLineStateOut=((bool)(this->TxBuf&0x01))?line_v23_1200bps_1:line_v23_1200bps_0;
+					this->sendPhoneLine(this->phoneLineStateOut);
 					this->TxBuf=this->TxBuf>>1;
 					this->TxState++;
 					break;
 				case 9:
-					this->sendPhoneLine(logical_1);
+					this->phoneLineStateOut=line_v23_1200bps_1;
+					this->sendPhoneLine(this->phoneLineStateOut);
 					this->TxState=0;
 					break;
 			}
 		}
 		
 		void RxClkTick(){
-			unsigned short logical_0=this->OPPO?line_v23_1200bps_0:line_v23_75bps_0;
-			unsigned short logical_1=this->OPPO?line_v23_1200bps_1:line_v23_75bps_1;
 			switch (this->RxState){
 				case 0:
-					if ((bool)(this->phoneLineStateIn&logical_0))this->RxState=1;
+					if ((bool)(this->phoneLineStateIn&line_v23_75bps_0))this->RxState=1;
+					else{
+						this->RxWaiting();
+						this->RxState=11;
+					}
+					break;
+				case 11:
+					if ((bool)(this->phoneLineStateIn&line_v23_75bps_0))this->RxState=1;
 					break;
 				default:
-					this->RxBuf=(this->RxBuf>>1)|(((bool)(this->phoneLineStateIn&logical_0))?0:0x80);
+					this->RxBuf=(this->RxBuf>>1)|(((bool)(this->phoneLineStateIn&line_v23_75bps_0))?0:0x80);
 					this->RxState++;
 					break;
 				case 9:
-					printf("rx %02X\n",this->RxBuf);
-					if (this->PCE) this->PCEUpdate(this->RxBuf);
-					this->Rxq.push_back(this->RxBuf&0x7F);
-					if ((bool)(this->phoneLineStateIn&logical_1)) this->RxState=0;
+					this->qRx.push_back(this->RxBuf&0x7F);
+					if ((bool)(this->phoneLineStateIn&line_v23_75bps_1)) this->RxState=0;
 					else this->RxState=10;
 					this->RxUpdate();
 					break;
 				case 10:
-					if ((bool)(this->phoneLineStateIn&logical_1)) this->RxState=0;
+					if ((bool)(this->phoneLineStateIn&line_v23_75bps_1)) this->RxState=0;
 					break;
 			}
 		}
 		
 		void RxUpdate(){
-			unsigned char cmd=this->NOT_CMD;
-			cmd|=this->isISO2022CMD();
-			if (cmd==this->CMD_FINISHED){
-				if (this->Rxq.size()==6&&this->Rxq[1]==0x23&&this->Rxq[2]==0x20&&this->Rxq[3]==0x2C&&this->Rxq[4]==0x21&&this->Rxq[5]==0x3C){//IRD
-					constexpr char DC[]="\x1B\x23\x20\x2C\x21\x38";
-					for (size_t i=0;i<sizeof(DC)/sizeof(DC[0]);i++)this->Txq.push((unsigned char)DC[i]);
-				}
-				if (this->Rxq.size()==5&&this->Rxq[1]==0x20&&this->Rxq[2]==0x2C&&this->Rxq[3]==0x21&&this->Rxq[4]==0x39){//AC
-					constexpr char STUTEL1[]="\x1F"">D~S#~Q~R ~YE~QMQ~Q~QL~Q~X\x0D";
-					for (size_t i=0;i<sizeof(STUTEL1)/sizeof(STUTEL1[0]);i++)this->Txq.push((unsigned char)STUTEL1[i]);
-					/*for (size_t i=0;i<sizeof(this->test)/sizeof(this->test[0]);i++)this->Txq.push((unsigned char)this->test[i]);
-					constexpr char ILC[]="\x1B\x20\x2C\x21\x3A";
-					for (size_t i=0;i<sizeof(ILC)/sizeof(ILC[0]);i++)this->Txq.push((unsigned char)ILC[i]);*/
-				}
-				if (this->Rxq.size()==5&&this->Rxq[1]==0x20&&this->Rxq[2]==0x2C&&this->Rxq[3]==0x21&&this->Rxq[4]==0x38){//DC
-					constexpr char AC[]="\x1B\x20\x2C\x21\x39";
-					for (size_t i=0;i<sizeof(AC)/sizeof(AC[0]);i++)this->Txq.push((unsigned char)AC[i]);
-				}
-			}
-			if (cmd==NOT_CMD){
-				cmd|=this->isACKCMD();
-				if (cmd==this->CMD_FINISHED&&this->Rxq[1]==0x53){
-					constexpr char IRD[]="\x1B\x23\x20\x2C\x21\x3C";
-					for (size_t i=0;i<sizeof(IRD)/sizeof(IRD[0]);i++)this->Txq.push((unsigned char)IRD[i]);
-				}
-			}
-			if (cmd==NOT_CMD){
-				cmd|=this->isSTUTELCMD();
-				if (cmd==this->CMD_FINISHED){
-					if ((this->Rxq[2]&0x0C)==0x04){
-						constexpr char STUTEL2[]="\x1F"">P2\x0D";
-						for (size_t i=0;i<sizeof(STUTEL2)/sizeof(STUTEL2[0]);i++)this->Txq.push((unsigned char)STUTEL2[i]);
-					}
-					if ((this->Rxq[2]&0x03)==0x00){
-						std::vector<unsigned char> data(this->Rxq.begin()+2,this->Rxq.end()-1);
-						std::vector<unsigned char>* data2=DProtocolTranslationMode4Decode(&data);
-						if (data2!=NULL){
-							printf("\nData: ");
-							for (size_t i=0;i<data2->size();i++){
-								if ((*data2)[i]<0x20||(*data2)[i]>=0x7F) printf("\\x%02X",(*data2)[i]);
-								else if ((*data2)[i]=='\\') printf("\\\\");
-								else printf("%c",(*data2)[i]);
-							}
-							printf("\n");
-							delete data2;
-						}
-					}
-				}
-			}
-			if (cmd==NOT_CMD){
-				cmd|=this->isPRO2CMD();
-				if (cmd==this->CMD_FINISHED){
-					if (this->Rxq[2]==0x69&&this->Rxq[3]==0x44){//PCE
-						constexpr char PCE[]="\x1B\x3A\x73\x44";
-						for (size_t i=0;i<sizeof(PCE)/sizeof(PCE[0]);i++)this->Txq.push((unsigned char)PCE[i]);
-						printf("PCE!\n");
-						this->PCE=true;
-						this->PCEIndex=0;
-					}
-				}
-			}
-			if (cmd==this->NOT_CMD||cmd==this->CMD_FINISHED) this->Rxq.clear();
 			
 		}
 		
-		unsigned char isISO2022CMD(){
-			switch(this->Rxq.size()){
-				case 1:
-					if (this->Rxq[0]==0x1B) return this->CMD_ONGOING;
-					break;
-				case 2:
-					if (this->Rxq[0]==0x1B&&(this->Rxq[1]&0xF0)==0x20) return this->CMD_ONGOING;
-					break;
-				default:
-					if (this->Rxq[0]==0x1B){
-						for (size_t i=1;i<this->Rxq.size()-1;i++){
-							if ((this->Rxq[i]&0xF0)!=0x20) return this->NOT_CMD;
+		void RxWaiting(){
+			if (!this->qRx.empty()){
+				if (this->webSocket.getReadyState()==ix::ReadyState::Open) this->webSocket.sendBinary(this->qRx);
+				this->qRx.clear();
+			}
+		}
+		
+		void Reset(){
+			this->webSocket.stop();
+			{
+				std::lock_guard<std::mutex> lock(this->wsMutex);
+				this->qRx.clear();
+				std::queue<unsigned char> empty;
+				std::swap(qTx,empty);
+				this->TxState=0;
+				this->RxState=0;
+			}
+		}
+		
+		void Init(){
+			this->phoneLineStateOut=line_v23_1200bps_1;
+			this->sendPhoneLine(this->phoneLineStateOut);
+			
+			this->webSocket.setUrl(
+#ifdef M12_USE_TLS
+			"wss://go.minipavi.fr:8181"
+#else
+			"ws://go.minipavi.fr:8182"
+#endif
+			);
+			this->webSocket.setPingInterval(45);
+			this->webSocket.disablePerMessageDeflate();
+			this->webSocket.disableAutomaticReconnection();
+			this->webSocket.setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg){
+				switch (msg->type){
+					case ix::WebSocketMessageType::Error:
+						break;
+					case ix::WebSocketMessageType::Open:
+						break;
+					case ix::WebSocketMessageType::Close:
+						break;
+					case ix::WebSocketMessageType::Message:
+						{
+							std::lock_guard<std::mutex> lock(this->wsMutex);
+							for (unsigned int i=0;i<msg->str.length();i++) this->qTx.push((unsigned char)msg->str[i]);
 						}
-						switch (this->Rxq[this->Rxq.size()-1]){
-							case 0x20 ... 0x2F:return this->CMD_ONGOING;
-							case 0x30 ... 0x7E:return this->CMD_FINISHED;
-						}
-					}
-					break;
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isACKCMD(){
-			if (this->Rxq.size()<2){
-				if (this->Rxq[0]==0x13){
-					return this->CMD_ONGOING;
+						break;
+					default:
+						break;
 				}
-			}
-			else if (this->Rxq.size()==2){
-				if (this->Rxq[0]==0x13){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isSTUTELCMD(){//D-Protocol mode C with translation mode 4
-			switch (this->Rxq.size()){
-				case 0:break;
-				case 1:
-					if (this->Rxq[0]==0x1F) return this->CMD_ONGOING;
-					break;
-				case 2:
-					if (this->Rxq[0]==0x1F&&this->Rxq[1]==0x3E) return this->CMD_ONGOING;
-					break;
-				default:
-					if (this->Rxq[0]==0x1F&&this->Rxq[1]==0x3E){
-						if (this->Rxq[this->Rxq.size()-1]==0x0D) return this->CMD_FINISHED;
-						else return this->CMD_ONGOING;
-					}
-					break;
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isPRO2CMD(){
-			constexpr unsigned char CMD[2]={0x1B,0x3A};
-			if (this->Rxq.size()<4){
-				if (!(bool)memcmp(this->Rxq.data(),CMD,(this->Rxq.size()<2?this->Rxq.size():2)*sizeof(unsigned char))){
-					return this->CMD_ONGOING;
-				}
-			}
-			else if (this->Rxq.size()==4){
-				if (!(bool)memcmp(this->Rxq.data(),CMD,2*sizeof(unsigned char))){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
-		
-		void PCEUpdate(unsigned char d){
-			if (this->PCEIndex>=16){
-				this->PCEIndex=0;
-			}
-			else if (this->PCEIndex==15){
-				printf("CRC: %02X / V: %02X\n",this->PCECRC>>1,d&0x7F);
-				this->PCEIndex++;
-			}
-			else{
-				if (this->PCEIndex==0){
-					this->PCECRC=0;
-					printf("PCE block\n");
-				}
-				this->PCEBuffer[this->PCEIndex++]=d;
-				this->PCECRC^=d;
-				for (int i=0;i<8;i++){
-					this->PCECRC=((this->PCECRC&0x80)?this->PCECRCG:0)^(this->PCECRC<<1);
-				}
-			}
+			});
+			this->webSocket.start();
 		}
 };
 #endif

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+	<id>M12</id>
+	<metadata_license>CC0-1.0</metadata_license>
+	<project_license>MIT</project_license>
+	<name>M12</name>
+	<summary>Emulateur du Minitel 12 Philips</summary>
+	<description>
+		<p>M12 est un émulateur qui simule le fonctionnement matériel du Minitel 12 produit par Philips avec quelques additions en plus.</p>
+	</description>
+	<launchable type="desktop-id">M12.desktop</launchable>
+	<url type="homepage">https://github.com/EcrouVis/Minitel</url>
+	<screenshots>
+		<screenshot type="default">
+			<image></image>
+		</screenshot>
+	</screenshots>
+	<provides>
+		<id>M12.desktop</id>
+	</provides>
+</component>

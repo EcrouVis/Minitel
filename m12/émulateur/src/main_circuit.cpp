@@ -13,8 +13,8 @@
 #include "circuit/AudioBuffer.h"
 #include "circuit/BuzzerFilter.h"
 #include "circuit/SpeakerFilter.h"
-//#include "circuit/DIN5Interface.h"
 #include "circuit/PhoneLineWirring.h"
+#include "circuit/PhoneLineBuffer.h"
 
 #include "circuit/debug/IOLogger.h"
 #include "circuit/debug/dbg_80C32.h"
@@ -22,30 +22,8 @@
 
 #include "FileAccess.h"
 
-#include <chrono>
-
-#include <cstdio>
-
-#include <fstream>
-
-#include <cstring>
-
-#include <iostream>
-
-#include <thread>
-
-//#include "circuit/DIN5/DIN5InterfaceLocalWebsocket.h"
 #include "circuit/DIN5/MinitelNetwork.h"
 #include "circuit/RTC/RTCNetwork.h"
-
-#include <vector>
-
-#include <filesystem>
-
-#define GLAD_GL_IMPLEMENTATION
-#include "glad/glad.h"
-#define GLFW_INCLUDE_NONE
-#include "GLFW/glfw3.h"
 
 void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* p_gState){
 	//create ic
@@ -55,7 +33,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	m80C32 uc;
 	TS7514 modem;
 	TS9347wVRAM video;
-	//EdgeTriggeredLatchBus ALLatch;
 	EdgeTriggeredLatchWire A16Latch;
 	EdgeTriggeredLatchWire A17Latch;
 	MBSL_4000FH5_5 cpld;
@@ -78,7 +55,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	RTCNetwork rtcn;
 	RTCServiceMinipavi rtcmp;
 	rtcn.subscribeService((RTCService*)&rtcmp);
+	RTCServiceAudio rtcsa;
+	rtcn.subscribeService((RTCService*)&rtcsa);
 	PhoneLineWire phoneLine;
+	PhoneLineBuffer plb;
 	
 #ifdef M12_USE_DECOMP_TOOLS
 	RuntimeDecompiler rtd(&uc);
@@ -254,7 +234,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	cpld.subscribePIO(std::cref(CPLDIObus));
 	
-	auto RSTwire=[&uc,p_mb_video,p_gState,&eram](bool b){
+	auto RSTwire=[&uc,p_mb_video,p_gState,&eram,&kb](bool b){
 		uc.ResetChangeIn(b);
 		static bool bp=true;
 		if ((!b)&&bp){
@@ -268,6 +248,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			static unsigned char eram_cpy[ERAM_SIZE];
 			eram.copy((unsigned char*)eram_cpy);
 			writeM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
+			
+			kb.Reset();
 		}
 		bp=b;
 		p_gState->minitelOn.store(!b,std::memory_order_relaxed);
@@ -352,6 +334,12 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		thread_message ms_p_notif;
 		ms_p_notif.cmd=PRINT_FINISHED;
 		ms_p_notif.p=pc;
+		p_mb_video->send(&ms_p_notif);
+	});
+	
+	rtcsa.subscribeIOState([p_mb_video](bool b){
+		thread_message ms_p_notif;
+		ms_p_notif.cmd=b?AUDIO_PHONE_LINE_ON:AUDIO_PHONE_LINE_OFF;
 		p_mb_video->send(&ms_p_notif);
 	});
 	
@@ -549,7 +537,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	//mailbox
 	
-	auto checkMB=[p_mb_circuit,&eram,&erom,&modem,&wt,&CLKs,&kb,p_gState,&rtcn,&rtcmp,&crtb](){
+	auto checkMB=[p_mb_circuit,&eram,&erom,&modem,&wt,&CLKs,&kb,p_gState,&rtcn,&rtcsa,&crtb](){
 		//pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
 		CLKs.setPause(p_gState->stepByStep.load(std::memory_order_relaxed));
 		thread_message ms;
@@ -576,8 +564,11 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 					//pause_emu=false;
 					CLKs.setPause(false);
 					break;
+				case AUDIO_PHONE_LINE_CALL:
+					rtcn.requestPhoneLine((RTCService*)&rtcsa);
+					break;
 				case SPECIAL:
-					rtcn.requestPhoneLine((RTCService*)&rtcmp);
+					//rtcn.requestPhoneLine((RTCService*)&rtcsa);
 					break;
 				case EMU_SHUTDOWN:
 					CLKs.setStop(true);
@@ -611,21 +602,31 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	CLKs.subscribe9600Hz(CLKTick9600);
 	
-	auto CLKAudio=[&ab,&kb,&bzf,&spkf,&modem,&rtcn,&phoneLine](unsigned long sr){
+	auto CLKAudio=[&ab,&kb,&bzf,&spkf,&modem,&rtcn,&phoneLine,&plb,&rtcsa](unsigned long sr){//audio processing callback
+		constexpr float hybridRejectionValue=0.1;//~20dB
+		
 		static unsigned long srp=0;
 		if (sr!=srp){
 			bzf.setSampleRate(sr);
+			modem.setSampleRate(sr);
 			srp=sr;
 		}
 		
+		rtcsa.setServiceSample(plb.AudioEmulatorIn());
+		
 		phoneLine.setRTCSample(rtcn.getPhoneLineSample(sr));
 		phoneLine.setKeyboardSample(kb.getPhoneLineSample(sr));
-		phoneLine.setModemSample(modem.getTxOutSample());
+		float modemOut=modem.getTxOutSample();
+		phoneLine.setModemSample(modemOut);
+		
 		kb.setPhoneLineSample(phoneLine.getPhoneLineSample());
+		rtcn.setPhoneLineSample(phoneLine.getPhoneLineSample());
+		modem.setRxSample(phoneLine.getModemSample()-modemOut*(1-hybridRejectionValue));
 		
 		ab.AudioIn(spkf.filter(kb.getSpeakerSample(sr))+bzf.filter(modem.getBuzzerSample(sr)));
+		plb.AudioEmulatorOut(rtcsa.getServiceSample());
 	};
-	CLKs.subscribeAudioSample(CLKAudio);
+	CLKs.subscribeAudioSample(std::cref(CLKAudio));
 	
 	
 	
@@ -691,6 +692,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	ms.p=(void*)&ab;
 	ms.cmd=AUDIO_BUFFER;
+	p_mb_video->send(&ms);
+	
+	ms.p=(void*)&plb;
+	ms.cmd=PHONE_LINE_BUFFER;
 	p_mb_video->send(&ms);
 	
 	ms.p=(void*)&smnap;

@@ -260,20 +260,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					//d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 					this->CONNECTEDReceiveCMD(d);
 					break;
-				/*{
-					printf("CONN %02X\n",d);
-					this->CMDBuffer.push_back(d);
-					unsigned char s=this->isModuleRestCMD();
-					if (s==this->NOT_CMD) this->CMDBuffer.clear();
-					else if (s==this->CMD_FINISHED){
-						this->UNINIT_MODULESendCMD();
-						//this->CMDBuffer.clear();
-						//this->print(clear_bulk,sizeof(clear_bulk)/sizeof(clear_bulk[0]));
-						//this->print(reset_minitel,sizeof(reset_minitel)/sizeof(reset_minitel[0]));//TODO
-						//this->currentState=this->UNINIT_MODULE;
-					}
-					break;
-				}*/
 				case this->CLOSING:
 					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 					break;

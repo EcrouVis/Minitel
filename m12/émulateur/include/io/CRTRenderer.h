@@ -20,9 +20,6 @@ class CRTRenderer{
 			this->p_PARAMETERS=p_PARAMETERS;
 			this->window=window;
 			
-			//glEnable(GL_BLEND);
-			//glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); 
-			
 			glGenVertexArrays(1,&(this->VertexArrayID));
 			glBindVertexArray(this->VertexArrayID);
 			
@@ -87,8 +84,6 @@ class CRTRenderer{
 			}
 		}
 	private:
-		bool current_rgb=false;
-	
 		CRTBuffer* p_buffer=NULL;
 		GLFWwindow* window;
 		Parameters* p_PARAMETERS;
@@ -210,8 +205,6 @@ void main(){\n\
 			glDeleteShader(this->FragmentShaderID);
 		}
 		void updateTexture(){
-			if (this->p_buffer->frameChanged()||(this->current_rgb!=this->p_PARAMETERS->io.crt.rgb)){
-				this->current_rgb=this->p_PARAMETERS->io.crt.rgb;
 				static unsigned char crtbuffer_data[VIDEO_FRAME_SIZE];
 				this->p_buffer->getVideoFrame(crtbuffer_data);
 				glBindTexture(GL_TEXTURE_2D,this->TextureID);
@@ -264,7 +257,6 @@ void main(){\n\
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_LINEAR);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);*/
-			}
 			auto now = std::chrono::steady_clock::now();
 			float dt=std::chrono::duration_cast<std::chrono::duration<float>>(now-this->lastScreenUpdate).count();
 			this->lastScreenUpdate=now;
@@ -278,7 +270,7 @@ void main(){\n\
 					this->screenTextureDisplay[i]=std::max((unsigned char)(((float)this->screenTextureDisplay[i])*alpha),this->screenTexture[i]);
 				}
 				glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,3*40*8+2,250+2,0, GL_RGB, GL_UNSIGNED_BYTE,this->screenTextureDisplay);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,GL_LINEAR);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_LINEAR);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

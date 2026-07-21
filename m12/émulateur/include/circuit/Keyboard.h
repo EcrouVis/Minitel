@@ -23,7 +23,7 @@ const unsigned char LED_BLINK_FAST=2;
 const unsigned char LED_BLINK_SLOW=3;
 
 
-class Keyboard{
+class Keyboard{//TODO: fix behavior -> speaker should be able to be activated when connected to a service (wrong phone state?)
 	public:
 		
 		std::atomic_uchar LED_POWER=LED_OFF;
@@ -205,7 +205,45 @@ class Keyboard{
 				case line_DTMF_941Hz:dtmf_phase2+=941;break;
 			}
 			if (this->dtmf_phase2>sampleRate) this->dtmf_phase2-=sampleRate;
-			return std::sin(2*M_PI*((float)this->dtmf_phase2)/((float)sampleRate))+0.8*std::sin(2*M_PI*((float)this->dtmf_phase1)/((float)sampleRate));
+			return line_DTMF_LF_Attenuation*std::sin(2*M_PI*((float)this->dtmf_phase2)/((float)sampleRate))+line_DTMF_HF_Attenuation*std::sin(2*M_PI*((float)this->dtmf_phase1)/((float)sampleRate));
+		}
+		
+		void Reset(){
+			this->phone_status=0x61;
+			
+			this->phoneLineStateIn=0;
+			this->phoneLineStateOut=0;
+			
+			this->S_in_step=0;
+			this->S_in_low=0;
+			this->S_out_step=0;
+			std::queue<unsigned char> empty;
+			std::swap(this->SBUF_out_queue,empty);
+			
+			this->DTMF_step=0;
+			std::queue<unsigned char> empty2;
+			std::swap(this->DTMF_queue,empty2);
+			
+			this->command_part=false;
+			
+			this->ringtone_activated=false;
+			this->ringtone_tick=0;
+			this->ringtone_note=16;
+			this->ringtone_phase_tick=0;
+			this->ringtone=0;
+			this->ringtone_volume=0;
+			
+			this->speaker_on=false;
+			this->speaker_volume=0;
+			this->phoneLineSample=0;
+			
+			this->dtmf_phase1=0;
+			this->dtmf_phase2=0;
+			
+			this->LED_POWER=LED_OFF;
+			this->LED_SPEAKER=LED_OFF;
+			
+			this->sendPhoneLine(this->phoneLineStateOut);
 		}
 	private:
 		unsigned char phone_status=0x61;

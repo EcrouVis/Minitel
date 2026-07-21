@@ -44,6 +44,7 @@
 #include "circuit/AudioBuffer.h"
 #include "circuit/SpeakerFilter.h"
 #include "circuit/BuzzerFilter.h"
+#include "circuit/PhoneLineBuffer.h"
 #include "circuit/TS7514.h"
 #include "circuit/DIN5/MinitelNetwork.h"
 
@@ -55,17 +56,7 @@
 #include "miniaudio/miniaudio.h"
 
 #include "data_path.h"
-
-
-struct audioContext{
-	Clocks* pCLKs=NULL;
-	AudioBuffer* ab=NULL;
-	SpeakerFilter* spkf=NULL;
-	BuzzerFilter* bzf=NULL;
-	float samplesRemaining[UCHAR_MAX];
-	unsigned char samplesRemainingIndex;
-	unsigned long maxSamplesRemaining=1024;
-};
+#include "encoding.h"
 
 
 
@@ -111,7 +102,7 @@ class M12Window{
 				size_t fsize=ftell(f);
 				fseek(f,0,SEEK_SET);
 				char* config_raw=(char*)malloc(fsize);
-				if (fread(config_raw,1,fsize,f)!=fsize) printf("fail to read all the content of config.json\n");
+				fread(config_raw,1,fsize,f);
 				fclose(f);
 				
 				this->JSONConfig=cJSON_ParseWithLength(config_raw,fsize);
@@ -148,6 +139,31 @@ class M12Window{
 					
 					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"auto hide indicator");
 					if (cJSON_IsBool(c_param)) this->PARAMETERS.io.keyboard.auto_hide_indicator=cJSON_IsTrue(c_param);
+					
+					//Phone line
+					subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"Phone line");
+					
+					//Audio interface
+					cJSON* subconfig3=cJSON_GetObjectItemCaseSensitive(subconfig2,"Audio interface");
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig3,"capture device id");
+					if (cJSON_IsString(c_param)){
+						size_t sdid;
+						unsigned char* did=Base64Decode(c_param->valuestring,&sdid);
+						memcpy(&(this->PARAMETERS.io.modem.audio.captureDeviceId),did,sdid>sizeof(this->PARAMETERS.io.modem.audio.captureDeviceId)?sizeof(this->PARAMETERS.io.modem.audio.captureDeviceId):sdid);
+						free(did);
+					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig3,"playback device id");
+					if (cJSON_IsString(c_param)){
+						size_t sdid;
+						unsigned char* did=Base64Decode(c_param->valuestring,&sdid);
+						memcpy(&(this->PARAMETERS.io.modem.audio.playbackDeviceId),did,sdid>sizeof(this->PARAMETERS.io.modem.audio.playbackDeviceId)?sizeof(this->PARAMETERS.io.modem.audio.playbackDeviceId):sdid);
+						free(did);
+					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig3,"capture gain");
+					if (cJSON_IsNumber(c_param)) this->PARAMETERS.io.modem.audio.volume_in_db=c_param->valuedouble;
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig3,"playback gain");
+					if (cJSON_IsNumber(c_param)) this->PARAMETERS.io.modem.audio.volume_out_db=c_param->valuedouble;
+					
 					
 					//Buzzer
 					subconfig2=cJSON_GetObjectItemCaseSensitive(subconfig,"Buzzer");
@@ -289,24 +305,21 @@ class M12Window{
 				printf("Failed to initialize context.\n");
 				exit(-1);
 			}
+			this->updateAudioDevices();
 			
 			//see https://github.com/mackron/miniaudio/discussions/1084
 			//see https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/low-latency-audio
 			this->audioDeviceConfig = ma_device_config_init(ma_device_type_playback);
-			
 			this->audioDeviceConfig.playback.format   = ma_format_f32;
 			this->audioDeviceConfig.playback.channels = 1;
-			
 			this->audioDeviceConfig.sampleRate        = 0;//48000;
-			
 			this->audioDeviceConfig.dataCallback      = this->audio_data_callback;
 			this->audioDeviceConfig.noFixedSizedCallback=true;
 			this->audioDeviceConfig.periodSizeInFrames = 512;
-			//this->audioDeviceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
 			this->audioDeviceConfig.wasapi.noAutoConvertSRC = true;
 			this->audioDeviceConfig.pUserData         = &(this->AC);
 
-			if (ma_device_init(NULL, &(this->audioDeviceConfig), &(this->audioDevice)) != MA_SUCCESS) {
+			if (ma_device_init(NULL, &this->audioDeviceConfig, &(this->audioDevice)) != MA_SUCCESS) {
 				printf("Failed to open playback device.\n");
 				exit(-1);
 			}
@@ -318,6 +331,21 @@ class M12Window{
 				ma_device_uninit(&(this->audioDevice));
 				exit(-1);
 			}
+			
+			this->phoneLineDeviceConfig = ma_device_config_init(ma_device_type_duplex);
+			this->phoneLineDeviceConfig.playback.format   = ma_format_f32;
+			this->phoneLineDeviceConfig.playback.channels = 1;
+			this->phoneLineDeviceConfig.capture.format   = ma_format_f32;
+			this->phoneLineDeviceConfig.capture.channels = 1;
+			this->phoneLineDeviceConfig.sampleRate        = 0;
+			this->phoneLineDeviceConfig.dataCallback      = this->phone_line_data_callback;
+			this->phoneLineDeviceConfig.noFixedSizedCallback=true;
+			this->phoneLineDeviceConfig.periodSizeInFrames = 128;//in exclusive mode 512 samples seems too big -> audio distortion
+			this->phoneLineDeviceConfig.wasapi.noAutoConvertSRC = true;
+			this->phoneLineDeviceConfig.performanceProfile = ma_performance_profile_low_latency;//make audio thread prioritized to avoid dropping frames
+			this->phoneLineDeviceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;
+			//this->phoneLineDeviceConfig.playback.shareMode = ma_share_mode_exclusive;//make playback device exclusive to avoid interferences with other programs /-> disabled because miniaudio could have desync issues at the moment
+			this->phoneLineDeviceConfig.pUserData         = &(this->PLC);
 		}
 		~M12Window(){
 			
@@ -375,7 +403,21 @@ class M12Window{
 				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Phone line");
 				if (JSONSubconfig2!=NULL){
-					
+					JSONSubconfig3=cJSON_AddObjectToObject(JSONSubconfig2,"Audio interface");
+					if (JSONSubconfig3!=NULL){
+						size_t sdid=sizeof(this->PARAMETERS.io.modem.audio.captureDeviceId);
+						while (sdid>1&&((unsigned char*)&(this->PARAMETERS.io.modem.audio.captureDeviceId))[sdid-1]==0) sdid--;
+						char* did=Base64Encode((unsigned char*)&(this->PARAMETERS.io.modem.audio.captureDeviceId),sdid);
+						cJSON_AddStringToObject(JSONSubconfig3,"capture device id",did);
+						free(did);
+						sdid=sizeof(this->PARAMETERS.io.modem.audio.playbackDeviceId);
+						while (sdid>1&&((unsigned char*)&(this->PARAMETERS.io.modem.audio.playbackDeviceId))[sdid-1]==0) sdid--;
+						did=Base64Encode((unsigned char*)&(this->PARAMETERS.io.modem.audio.playbackDeviceId),sdid);
+						cJSON_AddStringToObject(JSONSubconfig3,"playback device id",did);
+						free(did);
+						cJSON_AddNumberToObject(JSONSubconfig3,"capture gain",this->PARAMETERS.io.modem.audio.volume_in_db);
+						cJSON_AddNumberToObject(JSONSubconfig3,"playback gain",this->PARAMETERS.io.modem.audio.volume_out_db);
+					}
 				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Buzzer");
 				if (JSONSubconfig2!=NULL){
@@ -412,7 +454,11 @@ class M12Window{
 			cJSON_Delete(JSONConfigOut);
 			
 			//audio
-			ma_device_uninit(&(this->audioDevice));//uninit audio before stoping -> don't read deleted buffer
+			Clocks* pCLKs=NULL;
+			if (ma_device_get_state(&(this->audioDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->audioDevice));//uninit audio before stoping -> don't read deleted buffer
+			if (ma_device_get_state(&(this->phoneLineDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->phoneLineDevice));
+			if (this->AC.pCLKs!=NULL) pCLKs=this->AC.pCLKs;
+			if (this->PLC.pCLKs!=NULL) pCLKs=this->PLC.pCLKs;
 			ma_context_uninit(&(this->miniaudioContext));
 			
 			//power down the minitel
@@ -422,7 +468,7 @@ class M12Window{
 			this->PARAMETERS.p_gState->stepByStep.store(false,std::memory_order_relaxed);
 			//wait emulator response
 			while (this->PARAMETERS.p_gState->minitelOn.load(std::memory_order_relaxed)){
-				this->AC.pCLKs->requestSamples(512,512);//don't wait that a timout occur in clocks.h ->speed up shutdown
+				if (pCLKs!=NULL) pCLKs->requestSamples(512,512);//don't wait that a timout occur in clocks.h ->speed up shutdown
 			}
 			//past this point we do not interact with object from the emulation thread, they may not exist anymore
 			//shutdown emulator
@@ -505,6 +551,11 @@ class M12Window{
 						case BUZZER_FILTER:
 							this->AC.bzf=(BuzzerFilter*)ms.p;
 							this->AC.bzf->setVolumeLog(this->PARAMETERS.io.buzzer.volume);
+							break;
+						case PHONE_LINE_BUFFER:
+							this->PLC.plb=(PhoneLineBuffer*)ms.p;
+							this->PLC.plb->setVolumeOutdB(this->PARAMETERS.io.modem.audio.volume_out_db);
+							this->PLC.plb->setVolumeIndB(this->PARAMETERS.io.modem.audio.volume_in_db);
 							break;
 						case AUTO_START_MODULE:
 							this->PARAMETERS.io.other.auto_start=&(((SimplifiedMinitelNetworkAppAutoStart*)ms.p)->autoStart);
@@ -678,6 +729,12 @@ class M12Window{
 							this->AC.pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
 							printf("Sync emulator to audio sample rate @%iHz\n",this->audioDevice.sampleRate);
 							break;
+						case AUDIO_PHONE_LINE_ON:
+							this->initPhoneLine();
+							break;
+						case AUDIO_PHONE_LINE_OFF:
+							this->uninitPhoneLine();
+							break;
 						case EMULATOR_READY:
 							{
 								if (this->JSONConfig!=NULL){
@@ -722,9 +779,35 @@ class M12Window{
 		Mailbox* p_mb_video;
 		
 		ma_context miniaudioContext;
-		audioContext AC;
+		struct audioDevices{
+			ma_result result=MA_NO_DATA_AVAILABLE;
+			ma_device_info* pPlaybackDeviceInfos;
+			ma_uint32 playbackDeviceCount;
+			ma_device_info* pCaptureDeviceInfos;
+			ma_uint32 captureDeviceCount;
+		} AD;
+		
+		struct audioContext{
+			Clocks* pCLKs=NULL;
+			AudioBuffer* ab=NULL;
+			SpeakerFilter* spkf=NULL;
+			BuzzerFilter* bzf=NULL;
+			float samplesRemaining[UCHAR_MAX];
+			unsigned char samplesRemainingIndex;
+			unsigned long maxSamplesRemaining=1024;
+		} AC;
 		ma_device_config audioDeviceConfig;
 		ma_device audioDevice;
+		
+		struct phoneLineContext{
+			Clocks* pCLKs=NULL;//when switching to audio phone line IO, set AC.pCLKs to NULL and set PLC.pCLKs to the old value of AC.pCLKs to avoid popping while transferring data -> sync to phone line audio sampling rate)
+			PhoneLineBuffer* plb=NULL;
+			float samplesRemaining[UCHAR_MAX];
+			unsigned char samplesRemainingIndex;
+			unsigned long maxSamplesRemaining=1024;
+		} PLC;
+		ma_device_config phoneLineDeviceConfig;
+		ma_device phoneLineDevice={0};//init memory -> ensure ma_device_state_uninitialized
 		
 		cJSON* JSONConfig=NULL;
 		
@@ -1002,21 +1085,95 @@ class M12Window{
 					
 					ImGui::SeparatorText("Modem");
 					
-					/*static ma_device_info* pPlaybackDeviceInfos;
-					static ma_uint32 playbackDeviceCount;
-					static ma_device_info* pCaptureDeviceInfos;
-					static ma_uint32 captureDeviceCount;
-					if (ma_context_get_devices(&(this->miniaudioContext), &pPlaybackDeviceInfos, &playbackDeviceCount, &pCaptureDeviceInfos, &captureDeviceCount) != MA_SUCCESS) {
-						printf("Failed to retrieve device information.\n");
+					if (this->AD.result==MA_SUCCESS&&ImGui::TreeNode("Interface audio")){
+						ImGui::Text("N° de téléphone: 00 00");
+						ImGui::Text("Ou ");
+						ImGui::SameLine();
+						if (ImGui::Button("Appeler le minitel")){
+							thread_message ms;
+							ms.cmd=AUDIO_PHONE_LINE_CALL;
+							p_mb_circuit->send(&ms);
+						}
+						
+						ssize_t captureDeviceIndex=-1;
+						for (ma_uint32 iDevice = 0; iDevice < this->AD.captureDeviceCount; ++iDevice) {
+							if (ma_device_id_equal(&(this->PARAMETERS.io.modem.audio.captureDeviceId),&(this->AD.pCaptureDeviceInfos[iDevice].id))){
+								this->PARAMETERS.io.modem.audio.captureDeviceId=this->AD.pCaptureDeviceInfos[iDevice].id;
+								captureDeviceIndex=iDevice;
+								break;
+							}
+						}
+						
+						ssize_t playbackDeviceIndex=-1;
+						for (ma_uint32 iDevice = 0; iDevice < this->AD.playbackDeviceCount; ++iDevice) {
+							if (ma_device_id_equal(&(this->PARAMETERS.io.modem.audio.playbackDeviceId),&(this->AD.pPlaybackDeviceInfos[iDevice].id))){
+								this->PARAMETERS.io.modem.audio.playbackDeviceId=this->AD.pPlaybackDeviceInfos[iDevice].id;
+								playbackDeviceIndex=iDevice;
+								break;
+							}
+						}
+						
+						bool audioPhoneLineUsed=(ma_device_get_state(&(this->phoneLineDevice))!=ma_device_state_uninitialized);
+						if (audioPhoneLineUsed) ImGui::BeginDisabled();
+							ImGui::Text("Entrée audio:");
+							ImGui::Indent();
+							bool ret=ImGui::BeginCombo("##phone_line_input", captureDeviceIndex<0?"":this->AD.pCaptureDeviceInfos[captureDeviceIndex].name,0);
+							if (ImGui::IsItemActivated()) this->updateAudioDevices();
+							if (ret){
+								for (ma_uint32 iDevice = 0; iDevice < this->AD.captureDeviceCount; ++iDevice) {
+									if (ImGui::Selectable( this->AD.pCaptureDeviceInfos[iDevice].name)){
+										this->PARAMETERS.io.modem.audio.captureDeviceId=this->AD.pCaptureDeviceInfos[iDevice].id;
+										this->updateAudioDevices();
+									}
+								}
+								ImGui::EndCombo();
+							}
+							ImGui::Unindent();
+							
+							ImGui::Text("Sortie audio:");
+							ImGui::Indent();
+							ret=ImGui::BeginCombo("##phone_line_output", playbackDeviceIndex<0?"":this->AD.pPlaybackDeviceInfos[playbackDeviceIndex].name,0);
+							if (ImGui::IsItemActivated()) this->updateAudioDevices();
+							if (ret){
+								for (ma_uint32 iDevice = 0; iDevice < this->AD.playbackDeviceCount; ++iDevice) {
+									if (ImGui::Selectable( this->AD.pPlaybackDeviceInfos[iDevice].name)){
+										this->PARAMETERS.io.modem.audio.playbackDeviceId=this->AD.pPlaybackDeviceInfos[iDevice].id;
+										this->updateAudioDevices();
+									}
+								}
+								ImGui::EndCombo();
+							}
+							ImGui::Unindent();
+						if (audioPhoneLineUsed) ImGui::EndDisabled();
+						/*if (audioPhoneLineUsed){
+							if(ImGui::Button("off")) this->uninitPhoneLine();
+						}
+						else{
+							if(ImGui::Button("on")) this->initPhoneLine();
+						}*/
+						
+						ImGui::Text("Gain d'entrée:");
+						ImGui::Indent();
+						if (ImGui::SliderFloat("##phone_line_volume_in", &(this->PARAMETERS.io.modem.audio.volume_in_db), -30., 30., "%.1fdB")) this->PLC.plb->setVolumeIndB(this->PARAMETERS.io.modem.audio.volume_in_db);
+						ImGui::Unindent();
+						ImGui::Text("Gain de sortie:");
+						ImGui::Indent();
+						if (ImGui::SliderFloat("##phone_line_volume_out", &(this->PARAMETERS.io.modem.audio.volume_out_db), -30, 0, "%.1fdB")) this->PLC.plb->setVolumeOutdB(this->PARAMETERS.io.modem.audio.volume_out_db);
+						ImGui::Unindent();
+						ImGui::TextDisabled("Pour que la réception s'effectue correctement, il est peut être nécessaire de désactiver la réduction de bruit au niveau du driver.");
+						ImGui::TextDisabled("Quand cette interface est utilisée, les autres sons sont désactivés.");
+						
+						ImGui::TreePop();
 					}
-					else{
-						for (ma_uint32 iDevice = 0; iDevice < playbackDeviceCount; ++iDevice) {
-							ImGui::Text("    %u: %s", iDevice, pPlaybackDeviceInfos[iDevice].name);
-						}
-						for (ma_uint32 iDevice = 0; iDevice < captureDeviceCount; ++iDevice) {
-							ImGui::Text("    %u: %s", iDevice, pCaptureDeviceInfos[iDevice].name);
-						}
-					}*/
+					
+					if (ImGui::TreeNode("Minipavi")){
+						ImGui::Text("N° de téléphone: 09 72 10 17 21");
+						
+						ImGui::TextDisabled("Connexion au websocket minipavi via le modem.");
+						ImGui::TextDisabled("Le débit est de 1200Bauds en réception et 75Bauds en émission.");
+						
+						ImGui::TreePop();
+					}
 					
 					ImGui::SeparatorText("Son");
 					if (ImGui::TreeNode("Buzzer")){
@@ -1105,7 +1262,7 @@ class M12Window{
 				if (ImGui::BeginTabItem("UI")){
 					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
-					ImGui::Text("DPI");
+					ImGui::Text("DPI:");
 					ImGui::Indent();
 					if(ImGui::Button("-##dpi")) ImGui::GetStyle().FontScaleDpi=(ImGui::GetStyle().FontScaleDpi<=1)?1:(ImGui::GetStyle().FontScaleDpi-1);
 					ImGui::SameLine();
@@ -1161,11 +1318,19 @@ class M12Window{
 					
 					ImGui::SeparatorText("Statistiques");
 					ImGui::Text("Rafraichissement d'image: %.1f FPS",ImGui::GetIO().Framerate);
-					ImGui::Text("Tampon audio (échantillons restants après lecture):");
-					ImGui::PlotLines("##audio_buffer", this->AC.samplesRemaining, sizeof(this->AC.samplesRemaining)/sizeof(this->AC.samplesRemaining[0]),0,NULL,0,(float)this->AC.maxSamplesRemaining, ImVec2(-1, 80.0f));
+					if (ma_device_get_state(&(this->audioDevice))==ma_device_state_started){
+						ImGui::Text("Tampon audio (échantillons restants après lecture):");
+						ImGui::PlotLines("##audio_buffer", this->AC.samplesRemaining, sizeof(this->AC.samplesRemaining)/sizeof(this->AC.samplesRemaining[0]),0,NULL,0,(float)this->AC.maxSamplesRemaining, ImVec2(-1, 80.0f));
+					}
+					if (ma_device_get_state(&(this->phoneLineDevice))==ma_device_state_started){
+						ImGui::Text("Tampon ligne télphonique (échantillons restants après lecture):");
+						ImGui::PlotLines("##phone_line_buffer", this->PLC.samplesRemaining, sizeof(this->PLC.samplesRemaining)/sizeof(this->PLC.samplesRemaining[0]),0,NULL,0,(float)this->PLC.maxSamplesRemaining, ImVec2(-1, 80.0f));
+					}
 					ImGui::Text("Répertoire de travail:");
 					ImGui::Indent();
 					ImGui::Text("%s",std::filesystem::current_path().u8string().c_str());
+					ImGui::SameLine();
+					if (ImGui::Button("Copier")) glfwSetClipboardString(this->window,std::filesystem::current_path().u8string().c_str());
 					ImGui::Unindent();
 					
 					ImGui::EndChild();
@@ -1174,7 +1339,7 @@ class M12Window{
 				if (ImGui::BeginTabItem("À propos")){
 					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
-					ImGui::Text("%s",this->PARAMETERS.info.title);
+					ImGui::Text("%s (ver.:%s)",this->PARAMETERS.info.title,this->PARAMETERS.info.version);
 					ImGui::SeparatorText("Développeurs");
 					ImGui::Text("%s",this->PARAMETERS.info.programmers);
 					ImGui::SeparatorText("Bibliothèques");
@@ -1292,6 +1457,77 @@ class M12Window{
 			
 		}
 		
+		void updateAudioDevices(){
+			this->AD.result=ma_context_get_devices(&(this->miniaudioContext), &(this->AD.pPlaybackDeviceInfos), &(this->AD.playbackDeviceCount), &(this->AD.pCaptureDeviceInfos), &(this->AD.captureDeviceCount));
+			if ( this->AD.result!= MA_SUCCESS) {
+				printf("Failed to retrieve device information.\n");
+			}
+		}
+		
+		void initPhoneLine(){
+			if (ma_device_get_state(&(this->audioDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->audioDevice));
+			if (ma_device_get_state(&(this->phoneLineDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->phoneLineDevice));
+			if (this->PLC.pCLKs==NULL) this->PLC.pCLKs=this->AC.pCLKs;
+			this->AC.pCLKs=NULL;
+			
+			this->updateAudioDevices();
+			this->phoneLineDeviceConfig.capture.pDeviceID=NULL;
+			this->phoneLineDeviceConfig.playback.pDeviceID=NULL;
+			for (ma_uint32 iDevice = 0; iDevice < this->AD.captureDeviceCount; ++iDevice) {
+				if (ma_device_id_equal(&(this->PARAMETERS.io.modem.audio.captureDeviceId),&(this->AD.pCaptureDeviceInfos[iDevice].id))){
+					this->phoneLineDeviceConfig.capture.pDeviceID=&(this->PARAMETERS.io.modem.audio.captureDeviceId);
+					break;
+				}
+			}
+			for (ma_uint32 iDevice = 0; iDevice < this->AD.playbackDeviceCount; ++iDevice) {
+				if (ma_device_id_equal(&(this->PARAMETERS.io.modem.audio.playbackDeviceId),&(this->AD.pPlaybackDeviceInfos[iDevice].id))){
+					this->phoneLineDeviceConfig.playback.pDeviceID=&(this->PARAMETERS.io.modem.audio.playbackDeviceId);
+					break;
+				}
+			}
+			if (this->phoneLineDeviceConfig.capture.pDeviceID==NULL){
+				constexpr static char msg[]="Entrée audio non spécifiée.";
+				this->Notification.notify(msg,false,ImVec4(1,0.5,0,1));
+			}
+			if (this->phoneLineDeviceConfig.playback.pDeviceID==NULL){
+				constexpr static char msg[]="Sortie audio non spécifiée.";
+				this->Notification.notify(msg,false,ImVec4(1,0.5,0,1));
+			}
+			if (ma_device_init(NULL, &(this->phoneLineDeviceConfig), &(this->phoneLineDevice)) != MA_SUCCESS) {
+				constexpr static char msg[]="Erreur lors de l'initialisation du thread audio.";
+				this->Notification.notify(msg,false,ImVec4(1,0,0,1));
+				this->uninitPhoneLine();
+				return;
+			}
+			if (ma_device_start(&(this->phoneLineDevice)) != MA_SUCCESS) {
+				constexpr static char msg[]="Erreur lors de l'activation du thread audio.";
+				this->Notification.notify(msg,false,ImVec4(1,0,0,1));
+				//TODO: use ma_result_description?
+				this->uninitPhoneLine();
+				return;
+			}
+			this->PLC.pCLKs->setAudioSampleRate(this->phoneLineDevice.sampleRate);
+			printf("Sync emulator to phone line sample rate @%iHz\n",this->phoneLineDevice.sampleRate);
+		}
+		void uninitPhoneLine(){
+			if (ma_device_get_state(&(this->phoneLineDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->phoneLineDevice));
+			if (ma_device_get_state(&(this->audioDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->audioDevice));
+			if (this->AC.pCLKs==NULL) this->AC.pCLKs=this->PLC.pCLKs;
+			this->PLC.pCLKs=NULL;
+			
+			if (ma_device_init(NULL, &this->audioDeviceConfig, &(this->audioDevice)) != MA_SUCCESS) {
+				printf("Failed to open playback device.\n");
+				exit(-1);
+			}
+			if (ma_device_start(&(this->audioDevice)) != MA_SUCCESS) {
+				printf("Failed to start playback device.\n");
+				ma_device_uninit(&(this->audioDevice));
+				exit(-1);
+			}
+			this->AC.pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
+			printf("Sync emulator to audio sample rate @%iHz\n",this->audioDevice.sampleRate);
+		}
+		
 		static void error_callback(int error, const char* description){
 			fprintf(stderr, "Error: %s\n", description);
 		}
@@ -1312,14 +1548,27 @@ class M12Window{
 		/*static void char_callback(GLFWwindow* window, unsigned int codepoint){
 			printf("UTF-32 %08X\n",codepoint);
 		}*/
-		static void audio_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){
+		static void audio_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){//playback
 			audioContext* AC=(audioContext*)pDevice->pUserData;
-			if (AC->pCLKs!=NULL){
-				AC->pCLKs->requestSamples(frameCount,AC->maxSamplesRemaining);
-			}
 			
 			if (AC->ab!=NULL){
 				AC->samplesRemaining[AC->samplesRemainingIndex++]=(float)AC->ab->AudioOut((float*)pOutput,frameCount);
+			}
+			
+			if (AC->pCLKs!=NULL){
+				AC->pCLKs->requestSamples(frameCount,AC->maxSamplesRemaining);
+			}
+		}
+		static void phone_line_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){//duplex
+			phoneLineContext* PLC=(phoneLineContext*)pDevice->pUserData;
+			
+			//TODO
+			if (PLC->plb!=NULL){
+				PLC->samplesRemaining[PLC->samplesRemainingIndex++]=(float)PLC->plb->AudioIO((float*)pInput,(float*)pOutput,frameCount);
+			}
+			
+			if (PLC->pCLKs!=NULL){
+				PLC->pCLKs->requestSamples(frameCount,PLC->maxSamplesRemaining);
 			}
 		}
 		static void window_close_callback(GLFWwindow* window){

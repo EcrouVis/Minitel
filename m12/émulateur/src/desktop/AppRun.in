@@ -1,4 +1,0 @@
-#! /bin/sh
-set -e
-this_dir="$(dirname -- "$(readlink -f -- "$0")")"
-exec "$this_dir"/usr/bin/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX} "$@"

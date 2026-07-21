@@ -12,10 +12,9 @@ cd /D "%~dp0"
 ::test.exe
 
 ::mkdir build
-::cmake -G Ninja -B build -DUSE_EXISTING_IXWEBSOCKET_LIB=On -DUSE_TLS=On
+cmake -DUSE_TLS=Off -DCMAKE_BUILD_TYPE=RelWithDebInfo -DFETCHCONTENT_FULLY_DISCONNECTED=On -DCMAKE_INSTALL_PREFIX="./install" -DUSE_DECOMP_TOOLS=Off -G Ninja -B build
 cmake --build build --clean-first
 cmake --install build
-::cpack --config ./build/CPackConfig.cmake -G ZIP
-"%~dp0/install/RelWithDebInfo/M12.exe"
+::"%~dp0/install/RelWithDebInfo/M12.exe"
 
 cd /D "%~dp0"

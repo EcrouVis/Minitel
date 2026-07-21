@@ -4,6 +4,8 @@
 #include "license.h"
 #include "GlobalState.h"
 
+#include "miniaudio/miniaudio.h"
+
 struct imguiMemoryView{
 	int mem_size=0;
 	bool show=false;
@@ -103,10 +105,18 @@ struct P_Peri{
 	P_Peri_Websocket websocket;
 	P_Peri_Printer printer;
 };
+struct P_Modem_Audio{
+	ma_device_id captureDeviceId={0};
+	ma_device_id playbackDeviceId={0};
+	float volume_out_db=0.;
+	float volume_in_db=0.;
+	void* service=NULL;
+};
 struct P_Modem{
 	bool plugged=false;
 	int main_device=-1;
 	bool notify_state=true;
+	P_Modem_Audio audio;
 };
 struct P_Buzzer{
 	float volume=100.;
@@ -154,6 +164,7 @@ struct P_Debug{
 };
 struct P_Info{
 	const char* title="Minitel 12 Philips";
+	const char* version=M12_VERSION;
 	const char* programmers="Yves Landemarre";
 	constexpr static License lib_licenses[]={
 		{lib_imgui,license_imgui},

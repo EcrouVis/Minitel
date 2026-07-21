@@ -1,6 +1,6 @@
 #include "data_path.h"
 
-void setLocalDirectoryExe(){
+void setLocalDirectoryExe(){//TODO: long path size
 	std::filesystem::path exePath;
 	ssize_t exePathSize=0;
 #if defined(_WIN32)

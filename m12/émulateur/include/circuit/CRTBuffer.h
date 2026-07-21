@@ -12,42 +12,36 @@ class CRTBuffer{
 	public:
 		void VideoChangeIn(unsigned char* v){
 			bool change=false;
-			std::lock_guard<std::mutex> lock(this->videoMutex);
 			for (int i=0;i<VIDEO_FRAME_SIZE;i++){
-				if (v[i]!=this->data[i]){
+				if (v[i]!=this->pFrameWrite[i]){
 					change=true;
-					this->data[i]=v[i];
+					this->pFrameWrite[i]=v[i];
 				}
 			}
 			if (change){
-				this->newFrame.store(true,std::memory_order_release);
+				this->pFrameWrite=this->pFrameRead.exchange(this->pFrameWrite,std::memory_order_relaxed);
 				this->sendSignal();
 			}
 			
 		}
 		void CRTPowerChangeIn(bool b){
 			this->power.store(b,std::memory_order_relaxed);
-			if (!b) this->newFrame.store(true,std::memory_order_release);
 		}
 		void subscribeSignal(std::function<void()> f){
 			this->sendSignal=f;
 		}
 		
 		void getVideoFrame(unsigned char* buffer){
-			std::lock_guard<std::mutex> lock(this->videoMutex);
-			this->newFrame.store(false,std::memory_order_release);
-			if (this->power.load(std::memory_order_relaxed)) memcpy(buffer,this->data,VIDEO_FRAME_SIZE*sizeof(unsigned char));
+			if (this->power.load(std::memory_order_relaxed)) memcpy(buffer,this->pFrameRead.load(std::memory_order_acquire),VIDEO_FRAME_SIZE*sizeof(unsigned char));
 			else memset(buffer,0,VIDEO_FRAME_SIZE*sizeof(unsigned char));
 		}
-		bool frameChanged(){
-			return this->newFrame.load(std::memory_order_acquire);
-		}
 	private:
-		unsigned char data[VIDEO_FRAME_SIZE];
+		unsigned char frame1[VIDEO_FRAME_SIZE];
+		unsigned char frame2[VIDEO_FRAME_SIZE];
+		std::atomic<unsigned char*> pFrameRead=frame1;
+		unsigned char* pFrameWrite=frame2;
 		std::function<void()> sendSignal=[](){};
 		
-		std::mutex videoMutex;
-		std::atomic_bool newFrame;
 		std::atomic_bool power=false;
 		
 };

@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 3.23)
 cmake_policy(SET CMP0207 NEW)#path separator
 cmake_policy(SET CMP0135 NEW)#FetchContent timestamp
 
-include(FetchContent)
-
 set(CMAKE_COLOR_DIAGNOSTICS On)
 set(CMAKE_COLOR_MAKEFILE On)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake;${CMAKE_MODULE_PATH}")
@@ -13,20 +11,22 @@ set(CMAKE_CXX_COMPILER gcc)
 set(CMAKE_C_STANDARD 17)
 set( CMAKE_C_COMPILER gcc )
 
-project(M12 VERSION 0.0.1.2 LANGUAGES CXX C)
+project(M12 VERSION 0.1.0.0 LANGUAGES CXX C)
+
+include(FetchContent)
+include(GNUInstallDirs)
 
 
 if(CMAKE_BUILD_TYPE_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-    set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/install/" CACHE PATH "Force path to set CMAKE_INSTALL_PREFIX" FORCE)
-endif()
+#if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+#    set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/install/" CACHE PATH "Force path to set CMAKE_INSTALL_PREFIX" FORCE)
+#endif()
+#set(FETCHCONTENT_FULLY_DISCONNECTED On)
 
 
 
-file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
 
 
 
@@ -88,6 +88,10 @@ endif()
 
 #copied from IXWebsocket
 if (USE_TLS)
+	list(APPEND 
+			OPT_DEF
+				M12_USE_TLS
+		)
     if (WIN32)
       if (NOT USE_OPEN_SSL AND NOT USE_LIBRE_SSL) # unless we want something else
         set(USE_MBED_TLS ON)
@@ -245,8 +249,6 @@ if (WIN32)
 	)
 elseif(LINUX)
 	configure_file(src/desktop/app.appimage.desktop.in "src/desktop/${CMAKE_PROJECT_NAME}.desktop")
-	file(COPY_FILE src/icon/M12_icon_square.svg "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.svg")
-	configure_file(src/desktop/AppRun.in src/desktop/AppRun)
 endif()
 
 
@@ -396,6 +398,8 @@ target_compile_definitions(m12
 		_GLIBCXX_DEBUG
 		_GLIBXX_DEBUG_PEDANTIC
 		
+		M12_VERSION="${CMAKE_PROJECT_VERSION}"
+		
 		${OPT_DEF}
 )
 
@@ -445,6 +449,7 @@ target_sources(m12
 		include/circuit/Keyboard.h
 		include/circuit/Latch.h
 		include/circuit/PhoneLine.h
+		include/circuit/PhoneLineBuffer.h
 		include/circuit/PhoneLineWirring.h
 		include/circuit/ROM_256k.h
 		include/circuit/SpeakerFilter.h
@@ -495,7 +500,7 @@ if(WIN32)
 		RUNTIME_DEPENDENCY_SET _dependency_set
 		DIRECTORIES "C:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/lib/../lib/"
 		PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
-		POST_EXCLUDE_REGEXES  ".*system32/.*\\.dll"
+		POST_EXCLUDE_REGEXES  ".*system32/.*\\.dll" ".*SysWOW64/.*\\.dll"
 		UNRESOLVED_DEPENDENCIES_VAR UNRES
 		RUNTIME DESTINATION "/"
 	)
@@ -512,25 +517,29 @@ if(WIN32)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
 		DESTINATION "rom"
 	)
-
-	include(CPack)
 elseif(LINUX)
+	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/icon/M12_icon_square.svg"
+		DESTINATION "usr/share/icons/hicolor/scalable/apps"
+		RENAME "${CMAKE_PROJECT_NAME}.svg"
+	)
 	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.desktop"
-		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir"
+		DESTINATION "usr/share/applications"
 	)
-	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.svg"
-		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir"
+	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.appdata.xml"
+		DESTINATION "usr/share/metainfo"
 	)
-	install(PROGRAMS "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${CMAKE_PROJECT_NAME}${CMAKE_EXECUTABLE_SUFFIX}"
-		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/bin"
-	)
-	install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/AppRun"
-		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir"
+	install(IMPORTED_RUNTIME_ARTIFACTS m12
+		DESTINATION "usr/bin"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/TS9347/TS9347_Texture_Character_Set_Datasheet.bmp"
-		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/share/M12/ressources"
+		DESTINATION "usr/share/M12/ressources"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
-		DESTINATION "${CMAKE_PROJECT_NAME}.AppDir/usr/share/M12/rom"
+		DESTINATION "usr/share/M12/rom"
 	)
+	set(CPACK_PACKAGE_ICON "${CMAKE_PROJECT_NAME}.svg")
+	set(CPACK_APPIMAGE_TOOL_EXECUTABLE /home/yves/appimagetool-x86_64.AppImage)
 endif()
+
+set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${CMAKE_PROJECT_VERSION}-${CMAKE_SYSTEM_PROCESSOR}")
+include(CPack)

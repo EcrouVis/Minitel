@@ -370,4 +370,8 @@ std::vector<unsigned char>* DProtocolTranslationMode4Encode(const std::vector<un
 
 std::vector<unsigned char>* DProtocolTranslationMode4Decode(const std::vector<unsigned char>* edata);
 
+char* Base64Encode(const unsigned char* data, size_t s);
+
+unsigned char* Base64Decode(const char* edata, size_t* ps);
+
 #endif

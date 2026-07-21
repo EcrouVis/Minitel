@@ -212,3 +212,81 @@ std::vector<unsigned char>* DProtocolTranslationMode4Decode(const std::vector<un
 	}
 	return data;
 }
+
+char* Base64Encode(const unsigned char* data, size_t s){
+	constexpr char V[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	
+	size_t t_size=s/3;
+	if ((bool)(s%3)){
+		t_size++;
+	}
+	
+	char* edata=(char*)malloc(t_size*4+1);
+	edata[t_size*4]=0;
+	
+	for(size_t p=0;p<t_size;p++){
+		unsigned long d=0;
+		for(unsigned char i=0;i<3&&3*p+i<s;i++){
+			d|=data[3*p+i]<<(8*(2-i));
+		}
+		for(unsigned char i=0;i<4;i++){
+			edata[4*p+i]=V[(d>>(6*(3-i)))&0x3F];
+		}
+	}
+	
+	for (unsigned char i=0;i<s%3;i++){
+		edata[t_size*4-1-i]='=';
+	}
+	
+	return edata;
+}
+
+unsigned char* Base64Decode(const char* edata, size_t* ps){
+	*ps=0;
+	size_t str_size=strlen(edata);
+	
+	unsigned char* data=(unsigned char*)malloc((str_size/4+1)*3);
+	
+	unsigned char stop=0xFF;
+	for(size_t p=0;p<str_size/4;p++){
+		unsigned long d=0;
+		for(unsigned char i=0;i<4;i++){
+			if (4*p+i>=str_size){
+				stop=i;
+				break;
+			}
+			switch (edata[4*p+i]){
+				case 'A' ... 'A'+25:
+					d|=(edata[4*p+i]-'A')<<(6*(3-i));
+					break;
+				case 'a' ... 'a'+25:
+					d|=(edata[4*p+i]-'a'+26)<<(6*(3-i));
+					break;
+				case '0' ... '0'+9:
+					d|=(edata[4*p+i]-'0'+52)<<(6*(3-i));
+					break;
+				case '+':
+				case '-':
+					d|=62<<(6*(3-i));
+					break;
+				case '/':
+				case '_':
+					d|=63<<(6*(3-i));
+					break;
+				//case '=':
+				default:
+					stop=i;
+					break;
+			}
+			if (stop!=0xFF) break;
+		}
+		if (stop<2) break;
+		for(unsigned char i=0;i<3&&i<stop;i++){
+			data[3*p+i]=(d>>(8*(2-i)))&0xFF;
+			(*ps)++;
+		}
+		if (stop!=0xFF) break;
+	}
+	
+	return data;
+}

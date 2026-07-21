@@ -1,7 +1,6 @@
 #include <thread>
 #include "m12_threads.h"
 #include <stdlib.h>
-//#include <pthread.h>
 #include <cstdio>
 #include <locale.h>
 
@@ -25,28 +24,14 @@ int main(void){
 	
 	GlobalState gState;
 	Mailbox mb_circuit;
-	//Mailbox mb_audio;
 	Mailbox mb_video;
 	
 	ix::initNetSystem();
 	
-	//std::thread thrd_v(thread_video_main,&mb_circuit,&mb_video,&gState);
 	std::thread thrd_e(thread_circuit_main,&mb_circuit,&mb_video,&gState);
 	
-	//set thread priority
-	/*sched_param sch;
-    int policy;
-    pthread_getschedparam(pthread_self(), &policy, &sch);
-	int max_priority = sched_get_priority_max(policy);
-	sch.sched_priority = max_priority;
-    int result = pthread_setschedparam(pthread_self(), SCHED_OTHER, &sch);
-	printf("sched %i\n",result);*/
-	
-	//thread_circuit_main(&mb_circuit,&mb_video,&gState);
 	thread_video_main(&mb_circuit,&mb_video,&gState);
 	
-	//thrd_a.join();
-	//thrd_v.join();
 	thrd_e.join();
 	
 	ix::uninitNetSystem();

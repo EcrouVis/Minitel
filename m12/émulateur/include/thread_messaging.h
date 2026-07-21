@@ -38,15 +38,16 @@ constexpr int SPEAKER_FILTER=29;
 constexpr int BUZZER_FILTER=30;
 constexpr int AUTO_START_MODULE=31;
 constexpr int WEBSOCKET_DIN=32;
+constexpr int AUDIO_PHONE_LINE_ON=33;
+constexpr int AUDIO_PHONE_LINE_OFF=34;
+constexpr int PHONE_LINE_BUFFER=35;
 
-/*constexpr int DUMP_ERAM=1;
-constexpr int LOAD_ERAM=1<<1;
-constexpr int LOAD_EROM=1<<2;*/
-constexpr int EMU_ON=1<<3;
-constexpr int EMU_OFF=1<<4;
-constexpr int EMU_NEXT_STEP=1<<5;
-constexpr int SPECIAL=1<<6;//for testing purpose
-constexpr int EMU_SHUTDOWN=1<<7;
+constexpr int EMU_ON=1;
+constexpr int EMU_OFF=2;
+constexpr int EMU_NEXT_STEP=3;
+constexpr int SPECIAL=4;//for testing purpose
+constexpr int EMU_SHUTDOWN=5;
+constexpr int AUDIO_PHONE_LINE_CALL=6;
 /*
 constexpr int RESTART;*/
 

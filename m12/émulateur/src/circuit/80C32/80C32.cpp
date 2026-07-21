@@ -891,23 +891,26 @@ void m80C32::nextCycleALU(){
 		this->i_cycle_n=0;
 		this->i_part_n=0;
 	}*/
-	unsigned char external_rw_action=0;
-	while (external_rw_action<2&&this->i_part_n<this->i_length[this->instruction[0]]){
-		//printf("PC 0x%04X %02X\n",this->PC,this->PX_out[3]);
-		this->sendP0((unsigned char)(this->PC&0xFF));
-		this->sendP2((unsigned char)(this->PC>>8));
-		this->sendALE(false);
-		this->sendnPSEN(false);
-		this->instruction[this->i_part_n]=this->getSFRByteIn(this->P0);
-		this->sendnPSEN(true);
-		this->sendALE(true);
-		this->sendP0(this->PX_out[0]);
-		this->sendP2(this->PX_out[2]);
-		this->PC++;
-		this->i_part_n++;
-		external_rw_action++;
-	}
+	unsigned char external_rw_action=2;
 	this->i_cycle_n++;
+	
+	if (this->i_part_n<this->i_length[this->instruction[0]]){//not interrupt
+		do{
+			//printf("PC 0x%04X %02X\n",this->PC,this->PX_out[3]);
+			this->sendP0((unsigned char)(this->PC&0xFF));
+			this->sendP2((unsigned char)(this->PC>>8));
+			this->sendALE(false);
+			this->sendnPSEN(false);
+			this->instruction[this->i_part_n]=this->getSFRByteIn(this->P0);
+			this->sendnPSEN(true);
+			this->sendALE(true);
+			this->sendP0(this->PX_out[0]);
+			this->sendP2(this->PX_out[2]);
+			this->PC++;
+			this->i_part_n++;
+			external_rw_action--;
+		}while (((bool)external_rw_action)&&this->i_part_n<this->i_length[this->instruction[0]]);
+	}
 	
 	if (this->i_cycle[this->instruction[0]]<=this->i_cycle_n){
 		this->execInstruction();

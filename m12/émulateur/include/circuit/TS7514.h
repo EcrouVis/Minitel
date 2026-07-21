@@ -3,15 +3,20 @@
 #include <functional>
 #include <cstdio>
 #include <atomic>
+#include<complex>
 #include <cmath>
 #ifndef M_PI
 #define M_PI (3.14159265358979323846264338327950288)
 #endif
 #include "miniaudio/miniaudio.h"
 #include "circuit/PhoneLine.h"
+using namespace std::complex_literals;
 
-class TS7514{
+class TS7514{//TODO: correct sample gains
 	public:
+		TS7514(){
+			this->setSampleRate(48000);
+		}
 		
 		//std::atomic<float> buzzer_amplitude=0.;
 		std::atomic_uchar REG[8];
@@ -135,8 +140,12 @@ class TS7514{
 					s=ATx[this->REG[this->RWLO].load(std::memory_order_relaxed)&0x03]*this->getTxInSample();
 					break;
 				}
-				case 0x04://TODO
+				case 0x04:
+				{
+					constexpr float ARx[4]={pow(10.,6./20.),pow(10.,-4./20.),pow(10.,-14./20.),pow(10.,-25./20.)};
+					s=ARx[this->REG[this->RWLO].load(std::memory_order_relaxed)&0x03]*this->RxSample;
 					break;
+				}
 				case 0x08:
 				{
 					constexpr float ABuzzer[4]={1.,0.316227766,0.1,0.028183829};
@@ -158,6 +167,116 @@ class TS7514{
 			float amp=A[this->REG[this->RATE].load(std::memory_order_relaxed)];
 			sample+=amp*this->getTxInSample();
 			return sample;
+		}
+		
+		void setRxSample(float s){
+			constexpr float N2[8]={pow(10.,-49./20.),pow(10.,-47./20.),pow(10.,-45./20.),pow(10.,-43./20.),pow(10.,-41./20.),pow(10.,-39./20.),pow(10.,-37./20.),pow(10.,-35./20.)};
+			constexpr float N1r[2]={pow(10.,3./20.),pow(10.,3.5/20.)};
+			//bool channel=(bool)(this->REG[this->RPROG].load(std::memory_order_relaxed)&0x04);
+			unsigned char rprf=this->REG[this->RPRF].load(std::memory_order_relaxed);
+			if ((rprf&0x03)==0x03){
+				this->RxSample=pow(10.,-35./20.)*this->getTxInSample();
+			}
+			else{
+				constexpr float A[3]={1.,pow(10.,6./20.),pow(10.,12./20.)};
+				this->RxSample=A[rprf&0x03]*s;
+			}
+			
+			//v23 audio decoding
+			if ((bool)(this->Rx_dout&line_analog)&&(rprf&0x03)!=0x03){
+				this->RxBufferSamples[this->RxBufferIndex]=this->RxSample;
+				
+				bool channel=(bool)(this->REG[this->RPROG].load(std::memory_order_relaxed)&0x04);
+				bool filter=!(bool)(rprf&0x04);
+				bool carrier_delay=!(bool)(this->REG[this->RPRX].load(std::memory_order_relaxed)&0x01);
+				if (filter){
+					//filter not implemented as described in the TS7514 pdf / should give better error tolerance + simpler to implement
+					std::complex<double> R1=0;
+					std::complex<double> R0=0;
+					
+					bool dcd=(bool)(this->Rx_din_analog&line_analog);
+					double A;
+					
+					if (this->MCnBC_buf==channel){//1200bps
+						if (this->RxBufferIndex<this->RxConvFilter1200bpsSize-1){
+							unsigned long n=this->RxConvFilter1200bpsSize-1-this->RxBufferIndex;
+							for (unsigned long i=0;i<n;i++){
+								double v=this->RxBufferSamples[this->RxConvFilter75bpsSize+i-n];
+								R1+=this->RxConvFilter1200bps1[i]*v;
+								R0+=this->RxConvFilter1200bps0[i]*v;
+							}
+							for (unsigned long i=n;i<this->RxConvFilter1200bpsSize;i++){
+								double v=this->RxBufferSamples[i-n];
+								R1+=this->RxConvFilter1200bps1[i]*v;
+								R0+=this->RxConvFilter1200bps0[i]*v;
+							}
+						}
+						else{
+							unsigned long p=this->RxBufferIndex-this->RxConvFilter1200bpsSize+1;
+							for (unsigned long i=0;i<this->RxConvFilter1200bpsSize;i++){
+								double v=this->RxBufferSamples[i+p];
+								R1+=this->RxConvFilter1200bps1[i]*v;
+								R0+=this->RxConvFilter1200bps0[i]*v;
+							}
+						}
+						
+						this->Rx_din_analog=(norm(R1)>norm(R0)?line_v23_1200bps_1:line_v23_1200bps_0);
+						A=sqrt(norm(R1)+norm(R0))/(this->RxConvFilter1200bpsNorm);
+					}
+					else{//75bps
+						unsigned long n=this->RxConvFilter75bpsSize-this->RxBufferIndex-1;
+						for (unsigned long i=0;i<n;i++){
+							double v=this->RxBufferSamples[this->RxConvFilter75bpsSize-n+i];
+							R1+=this->RxConvFilter75bps1[i]*v;
+							R0+=this->RxConvFilter75bps0[i]*v;
+						}
+						for (unsigned long i=n;i<this->RxConvFilter75bpsSize;i++){
+							double v=this->RxBufferSamples[i-n];
+							R1+=this->RxConvFilter75bps1[i]*v;
+							R0+=this->RxConvFilter75bps0[i]*v;
+						}
+						
+						this->Rx_din_analog=(norm(R1)>norm(R0)?line_v23_75bps_1:line_v23_75bps_0);
+						A=sqrt(norm(R1)+norm(R0))/(this->RxConvFilter75bpsNorm);
+					}
+					
+					if (dcd){
+						if (A<N2[this->REG[this->RHDL].load(std::memory_order_relaxed)&0x07]){
+							this->analog_dcd_timer++;
+							if ((!carrier_delay)||this->analog_dcd_timer>=this->analog_dcd_timer_max){
+								dcd=false;
+							}
+						}
+						else this->analog_dcd_timer=0;
+					}
+					else{
+						if (A>N2[this->REG[this->RHDL].load(std::memory_order_relaxed)&0x07]*N1r[(this->REG[this->RHDL].load(std::memory_order_relaxed)&0x08)>>3]){
+							this->analog_dcd_timer++;
+							if ((!carrier_delay)||this->analog_dcd_timer>=this->analog_dcd_timer_max){
+								dcd=true;
+							}
+						}
+						else this->analog_dcd_timer=0;
+					}
+					
+					this->Rx_din_analog|=dcd?line_analog:0;
+				}
+				else{
+					//rx / dcd data not computed -> garbage value
+					//TODO
+					this->Rx_din_analog=line_analog;
+					this->analog_dcd_timer=0;
+				}
+				
+				this->RxBufferIndex++;
+				if (this->RxBufferIndex>=this->RxConvFilter75bpsSize) this->RxBufferIndex=0;
+				
+				this->updateRx();
+			}
+			else{
+				this->Rx_din_analog=0;
+				this->analog_dcd_timer=0;
+			}
 		}
 		
 		void CLKTickIn(){
@@ -195,6 +314,42 @@ class TS7514{
 			}
 		}
 		
+		void setSampleRate(unsigned long rate){
+			this->RxBufferIndex=0;
+			this->analog_dcd_timer=0;
+			this->analog_dcd_timer_max=(unsigned long)(((float)rate)*0.015);
+			this->RxConvFilter75bpsSize=(2*rate)/(450-390);
+			this->RxConvFilter1200bpsSize=(2*rate)/(2100-1300);
+			
+			if (this->RxBufferSamples!=NULL) free(RxBufferSamples);
+			this->RxBufferSamples=(float*)malloc(this->RxConvFilter75bpsSize*sizeof(float));
+			if (this->RxConvFilter75bps1!=NULL) free(this->RxConvFilter75bps1);
+			this->RxConvFilter75bps1=(std::complex<double>*)malloc(this->RxConvFilter75bpsSize*sizeof(std::complex<double>));
+			if (this->RxConvFilter75bps0!=NULL) free(this->RxConvFilter75bps0);
+			this->RxConvFilter75bps0=(std::complex<double>*)malloc(this->RxConvFilter75bpsSize*sizeof(std::complex<double>));
+			if (this->RxConvFilter1200bps1!=NULL) free(this->RxConvFilter1200bps1);
+			this->RxConvFilter1200bps1=(std::complex<double>*)malloc(this->RxConvFilter1200bpsSize*sizeof(std::complex<double>));
+			if (this->RxConvFilter1200bps0!=NULL) free(this->RxConvFilter1200bps0);
+			this->RxConvFilter1200bps0=(std::complex<double>*)malloc(this->RxConvFilter1200bpsSize*sizeof(std::complex<double>));
+			
+			auto hamming=[](unsigned short x, unsigned short n){return 0.53836-0.46164*cos(2*M_PI*((double)x)/((double)(n-1)));};
+			double A;
+			this->RxConvFilter75bpsNorm=0;
+			for (unsigned long i=0;i<this->RxConvFilter75bpsSize;i++){
+				A=hamming(i,this->RxConvFilter75bpsSize);
+				this->RxConvFilter75bpsNorm+=A;
+				this->RxConvFilter75bps1[i]=A*exp(2i*M_PI*((double)390*i)/48000.);
+				this->RxConvFilter75bps0[i]=A*exp(2i*M_PI*((double)450*i)/48000.);
+			}
+			this->RxConvFilter1200bpsNorm=0;
+			for (unsigned long i=0;i<this->RxConvFilter1200bpsSize;i++){
+				A=hamming(i,this->RxConvFilter1200bpsSize);
+				this->RxConvFilter1200bpsNorm+=A;
+				this->RxConvFilter1200bps1[i]=A*exp(2i*M_PI*((double)1300*i)/48000.);
+				this->RxConvFilter1200bps0[i]=A*exp(2i*M_PI*((double)2100*i)/48000.);
+			}
+		}
+		
 	private:
 		unsigned char input_register;
 		bool MODEMnDTMF=true;
@@ -227,6 +382,22 @@ class TS7514{
 		float ATxIFilterBuffer[6];
 		unsigned short ATxITimeout=0;
 		constexpr static unsigned short ATxITimeoutMax=24576;
+		
+		unsigned long RxConvFilter75bpsSize=0;
+		unsigned long RxConvFilter1200bpsSize=0;
+		double RxConvFilter75bpsNorm=1;
+		double RxConvFilter1200bpsNorm=1;
+		std::complex<double>* RxConvFilter75bps1=NULL;
+		std::complex<double>* RxConvFilter75bps0=NULL;
+		std::complex<double>* RxConvFilter1200bps1=NULL;
+		std::complex<double>* RxConvFilter1200bps0=NULL;
+		float* RxBufferSamples=NULL;
+		unsigned long RxBufferIndex=0;
+		
+		float RxSample=0;
+		unsigned short Rx_din_analog=0;
+		unsigned long analog_dcd_timer=0;
+		unsigned long analog_dcd_timer_max=0;
 		
 		
 		void ATxIFilterUpdate(){//TODO: parallel implementation + SIMD?
@@ -271,7 +442,6 @@ class TS7514{
 					this->ATxIFilterBuffer[4]=this->ATxIFilterBuffer[5]-1.986454389602778*x1+1.9685314457776844*x2;
 					this->ATxIFilterBuffer[5]=x1-0.9726187727577423*x2;
 				}
-				
 				//simple exponential smoothing to remove signal <300Hz / constant
 				float alpha=(this->REG[this->RPTF].load(std::memory_order_relaxed)==0x03)?250./1228800.:50./1228800.;//alpha=1-exp(-dt/tau) ~ dt/tau (exponential smoothing)
 				this->ATxI_sample_out=x2-this->ATxI_mean_value;
@@ -384,17 +554,29 @@ class TS7514{
 			else{
 				rx=this->Rx_dout;
 			}
+			bool dcd;
 			const unsigned short MC_filter=line_DTMF_1209Hz|line_v23_1200bps_1|line_DTMF_1336Hz|line_DTMF_1477Hz|line_DTMF_1633Hz|line_v23_1200bps_0;//1kHz-2.5kHz
 			const unsigned short BC_filter=line_v23_75bps_1|line_call_progress_tone|line_v23_75bps_0;//wide: 300Hz-600Hz / narrow: 350Hz-500Hz
-			unsigned char rprx=this->REG[this->RPRX].load(std::memory_order_relaxed);
-			if (!(bool)(rprf&0x04)){
-				if (channel) rx&=(this->MCnBC_buf)?MC_filter:BC_filter;
-				else rx&=(this->MCnBC_buf)?BC_filter:MC_filter;
+			if ((bool)(rx&line_analog)){
+				rx=this->Rx_din_analog&(MC_filter|BC_filter);
+				dcd=(bool)(this->Rx_din_analog&line_analog);
+			}
+			else{
+				//unsigned char rprx=this->REG[this->RPRX].load(std::memory_order_relaxed);
+				if (!(bool)(rprf&0x04)){
+					rx&=(this->MCnBC_buf==channel)?MC_filter:BC_filter;
+				}
+				dcd=(bool)(rx&~(line_analog|line_Closed));
 			}
 			if (this->Rx_din!=rx){
 				//printf("Rx %04X / MCnBC %i\n",rx,this->MCnBC_buf);
+				static bool dcd2=false;
+				if (dcd!=dcd2){
+					dcd2=dcd;
+					printf("dcd=%i\n",dcd);
+				}
 				this->Rx_din=rx;
-				this->sendnDCD(!((bool)rx));//TODO: delay
+				this->sendnDCD(!dcd);//TODO: delay
 				this->sendRxD((bool)(rx&(line_v23_75bps_1|line_v23_1200bps_1)));
 				//ZCO not implemented
 			}
