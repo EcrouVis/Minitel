@@ -73,10 +73,10 @@ class PhoneLineWire{//simplify wirring+relay for the phone line
 		}
 		float getModemSample(){
 			if (this->RelayState){
-				return this->ModemSample+this->KeyboardSample+this->RTCSample;
+				return this->ModemSample*this->hybridRejectionValue+this->KeyboardSample+this->RTCSample;
 			}
 			else{
-				return this->ModemSample;
+				return this->ModemSample*this->hybridRejectionValue;
 			}
 		}
 		float getPhoneLineSample(){
@@ -88,6 +88,7 @@ class PhoneLineWire{//simplify wirring+relay for the phone line
 			}
 		}
 	private:
+		constexpr static float hybridRejectionValue=0.1;//~20dB
 		unsigned short ModemState=0;
 		unsigned short KeyboardState=0;
 		unsigned short RTCState=0;

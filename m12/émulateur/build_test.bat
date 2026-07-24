@@ -12,8 +12,9 @@ cd /D "%~dp0"
 ::test.exe
 
 ::mkdir build
-cmake -DUSE_TLS=Off -DCMAKE_BUILD_TYPE=RelWithDebInfo -DFETCHCONTENT_FULLY_DISCONNECTED=On -DCMAKE_INSTALL_PREFIX="./install" -DUSE_DECOMP_TOOLS=Off -G Ninja -B build
-cmake --build build --clean-first
+cmake -DUSE_TLS=Off -DCMAKE_BUILD_TYPE=RelWithDebInfo -DFETCHCONTENT_FULLY_DISCONNECTED=On -DCMAKE_INSTALL_PREFIX="./install" -DUSE_DECOMP_TOOLS=Off -DUSE_SSE2=On -DUSE_AVX2=On -G Ninja -B build
+cmake --build build
+:: --clean-first
 cmake --install build
 ::"%~dp0/install/RelWithDebInfo/M12.exe"
 

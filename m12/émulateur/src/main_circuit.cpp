@@ -25,7 +25,11 @@
 #include "circuit/DIN5/MinitelNetwork.h"
 #include "circuit/RTC/RTCNetwork.h"
 
+#include "thread_affinity.h"
+
 void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* p_gState){
+	setCurrentThreadAffinity(0);//pin this thread to a cpu core to improve performance by ~10% (help with data locality)
+	
 	//create ic
 	SRAM_64k eram;
 	ROM_256k erom;
@@ -603,8 +607,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	CLKs.subscribe9600Hz(CLKTick9600);
 	
 	auto CLKAudio=[&ab,&kb,&bzf,&spkf,&modem,&rtcn,&phoneLine,&plb,&rtcsa](unsigned long sr){//audio processing callback
-		constexpr float hybridRejectionValue=0.1;//~20dB
-		
+		//reconfigure the circuit if the samemple rate change
 		static unsigned long srp=0;
 		if (sr!=srp){
 			bzf.setSampleRate(sr);
@@ -612,19 +615,24 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			srp=sr;
 		}
 		
+		//generate the samples
+		modem.generateTxInSample(sr);
 		rtcsa.setServiceSample(plb.AudioEmulatorIn());
+		kb.generatePhoneLineSample(sr);
 		
-		phoneLine.setRTCSample(rtcn.getPhoneLineSample(sr));
-		phoneLine.setKeyboardSample(kb.getPhoneLineSample(sr));
-		float modemOut=modem.getTxOutSample();
-		phoneLine.setModemSample(modemOut);
+		//propagate the samples in the circuit
+		phoneLine.setRTCSample(rtcn.getPhoneLineSample(sr));//TODO: decouple generating and getting samples
+		phoneLine.setKeyboardSample(kb.getPhoneLineSample());
+		phoneLine.setModemSample(modem.getTxOutSample());
 		
 		kb.setPhoneLineSample(phoneLine.getPhoneLineSample());
 		rtcn.setPhoneLineSample(phoneLine.getPhoneLineSample());
-		modem.setRxSample(phoneLine.getModemSample()-modemOut*(1-hybridRejectionValue));
+		modem.setRxSample(phoneLine.getModemSample());
 		
-		ab.AudioIn(spkf.filter(kb.getSpeakerSample(sr))+bzf.filter(modem.getBuzzerSample(sr)));
+		//process the samples
+		ab.AudioIn(spkf.filter(kb.getSpeakerSample(sr))+bzf.filter(modem.getBuzzerSample(sr)));//TODO: same
 		plb.AudioEmulatorOut(rtcsa.getServiceSample());
+		modem.processRxInSample(sr);
 	};
 	CLKs.subscribeAudioSample(std::cref(CLKAudio));
 	

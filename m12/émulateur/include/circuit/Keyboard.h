@@ -188,7 +188,7 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 		void setPhoneLineSample(float f){
 			this->phoneLineSample=f;
 		}
-		float getPhoneLineSample(unsigned long sampleRate){
+		void generatePhoneLineSample(unsigned long sampleRate){
 			switch (this->phoneLineStateOut&line_DTMF_high){
 				case 0:this->dtmf_phase1=0;break;
 				case line_DTMF_1209Hz:this->dtmf_phase1+=1209;break;
@@ -205,7 +205,10 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 				case line_DTMF_941Hz:dtmf_phase2+=941;break;
 			}
 			if (this->dtmf_phase2>sampleRate) this->dtmf_phase2-=sampleRate;
-			return line_DTMF_LF_Attenuation*std::sin(2*M_PI*((float)this->dtmf_phase2)/((float)sampleRate))+line_DTMF_HF_Attenuation*std::sin(2*M_PI*((float)this->dtmf_phase1)/((float)sampleRate));
+			this->DTMFSample=line_DTMF_LF_Attenuation*std::sin(2*M_PI*((float)this->dtmf_phase2)/((float)sampleRate))+line_DTMF_HF_Attenuation*std::sin(2*M_PI*((float)this->dtmf_phase1)/((float)sampleRate));
+		}
+		float getPhoneLineSample(){
+			return this->DTMFSample;
 		}
 		
 		void Reset(){
@@ -236,9 +239,6 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 			this->speaker_on=false;
 			this->speaker_volume=0;
 			this->phoneLineSample=0;
-			
-			this->dtmf_phase1=0;
-			this->dtmf_phase2=0;
 			
 			this->LED_POWER=LED_OFF;
 			this->LED_SPEAKER=LED_OFF;
@@ -304,6 +304,7 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 		
 		unsigned long dtmf_phase1=0;
 		unsigned long dtmf_phase2=0;
+		float DTMFSample=0;
 		
 		void commandReceived(){
 			if (this->command_part){

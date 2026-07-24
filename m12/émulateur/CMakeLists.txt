@@ -11,7 +11,7 @@ set(CMAKE_CXX_COMPILER gcc)
 set(CMAKE_C_STANDARD 17)
 set( CMAKE_C_COMPILER gcc )
 
-project(M12 VERSION 0.1.0.0 LANGUAGES CXX C)
+project(M12 VERSION 0.1.1.0 LANGUAGES CXX C)
 
 include(FetchContent)
 include(GNUInstallDirs)
@@ -416,6 +416,7 @@ target_sources(m12
 		
 		src/encoding.cpp
 		src/thread_messaging.cpp
+		src/thread_affinity.cpp
 		
 		src/circuit/80C32/80C32.cpp
 		src/circuit/CPLD/MBSL_4000FH5_5.cpp
@@ -439,6 +440,7 @@ target_sources(m12
 		include/MemoryWindow.h
 		include/Parameters.h
 		include/thread_messaging.h
+		include/thread_affinity.h
 		
 		include/circuit/80C32.h
 		include/circuit/AudioBuffer.h

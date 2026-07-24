@@ -339,8 +339,8 @@ class M12Window{
 			this->phoneLineDeviceConfig.capture.channels = 1;
 			this->phoneLineDeviceConfig.sampleRate        = 0;
 			this->phoneLineDeviceConfig.dataCallback      = this->phone_line_data_callback;
-			this->phoneLineDeviceConfig.noFixedSizedCallback=true;
-			this->phoneLineDeviceConfig.periodSizeInFrames = 128;//in exclusive mode 512 samples seems too big -> audio distortion
+			//this->phoneLineDeviceConfig.noFixedSizedCallback=true;//don't play nice with ma_share_mode_exclusive if the audio thread skip samples (for wasapi)
+			this->phoneLineDeviceConfig.periodSizeInFrames = 128;
 			this->phoneLineDeviceConfig.wasapi.noAutoConvertSRC = true;
 			this->phoneLineDeviceConfig.performanceProfile = ma_performance_profile_low_latency;//make audio thread prioritized to avoid dropping frames
 			this->phoneLineDeviceConfig.wasapi.usage = ma_wasapi_usage_pro_audio;

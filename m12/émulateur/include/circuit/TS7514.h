@@ -137,7 +137,7 @@ class TS7514{//TODO: correct sample gains
 				case 0x00:
 				{
 					constexpr float ATx[4]={pow(10.,-4./20.),pow(10.,-14./20.),pow(10.,-25./20.),pow(10.,-36./20.)};
-					s=ATx[this->REG[this->RWLO].load(std::memory_order_relaxed)&0x03]*this->getTxInSample();
+					s=ATx[this->REG[this->RWLO].load(std::memory_order_relaxed)&0x03]*this->TxInSample;
 					break;
 				}
 				case 0x04:
@@ -165,159 +165,32 @@ class TS7514{//TODO: correct sample gains
 			
 			float sample=this->ATxI_sample_out;
 			float amp=A[this->REG[this->RATE].load(std::memory_order_relaxed)];
-			sample+=amp*this->getTxInSample();
+			sample+=amp*this->TxInSample;
 			return sample;
 		}
 		
 		void setRxSample(float s){
-			constexpr float N2[8]={pow(10.,-49./20.),pow(10.,-47./20.),pow(10.,-45./20.),pow(10.,-43./20.),pow(10.,-41./20.),pow(10.,-39./20.),pow(10.,-37./20.),pow(10.,-35./20.)};
-			constexpr float N1r[2]={pow(10.,3./20.),pow(10.,3.5/20.)};
-			//bool channel=(bool)(this->REG[this->RPROG].load(std::memory_order_relaxed)&0x04);
 			unsigned char rprf=this->REG[this->RPRF].load(std::memory_order_relaxed);
 			if ((rprf&0x03)==0x03){
-				this->RxSample=pow(10.,-35./20.)*this->getTxInSample();
+				this->RxSample=pow(10.,-35./20.)*this->TxInSample;
 			}
 			else{
 				constexpr float A[3]={1.,pow(10.,6./20.),pow(10.,12./20.)};
 				this->RxSample=A[rprf&0x03]*s;
 			}
-			
-			//v23 audio decoding
-			if ((bool)(this->Rx_dout&line_analog)&&(rprf&0x03)!=0x03){
-				this->RxBufferSamples[this->RxBufferIndex]=this->RxSample;
-				
-				bool channel=(bool)(this->REG[this->RPROG].load(std::memory_order_relaxed)&0x04);
-				bool filter=!(bool)(rprf&0x04);
-				bool carrier_delay=!(bool)(this->REG[this->RPRX].load(std::memory_order_relaxed)&0x01);
-				if (filter){
-					//filter not implemented as described in the TS7514 pdf / should give better error tolerance + simpler to implement
-					std::complex<double> R1=0;
-					std::complex<double> R0=0;
-					
-					bool dcd=(bool)(this->Rx_din_analog&line_analog);
-					double A;
-					
-					if (this->MCnBC_buf==channel){//1200bps
-						if (this->RxBufferIndex<this->RxConvFilter1200bpsSize-1){
-							unsigned long n=this->RxConvFilter1200bpsSize-1-this->RxBufferIndex;
-							for (unsigned long i=0;i<n;i++){
-								double v=this->RxBufferSamples[this->RxConvFilter75bpsSize+i-n];
-								R1+=this->RxConvFilter1200bps1[i]*v;
-								R0+=this->RxConvFilter1200bps0[i]*v;
-							}
-							for (unsigned long i=n;i<this->RxConvFilter1200bpsSize;i++){
-								double v=this->RxBufferSamples[i-n];
-								R1+=this->RxConvFilter1200bps1[i]*v;
-								R0+=this->RxConvFilter1200bps0[i]*v;
-							}
-						}
-						else{
-							unsigned long p=this->RxBufferIndex-this->RxConvFilter1200bpsSize+1;
-							for (unsigned long i=0;i<this->RxConvFilter1200bpsSize;i++){
-								double v=this->RxBufferSamples[i+p];
-								R1+=this->RxConvFilter1200bps1[i]*v;
-								R0+=this->RxConvFilter1200bps0[i]*v;
-							}
-						}
-						
-						this->Rx_din_analog=(norm(R1)>norm(R0)?line_v23_1200bps_1:line_v23_1200bps_0);
-						A=sqrt(norm(R1)+norm(R0))/(this->RxConvFilter1200bpsNorm);
-					}
-					else{//75bps
-						unsigned long n=this->RxConvFilter75bpsSize-this->RxBufferIndex-1;
-						for (unsigned long i=0;i<n;i++){
-							double v=this->RxBufferSamples[this->RxConvFilter75bpsSize-n+i];
-							R1+=this->RxConvFilter75bps1[i]*v;
-							R0+=this->RxConvFilter75bps0[i]*v;
-						}
-						for (unsigned long i=n;i<this->RxConvFilter75bpsSize;i++){
-							double v=this->RxBufferSamples[i-n];
-							R1+=this->RxConvFilter75bps1[i]*v;
-							R0+=this->RxConvFilter75bps0[i]*v;
-						}
-						
-						this->Rx_din_analog=(norm(R1)>norm(R0)?line_v23_75bps_1:line_v23_75bps_0);
-						A=sqrt(norm(R1)+norm(R0))/(this->RxConvFilter75bpsNorm);
-					}
-					
-					if (dcd){
-						if (A<N2[this->REG[this->RHDL].load(std::memory_order_relaxed)&0x07]){
-							this->analog_dcd_timer++;
-							if ((!carrier_delay)||this->analog_dcd_timer>=this->analog_dcd_timer_max){
-								dcd=false;
-							}
-						}
-						else this->analog_dcd_timer=0;
-					}
-					else{
-						if (A>N2[this->REG[this->RHDL].load(std::memory_order_relaxed)&0x07]*N1r[(this->REG[this->RHDL].load(std::memory_order_relaxed)&0x08)>>3]){
-							this->analog_dcd_timer++;
-							if ((!carrier_delay)||this->analog_dcd_timer>=this->analog_dcd_timer_max){
-								dcd=true;
-							}
-						}
-						else this->analog_dcd_timer=0;
-					}
-					
-					this->Rx_din_analog|=dcd?line_analog:0;
-				}
-				else{
-					//rx / dcd data not computed -> garbage value
-					//TODO
-					this->Rx_din_analog=line_analog;
-					this->analog_dcd_timer=0;
-				}
-				
-				this->RxBufferIndex++;
-				if (this->RxBufferIndex>=this->RxConvFilter75bpsSize) this->RxBufferIndex=0;
-				
-				this->updateRx();
-			}
-			else{
-				this->Rx_din_analog=0;
-				this->analog_dcd_timer=0;
-			}
 		}
 		
 		void CLKTickIn(){
-			constexpr unsigned int LF=line_v23_75bps_1|line_v23_75bps_0|line_DTMF_697Hz|line_DTMF_770Hz|line_DTMF_852Hz|line_DTMF_941Hz;
-			constexpr unsigned int HF=line_DTMF_1209Hz|line_v23_1200bps_1|line_DTMF_1336Hz|line_DTMF_1477Hz|line_DTMF_1633Hz|line_v23_1200bps_0;
-			
 			this->resample_clk_div++;
 			if (this->resample_clk_div>=12){
 				this->resample_clk_div=0;
 				this->ATxIFilterUpdate();
-				if ((bool)(this->Tx_din&LF)){
-					switch (this->Tx_din&LF){
-						case line_v23_75bps_1: this->fgen1_phase+=390;break;
-						case line_v23_75bps_0: this->fgen1_phase+=450;break;
-						case line_DTMF_697Hz: this->fgen1_phase+=697;break;
-						case line_DTMF_770Hz: this->fgen1_phase+=770;break;
-						case line_DTMF_852Hz: this->fgen1_phase+=852;break;
-						case line_DTMF_941Hz: this->fgen1_phase+=941;break;
-					}
-					if (this->fgen1_phase>=1228800) this->fgen1_phase-=1228800;
-				}
-				else this->fgen1_phase=0;
-				if ((bool)(this->Tx_din&HF)){//DTMF HF+v23 1200Baud
-					switch (this->Tx_din&HF){
-						case line_DTMF_1209Hz: this->fgen2_phase+=1209;break;
-						case line_v23_1200bps_1: this->fgen2_phase+=1300;break;
-						case line_DTMF_1336Hz: this->fgen2_phase+=1336;break;
-						case line_DTMF_1477Hz: this->fgen2_phase+=1477;break;
-						case line_DTMF_1633Hz: this->fgen2_phase+=1633;break;
-						case line_v23_1200bps_0: this->fgen2_phase+=2100;break;
-					}
-					if (this->fgen2_phase>=1228800) this->fgen2_phase-=1228800;
-				}
-				else this->fgen2_phase=0;
 			}
 		}
 		
 		void setSampleRate(unsigned long rate){
 			this->RxBufferIndex=0;
 			this->analog_dcd_timer=0;
-			this->analog_dcd_timer_max=(unsigned long)(((float)rate)*0.015);
 			this->RxConvFilter75bpsSize=(2*rate)/(450-390);
 			this->RxConvFilter1200bpsSize=(2*rate)/(2100-1300);
 			
@@ -350,6 +223,188 @@ class TS7514{//TODO: correct sample gains
 			}
 		}
 		
+		void generateTxInSample(unsigned long sampleRate){
+			constexpr unsigned int LF=line_v23_75bps_1|line_v23_75bps_0|line_DTMF_697Hz|line_DTMF_770Hz|line_DTMF_852Hz|line_DTMF_941Hz;
+			constexpr unsigned int HF=line_DTMF_1209Hz|line_v23_1200bps_1|line_DTMF_1336Hz|line_DTMF_1477Hz|line_DTMF_1633Hz|line_v23_1200bps_0;
+			this->TxInSample=0;
+			
+			if ((bool)(this->Tx_din&LF)){
+				switch (this->Tx_din&LF){
+					case line_v23_75bps_1: this->fgen1_phase+=390./((float)sampleRate);break;
+					case line_v23_75bps_0: this->fgen1_phase+=450./((float)sampleRate);break;
+					case line_DTMF_697Hz: this->fgen1_phase+=697./((float)sampleRate);break;
+					case line_DTMF_770Hz: this->fgen1_phase+=770./((float)sampleRate);break;
+					case line_DTMF_852Hz: this->fgen1_phase+=852./((float)sampleRate);break;
+					case line_DTMF_941Hz: this->fgen1_phase+=941./((float)sampleRate);break;
+				}
+				if (this->fgen1_phase>=1) this->fgen1_phase--;
+				
+				if ((bool)(this->Tx_din&(line_v23_75bps_1|line_v23_75bps_0))){
+					TxInSample+=sin(2*M_PI*this->fgen1_phase);
+				}
+				else{
+					TxInSample+=pow(10.,-6./20.)*sin(2*M_PI*this->fgen1_phase);
+				}
+			}
+			else this->fgen1_phase=0;
+			if ((bool)(this->Tx_din&HF)){//DTMF HF+v23 1200Baud
+				switch (this->Tx_din&HF){
+					case line_DTMF_1209Hz: this->fgen2_phase+=1209./((float)sampleRate);break;
+					case line_v23_1200bps_1: this->fgen2_phase+=1300./((float)sampleRate);break;
+					case line_DTMF_1336Hz: this->fgen2_phase+=1336./((float)sampleRate);break;
+					case line_DTMF_1477Hz: this->fgen2_phase+=1477./((float)sampleRate);break;
+					case line_DTMF_1633Hz: this->fgen2_phase+=1633./((float)sampleRate);break;
+					case line_v23_1200bps_0: this->fgen2_phase+=2100./((float)sampleRate);break;
+				}
+				if (this->fgen2_phase>=1) this->fgen2_phase--;
+				
+				if ((bool)(this->Tx_din&(line_v23_1200bps_1|line_v23_1200bps_0))){
+					TxInSample+=sin(2*M_PI*this->fgen2_phase);
+				}
+				else{
+					TxInSample+=pow(10.,-4./20.)*sin(2*M_PI*this->fgen2_phase);
+				}
+			}
+			else this->fgen2_phase=0;
+		}
+		
+		void processRxInSample(unsigned long sampleRate){
+			constexpr float N2[8]={pow(10.,-49./20.),pow(10.,-47./20.),pow(10.,-45./20.),pow(10.,-43./20.),pow(10.,-41./20.),pow(10.,-39./20.),pow(10.,-37./20.),pow(10.,-35./20.)};
+			constexpr float N1r[2]={pow(10.,3./20.),pow(10.,3.5/20.)};
+			unsigned char rprf=this->REG[this->RPRF].load(std::memory_order_relaxed);
+			//v23 audio decoding
+			if ((bool)(this->Rx_dout&line_analog)&&(rprf&0x03)!=0x03){
+				this->RxBufferSamples[this->RxBufferIndex]=this->RxSample;
+				
+				bool channel=(bool)(this->REG[this->RPROG].load(std::memory_order_relaxed)&0x04);
+				bool filter=!(bool)(rprf&0x04);
+				bool carrier_delay=!(bool)(this->REG[this->RPRX].load(std::memory_order_relaxed)&0x01);
+				if (filter){
+					//filter not implemented as described in the TS7514 pdf / should give better error tolerance + simpler to implement
+					std::complex<double> R1=0;
+					std::complex<double> R0=0;
+					
+					double A;
+					
+					if (this->MCnBC_buf==channel){//1200bps -> update result at a rate of 4800Hz to be more efficient
+						this->analog_rx_update_tick+=4800;
+						if (this->analog_rx_update_tick>=sampleRate){
+							this->analog_rx_update_tick-=sampleRate;
+							
+							if (this->RxBufferIndex<this->RxConvFilter1200bpsSize-1){
+								unsigned long n=this->RxConvFilter1200bpsSize-1-this->RxBufferIndex;
+								for (unsigned long i=0;i<n;i++){
+									double v=this->RxBufferSamples[this->RxConvFilter75bpsSize+i-n];
+									R1+=this->RxConvFilter1200bps1[i]*v;
+									R0+=this->RxConvFilter1200bps0[i]*v;
+								}
+								for (unsigned long i=n;i<this->RxConvFilter1200bpsSize;i++){
+									double v=this->RxBufferSamples[i-n];
+									R1+=this->RxConvFilter1200bps1[i]*v;
+									R0+=this->RxConvFilter1200bps0[i]*v;
+								}
+							}
+							else{
+								unsigned long p=this->RxBufferIndex-this->RxConvFilter1200bpsSize+1;
+								for (unsigned long i=0;i<this->RxConvFilter1200bpsSize;i++){
+									double v=this->RxBufferSamples[i+p];
+									R1+=this->RxConvFilter1200bps1[i]*v;
+									R0+=this->RxConvFilter1200bps0[i]*v;
+								}
+							}
+							
+							bool dcd=(bool)(this->Rx_din_analog&line_analog);
+							A=sqrt(norm(R1)+norm(R0))/(this->RxConvFilter1200bpsNorm);
+							
+							if (dcd){
+								if (A<N2[this->REG[this->RHDL].load(std::memory_order_relaxed)&0x07]){
+									this->analog_dcd_timer++;
+									if ((!carrier_delay)||this->analog_dcd_timer>=48){//10ms
+										dcd=false;
+										this->analog_dcd_timer=0;
+									}
+								}
+								else this->analog_dcd_timer=0;
+							}
+							else{
+								if (A>N2[this->REG[this->RHDL].load(std::memory_order_relaxed)&0x07]*N1r[(this->REG[this->RHDL].load(std::memory_order_relaxed)&0x08)>>3]){
+									this->analog_dcd_timer++;
+									if ((!carrier_delay)||this->analog_dcd_timer>=48){//10ms
+										dcd=true;
+										this->analog_dcd_timer=0;
+									}
+								}
+								else this->analog_dcd_timer=0;
+							}
+							
+							this->Rx_din_analog=(norm(R1)>norm(R0)?line_v23_1200bps_1:line_v23_1200bps_0);
+							this->Rx_din_analog|=dcd?line_analog:0;
+						}
+					}
+					else{//75bps -> update result at a rate of 300Hz to be more efficient
+						this->analog_rx_update_tick+=300;
+						if (this->analog_rx_update_tick>=sampleRate){
+							this->analog_rx_update_tick-=sampleRate;
+							
+							unsigned long n=this->RxConvFilter75bpsSize-this->RxBufferIndex-1;
+							for (unsigned long i=0;i<n;i++){
+								double v=this->RxBufferSamples[this->RxConvFilter75bpsSize-n+i];
+								R1+=this->RxConvFilter75bps1[i]*v;
+								R0+=this->RxConvFilter75bps0[i]*v;
+							}
+							for (unsigned long i=n;i<this->RxConvFilter75bpsSize;i++){
+								double v=this->RxBufferSamples[i-n];
+								R1+=this->RxConvFilter75bps1[i]*v;
+								R0+=this->RxConvFilter75bps0[i]*v;
+							}
+							
+							bool dcd=(bool)(this->Rx_din_analog&line_analog);
+							A=sqrt(norm(R1)+norm(R0))/(this->RxConvFilter75bpsNorm);
+						
+							if (dcd){
+								if (A<N2[this->REG[this->RHDL].load(std::memory_order_relaxed)&0x07]){
+									this->analog_dcd_timer++;
+									if ((!carrier_delay)||this->analog_dcd_timer>=6){//20ms
+										dcd=false;
+										this->analog_dcd_timer=0;
+									}
+								}
+								else this->analog_dcd_timer=0;
+							}
+							else{
+								if (A>N2[this->REG[this->RHDL].load(std::memory_order_relaxed)&0x07]*N1r[(this->REG[this->RHDL].load(std::memory_order_relaxed)&0x08)>>3]){
+									this->analog_dcd_timer++;
+									if ((!carrier_delay)||this->analog_dcd_timer>=6){//20ms
+										dcd=true;
+										this->analog_dcd_timer=0;
+									}
+								}
+								else this->analog_dcd_timer=0;
+							}
+							
+							this->Rx_din_analog=(norm(R1)>norm(R0)?line_v23_75bps_1:line_v23_75bps_0);
+							this->Rx_din_analog|=dcd?line_analog:0;
+						}
+					}
+				}
+				else{
+					//rx / dcd data not computed -> garbage value
+					//TODO
+					this->Rx_din_analog=line_analog;
+					this->analog_dcd_timer=0;
+				}
+				
+				this->RxBufferIndex++;
+				if (this->RxBufferIndex>=this->RxConvFilter75bpsSize) this->RxBufferIndex=0;
+				
+				this->updateRx();
+			}
+			else{
+				this->Rx_din_analog=0;
+				this->analog_dcd_timer=0;
+			}
+		}
+		
 	private:
 		unsigned char input_register;
 		bool MODEMnDTMF=true;
@@ -368,8 +423,9 @@ class TS7514{//TODO: correct sample gains
 		
 		unsigned int buzzer_clock_tick=0;
 		
-		unsigned int fgen1_phase=0;
-		unsigned int fgen2_phase=0;
+		float TxInSample=0;
+		float fgen1_phase=0;
+		float fgen2_phase=0;
 		
 		std::function<void(bool)> sendRxD=[](bool b){};
 		std::function<void(bool)> sendWLO=[](bool b){};
@@ -397,7 +453,7 @@ class TS7514{//TODO: correct sample gains
 		float RxSample=0;
 		unsigned short Rx_din_analog=0;
 		unsigned long analog_dcd_timer=0;
-		unsigned long analog_dcd_timer_max=0;
+		unsigned long analog_rx_update_tick=0;
 		
 		
 		void ATxIFilterUpdate(){//TODO: parallel implementation + SIMD?
@@ -447,30 +503,6 @@ class TS7514{//TODO: correct sample gains
 				this->ATxI_sample_out=x2-this->ATxI_mean_value;
 				this->ATxI_mean_value+=alpha*this->ATxI_sample_out;
 			}
-		}
-		
-		float getTxInSample(){
-			constexpr unsigned int LF=line_v23_75bps_1|line_v23_75bps_0|line_DTMF_697Hz|line_DTMF_770Hz|line_DTMF_852Hz|line_DTMF_941Hz;
-			constexpr unsigned int HF=line_DTMF_1209Hz|line_v23_1200bps_1|line_DTMF_1336Hz|line_DTMF_1477Hz|line_DTMF_1633Hz|line_v23_1200bps_0;
-			
-			float sample=0;
-			if ((bool)(this->Tx_din&LF)){//DTMF LF+v23 75Baud
-				if ((bool)(this->Tx_din&(line_v23_75bps_1|line_v23_75bps_0))){
-					sample+=sin(2*M_PI*this->fgen1_phase/1228800.);
-				}
-				else{
-					sample+=pow(10.,-6./20.)*sin(2*M_PI*this->fgen1_phase/1228800.);
-				}
-			}
-			if ((bool)(this->Tx_din&HF)){//DTMF HF+v23 1200Baud
-				if ((bool)(this->Tx_din&(line_v23_1200bps_1|line_v23_1200bps_0))){
-					sample+=sin(2*M_PI*this->fgen2_phase/1228800.);
-				}
-				else{
-					sample+=pow(10.,-4./20.)*sin(2*M_PI*this->fgen2_phase/1228800.);
-				}
-			}
-			return sample;
 		}
 		
 		void writeRegister(){
@@ -570,11 +602,6 @@ class TS7514{//TODO: correct sample gains
 			}
 			if (this->Rx_din!=rx){
 				//printf("Rx %04X / MCnBC %i\n",rx,this->MCnBC_buf);
-				static bool dcd2=false;
-				if (dcd!=dcd2){
-					dcd2=dcd;
-					printf("dcd=%i\n",dcd);
-				}
 				this->Rx_din=rx;
 				this->sendnDCD(!dcd);//TODO: delay
 				this->sendRxD((bool)(rx&(line_v23_75bps_1|line_v23_1200bps_1)));
