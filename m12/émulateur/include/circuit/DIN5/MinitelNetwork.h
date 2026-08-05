@@ -627,7 +627,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			if (this->PTin){
 				resync:
 				this->CMDBuffer.push_back(d);
-				unsigned char s=this->isModuleWakeCMD();//TODO: resync
+				unsigned char s=this->isModuleWakeCMD();
 				if (s==this->NOT_CMD){
 					if (this->CMDBuffer.size()>1){
 						this->CMDBuffer.clear();
@@ -856,7 +856,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					this->qTx.push(0x1B);this->qTx.push(0x3A);this->qTx.push(0x32);this->qTx.push(0x7D);break;
 				case 6://keyboard status
 					this->qTx.push(0x1B);this->qTx.push(0x3A);this->qTx.push(0x72);this->qTx.push(0x59);break;
-				case 7://simple keyboard / TODO: does not work in tele mode (minitel ack but do nothing)
+				case 7://simple keyboard
 					this->qTx.push(0x1B);this->qTx.push(0x3B);this->qTx.push(0x6A);this->qTx.push(0x59);this->qTx.push(0x41);break;
 				case 8://extended keyboard
 					this->qTx.push(0x1B);this->qTx.push(0x3B);this->qTx.push(0x69);this->qTx.push(0x59);this->qTx.push(0x41);break;
@@ -1439,7 +1439,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		
 		void printContextMenu(unsigned char line){
 			this->moveCursor(17,16);
-			this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));////TODO: to avoid flashing background when changing context menu ???
+			this->print(foreground_color_black,sizeof(foreground_color_black)/sizeof(foreground_color_black[0]));
 			this->print(swap_color,sizeof(swap_color)/sizeof(swap_color[0]));
 			this->printString("\x18\x0A\x18\x0A\x18\x0A\x18");
 			//this->printString(" \x12\x7F""\x12\x7F""\x12\x7F""\x12\x7F""\x12\x5B");//7*40
@@ -1539,7 +1539,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 			
 		}
-		void cycleParameterOption(unsigned char line){//TODO
+		void cycleParameterOption(unsigned char line){
 			switch (line){
 				case 1://baudrate
 					this->moveCursor(17+this->parameters.baudrate.load(std::memory_order_relaxed),15);

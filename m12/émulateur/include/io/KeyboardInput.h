@@ -100,7 +100,7 @@ constexpr int M12_KEY_KP_ADD=334;
 constexpr int M12_KEY_KP_ENTER=335;
 constexpr int M12_KEY_KP_EQUAL=336;
 
-class KeyboardInput{
+class KeyboardInput{//TODO: special keyboard key symbols
 	public:
 		void KeyboardAzertyWindow(){
 			int bs=ImGui::CalcTextSize(" ").x*5+2*ImGui::GetStyle().FramePadding.x;
@@ -937,281 +937,279 @@ class KeyboardInput{
 			this->p_keyboard=kb;
 		}
 		
-		void InputTranslate(bool focus, int key, int action, int mods){
-			if (focus||action==GLFW_RELEASE){//||action==GLFW_RELEASE temporary fix to avoid being stuck when ctrl+click on imgui slider
-				if (action==GLFW_PRESS||action==GLFW_RELEASE){
-					bool keyPressed=(action==GLFW_PRESS);
-					bool altgr=((mods&(GLFW_MOD_CONTROL|GLFW_MOD_ALT))==(GLFW_MOD_CONTROL|GLFW_MOD_ALT));
-					KeyboardState kbs;
-					kbs.fnct=((mods&(GLFW_MOD_CONTROL|GLFW_MOD_ALT))==GLFW_MOD_ALT);
-					kbs.ctrl=((mods&(GLFW_MOD_CONTROL|GLFW_MOD_ALT))==GLFW_MOD_CONTROL);
-					kbs.shift=(bool)(mods&GLFW_MOD_SHIFT);
-					kbs.key=0;
-					
-					if (key==M12_KEY_LEFT_CONTROL||key==M12_KEY_RIGHT_CONTROL||key==M12_KEY_LEFT_SHIFT||key==M12_KEY_RIGHT_SHIFT||key==M12_KEY_ALT||key==M12_KEY_ALTGR){
-						kbs.key=this->currentKeyboardState.key;
-					}
-					else if (keyPressed){
-						if (altgr){
-							switch (key){
-								//compatibility
-								case M12_KEY_0://à
-									kbs.key=0x73;//Suite
-									kbs.ctrl=true;
-									break;
-									
-								case M12_KEY_4://'
-									kbs.key=0x27;//numpad 1
-									kbs.ctrl=true;
-									break;
-									
-								case M12_KEY_PLUS://=
-									kbs.key=0x21;//numpad 3
-									kbs.ctrl=true;
-									break;
-									
-								case M12_KEY_6://-
-									kbs.key=0x17;//numpad 2
-									kbs.ctrl=true;
-									break;
-									
-								case M12_KEY_2://é
-									kbs.key=0x19;//numpad 4
-									kbs.ctrl=true;
-									break;
-									
-								case M12_KEY_7://è
-									kbs.key=0x29;//numpad 5
-									kbs.ctrl=true;
-									break;
-									
-								case M12_KEY_3://"
-									kbs.key=0x1D;//#
-									break;
-									
-								case M12_KEY_5://(
-									kbs.key=0x1F;// *
-									kbs.shift=true;
-									break;
-									
-								case M12_KEY_9://ç
-									kbs.key=0x2F;//numpad 0
-									kbs.shift=true;
-									break;
-									
-								case M12_KEY_DEGREE://)
-									kbs.key=0x1D;//#
-									kbs.shift=true;
-									break;
-									
-								case M12_KEY_8://_
-									kbs.key=0x21;//numpad 3
-									kbs.shift=true;
-									break;
-									
-								//special phone keys
-								case M12_KEY_P://P
-									kbs.key=0x23;//Volume +
-									break;
-									
-								case M12_KEY_M://M
-									kbs.key=0x13;//Volume -
-									break;
-									
-								case M12_KEY_A://A
-									kbs.key=0x45;//appel Annuaire
-									break;
-									
-								case M12_KEY_Z://Z
-									kbs.key=0x25;//appel n°51
-									break;
-									
-								case M12_KEY_R://R
-									kbs.key=0x33;//appel Répertoire
-									break;
-									
-								case M12_KEY_B://B
-									kbs.key=0x15;//appel Bis
-									break;
-									
-								case M12_KEY_T://T
-									kbs.key=0x35;//téléphone
-									break;
-									
-								case M12_KEY_I://I
-									kbs.key=0x45;//Impr.
-									kbs.shift=true;
-									break;
-							}
+		void InputTranslate(int key, int action, int mods){
+			if (action==GLFW_PRESS||action==GLFW_RELEASE){
+				bool keyPressed=(action==GLFW_PRESS);
+				bool altgr=((mods&(GLFW_MOD_CONTROL|GLFW_MOD_ALT))==(GLFW_MOD_CONTROL|GLFW_MOD_ALT));
+				KeyboardState kbs;
+				kbs.fnct=((mods&(GLFW_MOD_CONTROL|GLFW_MOD_ALT))==GLFW_MOD_ALT);
+				kbs.ctrl=((mods&(GLFW_MOD_CONTROL|GLFW_MOD_ALT))==GLFW_MOD_CONTROL);
+				kbs.shift=(bool)(mods&GLFW_MOD_SHIFT);
+				kbs.key=0;
+				
+				if (key==M12_KEY_LEFT_CONTROL||key==M12_KEY_RIGHT_CONTROL||key==M12_KEY_LEFT_SHIFT||key==M12_KEY_RIGHT_SHIFT||key==M12_KEY_ALT||key==M12_KEY_ALTGR){
+					kbs.key=this->currentKeyboardState.key;
+				}
+				else if (keyPressed){
+					if (altgr){
+						switch (key){
+							//compatibility
+							case M12_KEY_0://à
+								kbs.key=0x73;//Suite
+								kbs.ctrl=true;
+								break;
+								
+							case M12_KEY_4://'
+								kbs.key=0x27;//numpad 1
+								kbs.ctrl=true;
+								break;
+								
+							case M12_KEY_PLUS://=
+								kbs.key=0x21;//numpad 3
+								kbs.ctrl=true;
+								break;
+								
+							case M12_KEY_6://-
+								kbs.key=0x17;//numpad 2
+								kbs.ctrl=true;
+								break;
+								
+							case M12_KEY_2://é
+								kbs.key=0x19;//numpad 4
+								kbs.ctrl=true;
+								break;
+								
+							case M12_KEY_7://è
+								kbs.key=0x29;//numpad 5
+								kbs.ctrl=true;
+								break;
+								
+							case M12_KEY_3://"
+								kbs.key=0x1D;//#
+								break;
+								
+							case M12_KEY_5://(
+								kbs.key=0x1F;// *
+								kbs.shift=true;
+								break;
+								
+							case M12_KEY_9://ç
+								kbs.key=0x2F;//numpad 0
+								kbs.shift=true;
+								break;
+								
+							case M12_KEY_DEGREE://)
+								kbs.key=0x1D;//#
+								kbs.shift=true;
+								break;
+								
+							case M12_KEY_8://_
+								kbs.key=0x21;//numpad 3
+								kbs.shift=true;
+								break;
+								
+							//special phone keys
+							case M12_KEY_P://P
+								kbs.key=0x23;//Volume +
+								break;
+								
+							case M12_KEY_M://M
+								kbs.key=0x13;//Volume -
+								break;
+								
+							case M12_KEY_A://A
+								kbs.key=0x45;//appel Annuaire
+								break;
+								
+							case M12_KEY_Z://Z
+								kbs.key=0x25;//appel n°51
+								break;
+								
+							case M12_KEY_R://R
+								kbs.key=0x33;//appel Répertoire
+								break;
+								
+							case M12_KEY_B://B
+								kbs.key=0x15;//appel Bis
+								break;
+								
+							case M12_KEY_T://T
+								kbs.key=0x35;//téléphone
+								break;
+								
+							case M12_KEY_I://I
+								kbs.key=0x45;//Impr.
+								kbs.shift=true;
+								break;
 						}
-						else{
-							switch (key){
-								case M12_KEY_A:kbs.key=0xBB;break;//A
-								case M12_KEY_Z:kbs.key=0xB7;break;//Z
-								case M12_KEY_E:kbs.key=0xB9;break;//E
-								case M12_KEY_R:kbs.key=0xA9;break;//R
-								case M12_KEY_T:kbs.key=0x97;break;//T
-								case M12_KEY_Y:kbs.key=0x87;break;//Y
-								case M12_KEY_U:kbs.key=0x77;break;//U
-								case M12_KEY_I:kbs.key=0x67;break;//I
-								case M12_KEY_O:kbs.key=0x69;break;//O
-								case M12_KEY_P:kbs.key=0x57;break;//P
-								case M12_KEY_Q:kbs.key=0xBF;break;//Q
-								case M12_KEY_S:kbs.key=0xBD;break;//S
-								case M12_KEY_D:kbs.key=0xAB;break;//D
-								case M12_KEY_F:kbs.key=0x99;break;//F
-								case M12_KEY_G:kbs.key=0x8B;break;//G
-								case M12_KEY_H:kbs.key=0x89;break;//H
-								case M12_KEY_J:kbs.key=0x79;break;//J
-								case M12_KEY_K:kbs.key=0x6B;break;//K
-								case M12_KEY_L:kbs.key=0x59;break;//L
-								case M12_KEY_M:kbs.key=0x3B;break;//M
-								case M12_KEY_W:kbs.key=0xAD;break;//W
-								case M12_KEY_X:kbs.key=0x9B;break;//X
-								case M12_KEY_C:kbs.key=0x8D;break;//C
-								case M12_KEY_V:kbs.key=0x8F;break;//V
-								case M12_KEY_B:kbs.key=0x7D;break;//B
-								case M12_KEY_N:kbs.key=0x7B;break;//N
-								case M12_KEY_SPACE:kbs.key=0x7F;break;//espace
-								case M12_KEY_KP_ENTER:
-								case M12_KEY_ENTER:kbs.key=0x39;break;//entrée
-								case M12_KEY_QUESTION:kbs.key=0x6F;break;//,
-								case M12_KEY_KP_DECIMAL:
+					}
+					else{
+						switch (key){
+							case M12_KEY_A:kbs.key=0xBB;break;//A
+							case M12_KEY_Z:kbs.key=0xB7;break;//Z
+							case M12_KEY_E:kbs.key=0xB9;break;//E
+							case M12_KEY_R:kbs.key=0xA9;break;//R
+							case M12_KEY_T:kbs.key=0x97;break;//T
+							case M12_KEY_Y:kbs.key=0x87;break;//Y
+							case M12_KEY_U:kbs.key=0x77;break;//U
+							case M12_KEY_I:kbs.key=0x67;break;//I
+							case M12_KEY_O:kbs.key=0x69;break;//O
+							case M12_KEY_P:kbs.key=0x57;break;//P
+							case M12_KEY_Q:kbs.key=0xBF;break;//Q
+							case M12_KEY_S:kbs.key=0xBD;break;//S
+							case M12_KEY_D:kbs.key=0xAB;break;//D
+							case M12_KEY_F:kbs.key=0x99;break;//F
+							case M12_KEY_G:kbs.key=0x8B;break;//G
+							case M12_KEY_H:kbs.key=0x89;break;//H
+							case M12_KEY_J:kbs.key=0x79;break;//J
+							case M12_KEY_K:kbs.key=0x6B;break;//K
+							case M12_KEY_L:kbs.key=0x59;break;//L
+							case M12_KEY_M:kbs.key=0x3B;break;//M
+							case M12_KEY_W:kbs.key=0xAD;break;//W
+							case M12_KEY_X:kbs.key=0x9B;break;//X
+							case M12_KEY_C:kbs.key=0x8D;break;//C
+							case M12_KEY_V:kbs.key=0x8F;break;//V
+							case M12_KEY_B:kbs.key=0x7D;break;//B
+							case M12_KEY_N:kbs.key=0x7B;break;//N
+							case M12_KEY_SPACE:kbs.key=0x7F;break;//espace
+							case M12_KEY_KP_ENTER:
+							case M12_KEY_ENTER:kbs.key=0x39;break;//entrée
+							case M12_KEY_QUESTION:kbs.key=0x6F;break;//,
+							case M12_KEY_KP_DECIMAL:
+								kbs.shift=true;
+								[[fallthrough]];
+							case M12_KEY_PERIOD:kbs.key=0x6D;break;//;
+							case M12_KEY_KP_DIVIDE:
+								kbs.shift=true;
+								[[fallthrough]];
+							case M12_KEY_SLASH:kbs.key=0x3D;break;//:
+							
+							case M12_KEY_KP_0:kbs.key=0x2F;break;//numpad 0
+							case M12_KEY_KP_1:kbs.key=0x27;break;//numpad 1
+							case M12_KEY_KP_2:kbs.key=0x17;break;//numpad 2
+							case M12_KEY_KP_3:kbs.key=0x21;break;//numpad 3
+							case M12_KEY_KP_4:kbs.key=0x19;break;//numpad 4
+							case M12_KEY_KP_5:kbs.key=0x29;break;//numpad 5
+							case M12_KEY_KP_6:kbs.key=0x11;break;//numpad 6
+							case M12_KEY_KP_7:kbs.key=0x2B;break;//numpad 7
+							case M12_KEY_KP_8:kbs.key=0x1B;break;//numpad 8
+							case M12_KEY_KP_9:kbs.key=0x2D;break;//numpad 9
+							
+							case M12_KEY_F2:kbs.key=0x95;break;//F2=Sommaire
+							case M12_KEY_F3:kbs.key=0x93;break;//F3=Guide
+							case M12_KEY_F4:kbs.key=0x85;break;//F4=Annulation
+							case M12_KEY_F5:kbs.key=0x83;break;//F5=Correction
+							case M12_KEY_F6:kbs.key=0x75;break;//F6=Retour
+							case M12_KEY_F7:kbs.key=0x73;break;//F7=Suite
+							case M12_KEY_F8:kbs.key=0x65;break;//F8=Répétition
+							case M12_KEY_F9:kbs.key=0x63;break;//F9=Envoi
+							
+							case M12_KEY_SQUARE:kbs.key=0x55;break;//²=on/off            ///////////////////////////////////////////////////////////////////////
+							case M12_KEY_BACKSPACE:kbs.key=0x31;break;//backspace=mem       ///////////////////////////////////////////////////////////////////////
+							case M12_KEY_TAB:kbs.key=0xB5;break;//tab=Connex/Fin      ///////////////////////////////////////////////////////////////////////
+							case M12_KEY_ESCAPE:kbs.key=0xA5;break;//échap=Esc
+							case M12_KEY_CAPS_LOCK:kbs.key=0x9F;break;//min/maj
+					
+							case M12_KEY_UP:kbs.key=0x5B;break;//flèche haut
+							case M12_KEY_LEFT:kbs.key=0x5D;break;//flèche gauche
+							case M12_KEY_DOWN:kbs.key=0x5F;break;//flèche bas
+							case M12_KEY_RIGHT:kbs.key=0x3F;break;//flèche droite
+							
+							case M12_KEY_1:kbs.key=0xB3;break;//&
+							case M12_KEY_2:kbs.key=0xB1;break;//é
+							case M12_KEY_3:kbs.key=0xA7;break;//"
+							case M12_KEY_4:kbs.key=0xA1;break;//'
+							case M12_KEY_5:kbs.key=0x91;break;//(
+							case M12_KEY_KP_SUBSTRACT:
+								kbs.shift=false;
+								[[fallthrough]];
+							case M12_KEY_6:kbs.key=0x81;break;//-
+							case M12_KEY_7:kbs.key=0x71;break;//è
+							case M12_KEY_9:kbs.key=0x51;break;//ç
+							case M12_KEY_0:kbs.key=0x53;break;//à
+							case M12_KEY_DEGREE:kbs.key=0x37;break;//)
+							
+							//compatibility
+							case M12_KEY_8://_
+								if (kbs.ctrl||kbs.shift) kbs.key=0x61;// !
+								else{
+									kbs.key=0x2D;//numpad 9
 									kbs.shift=true;
-									[[fallthrough]];
-								case M12_KEY_PERIOD:kbs.key=0x6D;break;//;
-								case M12_KEY_KP_DIVIDE:
+								}
+								break;
+							
+							case M12_KEY_SECTION:// !
+								if (kbs.shift) kbs.key=0x11;//numpad 6
+								else kbs.key=0x61;// !
+								break;
+							
+							case M12_KEY_KP_MULTIPLY:
+								kbs.shift=false;
+								[[fallthrough]];
+							case M12_KEY_MU:// *
+								if (!kbs.shift){
+									kbs.key=0x1F;// *
+								}
+								break;
+								
+							case M12_KEY_DIAERESIS://^
+								if (kbs.shift){
+									kbs.key=0x93;//Guide
+									kbs.shift=false;
+									kbs.ctrl=true;
+								}
+								else{
+									kbs.key=0x95;//Sommaire
+									kbs.ctrl=true;
+								}
+								break;
+								
+							case M12_KEY_POUND://$
+								if (kbs.shift){
+									kbs.key=0x85;//Annulation
+									kbs.shift=false;
+									kbs.ctrl=true;
+								}
+								else{
+									kbs.key=0x19;//numpad 4
 									kbs.shift=true;
-									[[fallthrough]];
-								case M12_KEY_SLASH:kbs.key=0x3D;break;//:
+								}
+								break;
 								
-								case M12_KEY_KP_0:kbs.key=0x2F;break;//numpad 0
-								case M12_KEY_KP_1:kbs.key=0x27;break;//numpad 1
-								case M12_KEY_KP_2:kbs.key=0x17;break;//numpad 2
-								case M12_KEY_KP_3:kbs.key=0x21;break;//numpad 3
-								case M12_KEY_KP_4:kbs.key=0x19;break;//numpad 4
-								case M12_KEY_KP_5:kbs.key=0x29;break;//numpad 5
-								case M12_KEY_KP_6:kbs.key=0x11;break;//numpad 6
-								case M12_KEY_KP_7:kbs.key=0x2B;break;//numpad 7
-								case M12_KEY_KP_8:kbs.key=0x1B;break;//numpad 8
-								case M12_KEY_KP_9:kbs.key=0x2D;break;//numpad 9
-								
-								case M12_KEY_F2:kbs.key=0x95;break;//F2=Sommaire
-								case M12_KEY_F3:kbs.key=0x93;break;//F3=Guide
-								case M12_KEY_F4:kbs.key=0x85;break;//F4=Annulation
-								case M12_KEY_F5:kbs.key=0x83;break;//F5=Correction
-								case M12_KEY_F6:kbs.key=0x75;break;//F6=Retour
-								case M12_KEY_F7:kbs.key=0x73;break;//F7=Suite
-								case M12_KEY_F8:kbs.key=0x65;break;//F8=Répétition
-								case M12_KEY_F9:kbs.key=0x63;break;//F9=Envoi
-								
-								case M12_KEY_SQUARE:kbs.key=0x55;break;//²=on/off            ///////////////////////////////////////////////////////////////////////
-								case M12_KEY_BACKSPACE:kbs.key=0x31;break;//backspace=mem       ///////////////////////////////////////////////////////////////////////
-								case M12_KEY_TAB:kbs.key=0xB5;break;//tab=Connex/Fin      ///////////////////////////////////////////////////////////////////////
-								case M12_KEY_ESCAPE:kbs.key=0xA5;break;//échap=Esc
-								case M12_KEY_CAPS_LOCK:kbs.key=0x9F;break;//min/maj
-						
-								case M12_KEY_UP:kbs.key=0x5B;break;//flèche haut
-								case M12_KEY_LEFT:kbs.key=0x5D;break;//flèche gauche
-								case M12_KEY_DOWN:kbs.key=0x5F;break;//flèche bas
-								case M12_KEY_RIGHT:kbs.key=0x3F;break;//flèche droite
-								
-								case M12_KEY_1:kbs.key=0xB3;break;//&
-								case M12_KEY_2:kbs.key=0xB1;break;//é
-								case M12_KEY_3:kbs.key=0xA7;break;//"
-								case M12_KEY_4:kbs.key=0xA1;break;//'
-								case M12_KEY_5:kbs.key=0x91;break;//(
-								case M12_KEY_KP_SUBSTRACT:
-									kbs.shift=false;
-									[[fallthrough]];
-								case M12_KEY_6:kbs.key=0x81;break;//-
-								case M12_KEY_7:kbs.key=0x71;break;//è
-								case M12_KEY_9:kbs.key=0x51;break;//ç
-								case M12_KEY_0:kbs.key=0x53;break;//à
-								case M12_KEY_DEGREE:kbs.key=0x37;break;//)
-								
-								//compatibility
-								case M12_KEY_8://_
-									if (kbs.ctrl||kbs.shift) kbs.key=0x61;// !
-									else{
-										kbs.key=0x2D;//numpad 9
-										kbs.shift=true;
-									}
-									break;
-								
-								case M12_KEY_SECTION:// !
-									if (kbs.shift) kbs.key=0x11;//numpad 6
-									else kbs.key=0x61;// !
-									break;
-								
-								case M12_KEY_KP_MULTIPLY:
-									kbs.shift=false;
-									[[fallthrough]];
-								case M12_KEY_MU:// *
-									if (!kbs.shift){
-										kbs.key=0x1F;// *
-									}
-									break;
-									
-								case M12_KEY_DIAERESIS://^
-									if (kbs.shift){
-										kbs.key=0x93;//Guide
-										kbs.shift=false;
-										kbs.ctrl=true;
-									}
-									else{
-										kbs.key=0x95;//Sommaire
-										kbs.ctrl=true;
-									}
-									break;
-									
-								case M12_KEY_POUND://$
-									if (kbs.shift){
-										kbs.key=0x85;//Annulation
-										kbs.shift=false;
-										kbs.ctrl=true;
-									}
-									else{
-										kbs.key=0x19;//numpad 4
-										kbs.shift=true;
-									}
-									break;
-									
-								case M12_KEY_PERCENT://ù
-									if (kbs.shift) kbs.key=0x29;//numpad 5
-									else{
-										kbs.key=0x83;//Correction
-										kbs.ctrl=true;
-									}
-									break;
-								
-								case M12_KEY_KP_EQUAL:
+							case M12_KEY_PERCENT://ù
+								if (kbs.shift) kbs.key=0x29;//numpad 5
+								else{
+									kbs.key=0x83;//Correction
+									kbs.ctrl=true;
+								}
+								break;
+							
+							case M12_KEY_KP_EQUAL:
+								kbs.key=0x1B;//numpad 8
+								kbs.shift=true;
+								break;
+							case M12_KEY_KP_ADD:
+								kbs.shift=true;
+								[[fallthrough]];
+							case M12_KEY_PLUS://=
+								if (kbs.shift) kbs.key=0x2B;//numpad 7
+								else{
 									kbs.key=0x1B;//numpad 8
 									kbs.shift=true;
-									break;
-								case M12_KEY_KP_ADD:
+								}
+								break;
+								
+							case M12_KEY_GREATER_THAN://<
+								if (kbs.shift) kbs.key=0x17;//numpad 2
+								else{
+									kbs.key=0x27;//numpad 1
 									kbs.shift=true;
-									[[fallthrough]];
-								case M12_KEY_PLUS://=
-									if (kbs.shift) kbs.key=0x2B;//numpad 7
-									else{
-										kbs.key=0x1B;//numpad 8
-										kbs.shift=true;
-									}
-									break;
-									
-								case M12_KEY_GREATER_THAN://<
-									if (kbs.shift) kbs.key=0x17;//numpad 2
-									else{
-										kbs.key=0x27;//numpad 1
-										kbs.shift=true;
-									}
-									break;
-							}
+								}
+								break;
 						}
 					}
-					this->keyboardTransition(kbs);
 				}
+				this->keyboardTransition(kbs);
 			}
 		}
 	private:

@@ -134,6 +134,7 @@ struct P_CRT{
 	float width_factor=2./3.;
 	const float width=480;
 	const float height=250;
+	bool bilinear_filter=false;
 	bool display_effects=false;
 	bool error_loading_texture=false;
 	void* ts9347=NULL;

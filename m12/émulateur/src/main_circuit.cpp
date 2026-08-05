@@ -28,7 +28,8 @@
 #include "thread_affinity.h"
 
 void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* p_gState){
-	setCurrentThreadAffinity(0);//pin this thread to a cpu core to improve performance by ~10% (help with data locality)
+	setCurrentThreadAffinity(getCurrentCPU());//pin this thread to a cpu core to improve performance by ~10% (help with data locality)
+	//TODO: configure the child threads to not inherit this thread affinity for linux (windows: no idea) -> websocket thread
 	
 	//create ic
 	SRAM_64k eram;
@@ -485,38 +486,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	iol.subscribeOUT(dbgIOOUT);
 	
-	/*stackMonitor sm=stackMonitor(&uc);
-	sm.SPManualyModified=[p_gState,&uc](){
-		printf("SP manualy modified c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])));
-		//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-	};
-	sm.addressPOPed=[p_gState,&uc](bool high){
-		printf("Address ");
-		printf(high?"high":"low");
-		printf(" poped c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])));
-		//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-	};
-	sm.stackOverwrited=[p_gState,&uc](){
-		printf("Stack overwrited c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])));
-		//p_gState->stepByStep.store(true,std::memory_order_relaxed);		
-	};
-	sm.funcReturned=[p_gState,&uc](bool ud,bool ind,bool old){
-		if (ud){
-			printf("Return to undefined c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])));
-			//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-		}
-		else{
-			if (ind||old){
-				printf("Return to ");
-				if (old) printf("already used ");
-				if (ind) printf("indirect ");
-				unsigned char sp=uc.getSFRByteIn(uc.SP);
-				printf("address c:%05lX -> c:%05lX\n",(((unsigned long)uc.PX_out[1]&3)<<16)|((unsigned long)(uc.PC-uc.i_length[uc.instruction[0]])),(((unsigned long)uc.PX_out[1]&3)<<16)|(((unsigned short)uc.getRAMByte(sp))<<8)|((unsigned short)uc.getRAMByte(sp-1)));
-			}
-		}
-	};*/
-	
-	//bool pause_emu=false;
 #ifdef M12_USE_DECOMP_TOOLS
 	uc.debug_signal_alu_before_exec=[p_gState,&CLKs,&rtd,&uc](){
 		rtd.update();
@@ -528,16 +497,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			print_m12_alu_instruction(&uc);
 		}
 	};
-	//clock
-	
-	/*auto stopC=[p_gState](){
-		return p_gState->shutdown.load(std::memory_order_relaxed);
-	};
-	CLKs.setStopCondition(stopC);
-	auto pauseC=inline [&pause_emu](){
-		return pause_emu;
-	};
-	CLKs.setPauseCondition(pauseC);*/
 	
 	//mailbox
 	
@@ -562,7 +521,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 					//wait RST signal before saving the ram
 					modem.Reset();
 					wt.PWRChangeIn(false);
-					//TODO: reset keyboard
 					break;
 				case EMU_NEXT_STEP:
 					//pause_emu=false;
@@ -592,7 +550,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		video.CLKTickIn();
 		modem.CLKTickIn();//to resample ATxI input
 	};
-	CLKs.subscribe14745600Hz(std::cref(CLKTick14745600));
+	CLKs.subscribe14745600Hz(CLKTick14745600);
 	auto CLKTick600=[&kb,&cpld,&rtcn](){
 		cpld.CLKTickIn();
 		kb.CLKTickIn();

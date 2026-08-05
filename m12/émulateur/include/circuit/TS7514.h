@@ -339,6 +339,7 @@ class TS7514{//TODO: correct sample gains
 							
 							this->Rx_din_analog=(norm(R1)>norm(R0)?line_v23_1200bps_1:line_v23_1200bps_0);
 							this->Rx_din_analog|=dcd?line_analog:0;
+							this->updateRx();
 						}
 					}
 					else{//75bps -> update result at a rate of 300Hz to be more efficient
@@ -384,6 +385,7 @@ class TS7514{//TODO: correct sample gains
 							
 							this->Rx_din_analog=(norm(R1)>norm(R0)?line_v23_75bps_1:line_v23_75bps_0);
 							this->Rx_din_analog|=dcd?line_analog:0;
+							this->updateRx();
 						}
 					}
 				}
@@ -392,12 +394,12 @@ class TS7514{//TODO: correct sample gains
 					//TODO
 					this->Rx_din_analog=line_analog;
 					this->analog_dcd_timer=0;
+					this->updateRx();
 				}
 				
 				this->RxBufferIndex++;
 				if (this->RxBufferIndex>=this->RxConvFilter75bpsSize) this->RxBufferIndex=0;
 				
-				this->updateRx();
 			}
 			else{
 				this->Rx_din_analog=0;
@@ -603,7 +605,7 @@ class TS7514{//TODO: correct sample gains
 			if (this->Rx_din!=rx){
 				//printf("Rx %04X / MCnBC %i\n",rx,this->MCnBC_buf);
 				this->Rx_din=rx;
-				this->sendnDCD(!dcd);//TODO: delay
+				this->sendnDCD(!dcd);
 				this->sendRxD((bool)(rx&(line_v23_75bps_1|line_v23_1200bps_1)));
 				//ZCO not implemented
 			}

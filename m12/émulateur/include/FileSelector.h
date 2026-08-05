@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <functional>
 #include <fstream>
+//bug/limitations with directory_iterator for long path on windows ??? (ex: max out length directory containing M12.exe -> instead of finding ./ressources/*.bmp, it finds ./ressources/M12.exe ...)
 class ROMSelector{
 	public:
 		ROMSelector(const char* dir){
@@ -104,7 +105,7 @@ class ROMSelector{
 				if ((this->ROMSelected==NULL||!std::filesystem::equivalent(entry.path(),this->ROMSelected))&&this->isCandidate(entry.path().string().c_str())){
 					size_t s=strlen(entry.path().string().c_str());
 					char* f=(char*)malloc(s+1);
-					strcpy(f,entry.path().string().c_str());
+					strcpy(f,std::filesystem::path(entry.path()).make_preferred().string().c_str());
 					f[s]=0;
 					this->ROMCandidate.push_back(f);
 				}
@@ -251,7 +252,7 @@ class RAMSelector{
 					
 					size_t s=strlen(entry.path().string().c_str());
 					char* f=(char*)malloc(s+1);
-					strcpy(f,entry.path().string().c_str());
+					strcpy(f,std::filesystem::path(entry.path()).make_preferred().string().c_str());
 					f[s]=0;
 					
 					this->RAMCandidate.push_back(f);
@@ -402,7 +403,7 @@ class CharsetSelector{
 				if ((this->CharsetSelected==NULL||!std::filesystem::equivalent(entry.path(),this->CharsetSelected))&&this->isCandidate(entry.path().string().c_str())){
 					size_t s=strlen(entry.path().string().c_str());
 					char* f=(char*)malloc(s+1);
-					strcpy(f,entry.path().string().c_str());
+					strcpy(f,std::filesystem::path(entry.path()).make_preferred().string().c_str());
 					f[s]=0;
 					this->CharsetCandidate.push_back(f);
 				}

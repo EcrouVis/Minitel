@@ -22,7 +22,6 @@ class ROM_256k{
 
 	private:
 		long address;
-		unsigned char data;
 		bool nG=true;
 		//void (*sendD)(unsigned char);
 		std::function<void(unsigned char)> sendD;

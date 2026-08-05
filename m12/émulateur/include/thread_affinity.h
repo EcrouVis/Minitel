@@ -1,6 +1,7 @@
 #ifndef THREAD_AFFINITY_H
 #define THREAD_AFFINITY_H
 
-long setCurrentThreadAffinity(int i);
+long setCurrentThreadAffinity(long i);
+long getCurrentCPU();
 
 #endif

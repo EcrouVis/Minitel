@@ -10,12 +10,12 @@ class KeyboardIndicator{
 		void Init(){
 			ImGuiIO& io=ImGui::GetIO();
 			ImFontConfig config;
-			this->font = io.Fonts->AddFontDefault(&config);
-			config.MergeMode = true;
+			io.Fonts->AddFontDefaultBitmap(&config);
+			config.MergeMode = false;
 			config.GlyphMinAdvanceX=13;
 			config.GlyphMaxAdvanceX=13;
 			config.SizePixels=13;
-			io.Fonts->AddFontFromMemoryCompressedTTF(FontAwesomeIcon_compressed_data,FontAwesomeIcon_compressed_size,0,&config);
+			this->font=io.Fonts->AddFontFromMemoryCompressedTTF(FontAwesomeIcon_compressed_data,FontAwesomeIcon_compressed_size,0,&config);
 		}
 		void setKeyboard(Keyboard* kb){
 			this->p_keyboard=kb;

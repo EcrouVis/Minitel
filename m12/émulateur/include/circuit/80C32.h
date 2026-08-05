@@ -3,6 +3,14 @@
 #include <atomic>
 #include <functional>
 
+#ifdef _MSC_VER
+#define M12_FORCE_INLINE __forceinline inline
+#elif defined(__GNUC__)||defined(__clang__)
+#define M12_FORCE_INLINE __attribute__((always_inline)) inline
+#else
+#define M12_FORCE_INLINE
+#endif
+
 const int IRAM_SIZE=256;
 const int SFR_SIZE=128;
 
@@ -123,10 +131,10 @@ class m80C32{
 		
 		m80C32();
 		
-		static void bitaddress2address(unsigned char*,unsigned char*);
+		//static void bitaddress2address(unsigned char*,unsigned char*);
 		
-		static unsigned char getBitMask(unsigned char);
-		static unsigned char getBitDirectAddress(unsigned char);
+		static constexpr unsigned char getBitMask(unsigned char);
+		static constexpr unsigned char getBitDirectAddress(unsigned char);
 		
 		bool getBitIn(unsigned char);
 		bool getBitOut(unsigned char);
@@ -134,16 +142,13 @@ class m80C32{
 		void setBitIn(unsigned char,bool);
 		void setBitOut(unsigned char,bool);
 		
-		//unsigned char getCharIn(unsigned char);
 		unsigned char getRAMByte(unsigned char);
 		unsigned char getSFRByteIn(unsigned char);
 		unsigned char getDirectByteIn(unsigned char);
 		//for read-modify-write instruction
-		//unsigned char getCharOut(unsigned char);
 		unsigned char getSFRByteOut(unsigned char);
 		unsigned char getDirectByteOut(unsigned char);
 		//change state + callback for PX port change
-		//void setChar(unsigned char,unsigned char);
 		void setRAMByte(unsigned char,unsigned char);
 		void setSFRByte(unsigned char,unsigned char);
 		void setDirectByte(unsigned char,unsigned char);
@@ -154,17 +159,6 @@ class m80C32{
 		void ResetChangeIn(bool);
 		void Reset();
 		void PXChangeIn(unsigned char,unsigned char);
-		//void PXYChangeIn(unsigned char,unsigned char,bool);
-		/*void subscribeP0(void (*f)(unsigned char)){this->sendP0=f;}
-		void subscribeP1(void (*f)(unsigned char)){this->sendP1=f;}
-		void subscribeP2(void (*f)(unsigned char)){this->sendP2=f;}
-		void subscribeP3(void (*f)(unsigned char)){this->sendP3=f;}
-		void subscribenRD(void (*f)(bool)){this->sendnRD=f;}
-		void subscribenWR(void (*f)(bool)){this->sendnWR=f;}
-		void subscribeTxD(void (*f)(bool)){this->sendTxD=f;}
-		void subscribeRxD(void (*f)(bool)){this->sendRxD=f;}
-		void subscribeALE(void (*f)(bool)){this->sendALE=f;}
-		void subscribenPSEN(void (*f)(bool)){this->sendnPSEN=f;}*/
 		void subscribeP0(std::function<void(unsigned char)> f){this->sendP0=f;}
 		void subscribeP1(std::function<void(unsigned char)> f){this->sendP1=f;}
 		void subscribeP2(std::function<void(unsigned char)> f){this->sendP2=f;}
@@ -178,79 +172,6 @@ class m80C32{
 		std::function<void(void)> debug_signal_alu_after_exec=[](){};
 	
 		constexpr static unsigned char periodPerCycle=12;
-		
-		//bit address
-		/*const unsigned char EA=0xAF;
-		const unsigned char ET2=0xAD;
-		const unsigned char ES=0xAC;
-		const unsigned char ET1=0xAB;
-		const unsigned char EX1=0xAA;
-		const unsigned char ET0=0xA9;
-		const unsigned char EX0=0xA8;
-		const unsigned char PT2=0xBD;
-		const unsigned char PS=0xBC;
-		const unsigned char PT1=0xBB;
-		const unsigned char PX1=0xBA;
-		const unsigned char PT0=0xB9;
-		const unsigned char PX0=0xB8;
-		const unsigned char T2EX=0x91;
-		const unsigned char T2=0x90;
-		const unsigned char nRD=0xB7;
-		const unsigned char nWR=0xB6;
-		const unsigned char T1=0xB5;
-		const unsigned char T0=0xB4;
-		const unsigned char nINT1=0xB3;
-		const unsigned char nINT0=0xB2;
-		const unsigned char TxD=0xB1;
-		const unsigned char RxD=0xB0;
-		const unsigned char CY=0xD7;
-		const unsigned char AC=0xD6;
-		const unsigned char F0=0xD5;
-		const unsigned char RS1=0xD4;
-		const unsigned char RS0=0xD3;
-		const unsigned char OV=0xD2;
-		const unsigned char P=0xD0;
-		const unsigned char SM0=0x9F;
-		const unsigned char SM1=0x9E;
-		const unsigned char SM2=0x9D;
-		const unsigned char REN=0x9C;
-		const unsigned char TB8=0x9B;
-		const unsigned char RB8=0x9A;
-		const unsigned char TI=0x99;
-		const unsigned char RI=0x98;
-		const unsigned char TF1=0x8F;
-		const unsigned char TR1=0x8E;
-		const unsigned char TF0=0x8D;
-		const unsigned char TR0=0x8C;
-		const unsigned char IE1=0x8B;
-		const unsigned char IT1=0x8A;
-		const unsigned char IE0=0x89;
-		const unsigned char IT0=0x88;
-		const unsigned char TF2=0xCF;
-		const unsigned char EXF2=0xCE;
-		const unsigned char RCLK=0xCD;
-		const unsigned char TCLK=0xCC;
-		const unsigned char EXEN2=0xCB;
-		const unsigned char TR2=0xCA;
-		const unsigned char C_nT2=0xC9;
-		const unsigned char CP_nRL2=0xC8;
-		
-		//num bit
-		//PCON
-		const unsigned char SMOD=7;
-		const unsigned char GF1=3;
-		const unsigned char GF0=2;
-		const unsigned char PD=1;
-		const unsigned char IDL=0;
-		//TMOD
-		const unsigned char GATE_1=7;
-		const unsigned char C_T_1=6;
-		const unsigned char M1_1=5;
-		const unsigned char M0_1=4;
-		const unsigned char GATE_0=3;
-		const unsigned char C_T_0=2;
-		const unsigned char M1_0=1;
-		const unsigned char M0_0=0;*/
 	
 		constexpr static unsigned char i_length[256]={
 			1,2,3,1,1,2,1,1,1,1,1,1,1,1,1,1,
@@ -414,43 +335,20 @@ class m80C32{
 
 
 //inline member functions / called only in one place inside the hot path
-
-__attribute__((always_inline)) inline unsigned char m80C32::getSFRByteIn(unsigned char address){
-	return this->SFR[address&0x7F].load(std::memory_order_relaxed);
+M12_FORCE_INLINE constexpr unsigned char m80C32::getBitMask(unsigned char address){
+	return 1<<(address&0x07);
+}
+M12_FORCE_INLINE constexpr unsigned char m80C32::getBitDirectAddress(unsigned char address){
+	if ((bool)(address&0x80)){
+		return address&0xF8;
+	}
+	else{
+		return 0x20+(address>>3);
+	}
 }
 
-__attribute__((always_inline)) inline void m80C32::CLKTickIn(){
-	this->fixedSerialClockTick();
-	
-	this->period++;
-	if ((this->period&0x01)==1) return;// f/2->state time
-	
-	unsigned char t2con=this->getSFRByteIn(this->T2CON);
-	constexpr unsigned char t2con_mask1=1<<(this->C_nT2&0x07);
-	constexpr unsigned char t2con_mask2=(1<<(this->C_nT2&0x07))|(1<<(this->RCLK&0x07))|(1<<(this->TCLK&0x07));
-	if ((t2con&t2con_mask1)==0&&(t2con&t2con_mask2)!=0) this->T2Tick();
-	
-	if (this->period<this->periodPerCycle) return;
-	this->period=0;
-	if ((t2con&t2con_mask2)==0) this->T2Tick();
-	unsigned char tmod=this->getSFRByteIn(this->TMOD);
-	if (!(bool)(tmod&(1<<this->C_T_0))) this->T0Tick();
-	if (!(bool)(tmod&(1<<this->C_T_1))) this->T1Tick();
-	
-	this->ResetCountdown();
-	if (this->reset_count!=0){
-		constexpr unsigned char pd_mask=1<<this->PD;
-		constexpr unsigned char idl_mask=1<<this->IDL;
-		unsigned char power_mode=this->getSFRByteIn(this->PCON);//&(pd_mask|idl_mask);
-		if ((power_mode&pd_mask)==0){
-			if ((power_mode&idl_mask)==0){
-				this->nextCycleALU();
-			}
-		}
-		if (this->i_cycle_n==0){
-			this->checkInterrupts();
-		}
-	}
+M12_FORCE_INLINE unsigned char m80C32::getSFRByteIn(unsigned char address){
+	return this->SFR[address&0x7F].load(std::memory_order_relaxed);
 }
 
 #endif

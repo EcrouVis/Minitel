@@ -205,6 +205,10 @@ class M12Window{
 					if (cJSON_IsBool(c_param)){
 						this->PARAMETERS.io.crt.rgb=cJSON_IsTrue(c_param);
 					}
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig2,"bilinear filter");
+					if (cJSON_IsBool(c_param)){
+						this->PARAMETERS.io.crt.bilinear_filter=cJSON_IsTrue(c_param);
+					}
 					
 					//Other
 					//"os rtc" loaded later
@@ -436,6 +440,7 @@ class M12Window{
 					cJSON_AddNumberToObject(JSONSubconfig2,"decay",this->PARAMETERS.io.crt.decay);
 					cJSON_AddBoolToObject(JSONSubconfig2,"scanline",this->PARAMETERS.io.crt.scanline);
 					cJSON_AddBoolToObject(JSONSubconfig2,"rgb",this->PARAMETERS.io.crt.rgb);
+					cJSON_AddBoolToObject(JSONSubconfig2,"bilinear filter",this->PARAMETERS.io.crt.bilinear_filter);
 				}
 				JSONSubconfig2=cJSON_AddObjectToObject(JSONSubconfig1,"Other");
 				if (JSONSubconfig2!=NULL){
@@ -1161,7 +1166,7 @@ class M12Window{
 						if (ImGui::SliderFloat("##phone_line_volume_out", &(this->PARAMETERS.io.modem.audio.volume_out_db), -30, 0, "%.1fdB")) this->PLC.plb->setVolumeOutdB(this->PARAMETERS.io.modem.audio.volume_out_db);
 						ImGui::Unindent();
 						ImGui::TextDisabled("Pour que la réception s'effectue correctement, il est peut être nécessaire de désactiver la réduction de bruit au niveau du driver.");
-						ImGui::TextDisabled("Quand cette interface est utilisée, les autres sons sont désactivés.");
+						ImGui::TextDisabled("Quand cette interface est utilisée, les sons venant du buzzer et du haut-parleur sont désactivés.");
 						
 						ImGui::TreePop();
 					}
@@ -1187,7 +1192,7 @@ class M12Window{
 						ImGui::TreePop();
 					}
 					
-					if (ImGui::TreeNode("Haut parleur")){
+					if (ImGui::TreeNode("Haut-parleur")){
 						if (this->AC.spkf!=NULL){
 							ImGui::Text("Volume:");
 							ImGui::Indent();
@@ -1241,6 +1246,7 @@ class M12Window{
 						ImGui::Unindent();
 						ImGui::Checkbox("Lignes de balayage",&(this->PARAMETERS.io.crt.scanline));
 						ImGui::Checkbox("Sortie vidéo RGB",&(this->PARAMETERS.io.crt.rgb));
+						if (ImGui::Checkbox("Filtre bilinéaire",&(this->PARAMETERS.io.crt.bilinear_filter))) this->p_CRTout->updateTexture(true);
 						ImGui::TreePop();
 					}
 					
@@ -1385,6 +1391,7 @@ class M12Window{
 			strftime(filename,80,"minitel_%F_%H_%M_%S.png",pTime);
 			std::filesystem::path path=std::filesystem::path(SCREENSHOT_PATH);
 			path/=std::filesystem::path(filename);
+			path=path.make_preferred();
 			//char* path=(char*)malloc(sizeof(SCREENSHOT_PATH)+strlen(filename)+1);
 			//strcpy(path,SCREENSHOT_PATH);
 			//strcat(path,filename);
@@ -1464,7 +1471,7 @@ class M12Window{
 			}
 		}
 		
-		void initPhoneLine(){
+		void initPhoneLine(){//TODO: handle case where the playback device is disconnected while the audio is used for v23 transmissions
 			if (ma_device_get_state(&(this->audioDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->audioDevice));
 			if (ma_device_get_state(&(this->phoneLineDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->phoneLineDevice));
 			if (this->PLC.pCLKs==NULL) this->PLC.pCLKs=this->AC.pCLKs;
@@ -1502,7 +1509,6 @@ class M12Window{
 			if (ma_device_start(&(this->phoneLineDevice)) != MA_SUCCESS) {
 				constexpr static char msg[]="Erreur lors de l'activation du thread audio.";
 				this->Notification.notify(msg,false,ImVec4(1,0,0,1));
-				//TODO: use ma_result_description?
 				this->uninitPhoneLine();
 				return;
 			}
@@ -1541,9 +1547,16 @@ class M12Window{
 				ms.cmd=SPECIAL;
 				p_M12Window->p_mb_circuit->send(&ms);
 			}
-			ImGuiIO& io=ImGui::GetIO();
-			p_M12Window->keyboardInput.InputTranslate(!io.WantCaptureKeyboard,key,action,mods);
 			p_M12Window->PARAMETERS.io.keyboard.num_lock=(bool)(mods&GLFW_MOD_NUM_LOCK);
+			
+			ImGuiIO& io=ImGui::GetIO();
+			if ((!io.WantCaptureKeyboard)||action==GLFW_RELEASE){//||action==GLFW_RELEASE temporary fix to avoid being stuck when ctrl+click on imgui slider
+				mods=0;//fix unreliable modifiers (on Linux AltGr not registered as Ctrl+Alt modifier + release interaction with the virtual keyboard)
+				if (glfwGetKey(window,M12_KEY_LEFT_CONTROL)==GLFW_PRESS||glfwGetKey(window,M12_KEY_RIGHT_CONTROL)==GLFW_PRESS||glfwGetKey(window,M12_KEY_ALTGR)==GLFW_PRESS) mods|=GLFW_MOD_CONTROL;
+				if (glfwGetKey(window,M12_KEY_LEFT_SHIFT)==GLFW_PRESS||glfwGetKey(window,M12_KEY_RIGHT_SHIFT)==GLFW_PRESS) mods|=GLFW_MOD_SHIFT;
+				if (glfwGetKey(window,M12_KEY_ALT)==GLFW_PRESS||glfwGetKey(window,M12_KEY_ALTGR)==GLFW_PRESS) mods|=GLFW_MOD_ALT;
+				p_M12Window->keyboardInput.InputTranslate(key,action,mods);
+			}
 		}
 		/*static void char_callback(GLFWwindow* window, unsigned int codepoint){
 			printf("UTF-32 %08X\n",codepoint);
@@ -1562,7 +1575,6 @@ class M12Window{
 		static void phone_line_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){//duplex
 			phoneLineContext* PLC=(phoneLineContext*)pDevice->pUserData;
 			
-			//TODO
 			if (PLC->plb!=NULL){
 				PLC->samplesRemaining[PLC->samplesRemainingIndex++]=(float)PLC->plb->AudioIO((float*)pInput,(float*)pOutput,frameCount);
 			}

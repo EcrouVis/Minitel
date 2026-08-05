@@ -14,24 +14,55 @@
 
 #include "data_path.h"
 
-void setLocalDirectoryExe(){//TODO: long path size
+void setLocalDirectoryExe(){
 	std::filesystem::path exePath;
 	ssize_t exePathSize=0;
 #if defined(_WIN32)
-	wchar_t path[MAX_PATH+1] = { 0 };
-	exePathSize=GetModuleFileNameW(nullptr, path, MAX_PATH+1);
-	if (exePathSize==MAX_PATH+1) exePathSize=-1;
+
+	ssize_t buffer_size=MAX_PATH+1;
+	wchar_t* path=NULL;
+	do{
+		if (path!=NULL){
+			free(path);
+			buffer_size=buffer_size*2;
+		}
+		path=(wchar_t*)malloc(sizeof(wchar_t)*buffer_size);
+		exePathSize=GetModuleFileNameW(nullptr, path, buffer_size);
+	}
+	while (exePathSize==buffer_size);
+	if (exePathSize<=0) exePathSize=-1;
 	else exePath=std::filesystem::path(path);
+	free(path);
+	
 #elif defined(__APPLE__) && defined(__MACH__)
-	char path[PATH_MAX+1];
-	exePathSize=PATH_MAX+1;
-	if (_NSGetExecutablePath(path,&exePathSize)!=0) exePathSize=-1;
-	else exePath=std::filesystem::path(path);
+
+	ssize_t buffer_size=PATH_MAX+1;
+	char* path=(char*)malloc(sizeof(char)*buffer_size);
+	if (_NSGetExecutablePath(path,&buffer_size)!=0){
+		free(path);
+		path=(char*)malloc(sizeof(char)*buffer_size);
+		if (_NSGetExecutablePath(path,&buffer_size)!=0) exePathSize=-1;
+	}
+	if (exePathSize>0) exePath=std::filesystem::path(path);
+	free(path);
+	
 #elif defined(unix) || defined(__unix__)
-	char path[PATH_MAX+1];
-	exePathSize = readlink("/proc/self/exe", path, PATH_MAX+1);
-	if (exePathSize==PATH_MAX+1) exePathSize=-1;
+
+	ssize_t buffer_size=PATH_MAX+1;
+	char* path=NULL;
+	do{
+		if (path!=NULL){
+			free(path);
+			buffer_size=buffer_size*2;
+		}
+		path=(char*)malloc(sizeof(char)*buffer_size);
+		exePathSize = readlink("/proc/self/exe", path, buffer_size);
+	}
+	while (exePathSize==buffer_size);
+	if (exePathSize<=0) exePathSize=-1;
 	else exePath=std::filesystem::path(path);
+	free(path);
+	
 #endif
 	if (exePathSize>0){
 		if (is_symlink(exePath)) exePath=read_symlink(exePath);

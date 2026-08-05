@@ -2,6 +2,7 @@
 #define CLOCKS_H
 #include <functional>
 #include <thread>
+#include <chrono>
 #include <mutex>
 #include <climits>
 #include <condition_variable>
@@ -46,7 +47,7 @@ class Clocks{
 		}
 		
 		void start(){
-			std::unique_lock lock(this->audioMutex,std::defer_lock);
+			std::unique_lock<std::mutex> lock(this->audioMutex,std::defer_lock);
 			while (true){
 				//sync to audio
 				this->audio_div_sync+=this->audio_sample_rate.load(std::memory_order_relaxed);
@@ -79,12 +80,12 @@ class Clocks{
 						if (!(bool)this->requestedSamples) this->requestedSamples=1;
 						lock.unlock();//avoid blocking audio thread while checking mailbox
 						this->checkMailbox();//check less often mailbox
-						if (this->stop) return;//if (this->stop()) return;
+						if (this->stop) return;
 					}
 					else lock.unlock();
 				}
 				
-				if (!this->pause){//(!this->pause()){
+				if (!this->pause){
 					this->CLK14745600();
 					
 					if (!(bool)--this->div9600){//test if not 0 slightly more efficient than testing if greater than div9600_max (use TEST instead of CMP)

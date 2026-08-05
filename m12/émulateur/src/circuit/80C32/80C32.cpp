@@ -22,7 +22,7 @@ m80C32::m80C32(){
 /*
 =============== Helpers ===============
 */		
-void m80C32::bitaddress2address(unsigned char* address, unsigned char* bit){
+/*void m80C32::bitaddress2address(unsigned char* address, unsigned char* bit){
 	*bit=(*address)&0x07;
 	if ((bool)((*address)&0x80)){
 		*address=(*address)&0xF8;
@@ -30,33 +30,26 @@ void m80C32::bitaddress2address(unsigned char* address, unsigned char* bit){
 	else{
 		*address=0x20+((*address)>>3);
 	}
-}
-unsigned char m80C32::getBitMask(unsigned char address){
-	return 1<<(address&0x07);
-}
-unsigned char m80C32::getBitDirectAddress(unsigned char address){
-	if ((bool)(address&0x80)){
-		return address&0xF8;
-	}
-	else{
-		return 0x20+(address>>3);
-	}
-}
+}*/
 bool m80C32::getBitIn(unsigned char address){
-	unsigned char bit;
+	/*unsigned char bit;
 	this->bitaddress2address(&address,&bit);
-	return (bool)((this->getDirectByteIn(address)>>bit)&0x01);
+	return (bool)((this->getDirectByteIn(address)>>bit)&0x01);*/
+	return (bool)(this->getDirectByteIn(this->getBitDirectAddress(address))&this->getBitMask(address));
 }
 bool m80C32::getBitOut(unsigned char address){
-	unsigned char bit;
+	/*unsigned char bit;
 	this->bitaddress2address(&address,&bit);
-	return (bool)((this->getDirectByteOut(address)>>bit)&0x01);
+	return (bool)((this->getDirectByteOut(address)>>bit)&0x01);*/
+	return (bool)(this->getDirectByteOut(this->getBitDirectAddress(address))&this->getBitMask(address));
 }
 //change state + callback for PX port change
 void m80C32::setBitIn(unsigned char address, bool b){
-	unsigned char bit;
+	/*unsigned char bit;
 	this->bitaddress2address(&address,&bit);
-	unsigned char mask=1<<bit;
+	unsigned char mask=1<<bit;*/
+	unsigned char mask=this->getBitMask(address);
+	address=this->getBitDirectAddress(address);
 	if ((bool)(address&0x80)){
 		unsigned char v=this->getSFRByteIn(address);
 		v&=~mask;
@@ -71,9 +64,11 @@ void m80C32::setBitIn(unsigned char address, bool b){
 	}
 }
 void m80C32::setBitOut(unsigned char address, bool b){
-	unsigned char bit;
+	/*unsigned char bit;
 	this->bitaddress2address(&address,&bit);
-	unsigned char mask=1<<bit;
+	unsigned char mask=1<<bit;*/
+	unsigned char mask=this->getBitMask(address);
+	address=this->getBitDirectAddress(address);
 	if ((bool)(address&0x80)){
 		unsigned char v=this->getSFRByteOut(address);
 		v&=~mask;
@@ -403,6 +398,37 @@ void m80C32::PCONChange(){
 /*
 =============== SERIAL + TIMERS/COUNTERS ===============
 */
+void m80C32::CLKTickIn(){
+	this->fixedSerialClockTick();
+	
+	this->period++;
+	if ((bool)(this->period&0x01)) return;// f/2->state time
+	
+	unsigned char t2con=this->getSFRByteIn(this->T2CON);
+	constexpr unsigned char t2con_mask1=1<<(this->C_nT2&0x07);
+	constexpr unsigned char t2con_mask2=(1<<(this->C_nT2&0x07))|(1<<(this->RCLK&0x07))|(1<<(this->TCLK&0x07));
+	if ((t2con&t2con_mask1)==0&&(t2con&t2con_mask2)!=0) this->T2Tick();
+	
+	if (this->period<this->periodPerCycle) return;
+	this->period=0;
+	if ((t2con&t2con_mask2)==0) this->T2Tick();
+	unsigned char tmod=this->getSFRByteIn(this->TMOD);
+	if (!(bool)(tmod&(1<<this->C_T_0))) this->T0Tick();
+	if (!(bool)(tmod&(1<<this->C_T_1))) this->T1Tick();
+	
+	this->ResetCountdown();
+	if (this->reset_count!=0){
+		constexpr unsigned char pd_mask=1<<this->PD;
+		constexpr unsigned char idl_mask=1<<this->IDL;
+		unsigned char power_mode=this->getSFRByteIn(this->PCON);//&(pd_mask|idl_mask);
+		if (!(bool)(power_mode&(pd_mask|idl_mask))){
+			this->nextCycleALU();
+		}
+		if (this->i_cycle_n==0){
+			this->checkInterrupts();
+		}
+	}
+}
 void m80C32::T2EXFall(){
 	if (this->getBitIn(this->EXEN2)){
 		this->setBitIn(this->EXF2,true);
@@ -579,7 +605,7 @@ void m80C32::T1SerialClockTick(){
 		RXClockTickX4();
 	}
 }
-void m80C32::fixedSerialClockTick(){
+M12_FORCE_INLINE void m80C32::fixedSerialClockTick(){
 	if (this->getBitIn(this->SM1)) return;
 	if (this->getBitIn(this->SM0)){
 		bool smod=(bool)((this->getSFRByteIn(this->PCON)>>this->SMOD)&0x01);

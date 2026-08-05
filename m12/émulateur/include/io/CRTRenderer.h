@@ -67,6 +67,12 @@ class CRTRenderer{
 					scale[0]=0.5*l2_1/l2_2;
 					scale[1]=-0.5;
 				}
+				/*if (height%252!=0){
+					scale[1]=-0.5*((float)height)/((float)(height-(height%252)));
+				}
+				if (width%962!=0){
+					scale[0]=0.5*((float)width)/((float)(width-(width%962)));
+				}*/
 				glUniform2fv(this->ScaleID,1,scale);
 				
 				glUniform1f(this->BlackLevelID,this->p_PARAMETERS->io.crt.black_level*0.01);
@@ -81,6 +87,65 @@ class CRTRenderer{
 				
 				glDrawArrays(GL_TRIANGLES,0,6);
 				glDisableVertexAttribArray(0);
+			}
+		}
+		void updateTexture(bool force=false){
+			static unsigned char crtbuffer_data[VIDEO_FRAME_SIZE];
+			this->p_buffer->getVideoFrame(crtbuffer_data);
+			glBindTexture(GL_TEXTURE_2D,this->TextureID);
+			const unsigned char l[]={0,102,179,204,128,153,230,255};
+			if (this->p_PARAMETERS->io.crt.rgb){
+				for (int i=0;i<(250+2)*(3*40*8+2);i++){
+					this->screenTexture[3*i]=crtbuffer_data[i>>1];
+					if ((bool)(i&1)) this->screenTexture[3*i]&=0x0F;
+					else this->screenTexture[3*i]=this->screenTexture[3*i]>>4;
+					// 0000 ABGR
+					if ((bool)(this->screenTexture[3*i]&0x08)){
+						this->screenTexture[3*i+2]=(this->screenTexture[3*i]&0x04)?0xFF:0;
+						this->screenTexture[3*i+1]=(this->screenTexture[3*i]&0x02)?0xFF:0;
+						this->screenTexture[3*i]=(this->screenTexture[3*i]&0x01)?0xFF:0;
+					}
+					else{
+						this->screenTexture[3*i]=0;
+						this->screenTexture[3*i+1]=0;
+						this->screenTexture[3*i+2]=0;
+					}
+				}
+			}
+			else{
+				for (int i=0;i<(250+2)*(3*40*8+2);i++){
+					this->screenTexture[3*i]=crtbuffer_data[i>>1];
+					if ((bool)(i&1)) this->screenTexture[3*i]&=0x0F;
+					else this->screenTexture[3*i]=this->screenTexture[3*i]>>4;
+					if ((bool)(this->screenTexture[3*i]&0x08)){
+						this->screenTexture[3*i]=l[this->screenTexture[3*i]&0x07];
+						this->screenTexture[3*i+1]=this->screenTexture[3*i];
+						this->screenTexture[3*i+2]=this->screenTexture[3*i];
+					}
+					else{
+						this->screenTexture[3*i]=0;
+						this->screenTexture[3*i+1]=0;
+						this->screenTexture[3*i+2]=0;
+					}
+				}
+			}
+			auto now = std::chrono::steady_clock::now();
+			float dt=std::chrono::duration_cast<std::chrono::duration<float>>(now-this->lastScreenUpdate).count();
+			this->lastScreenUpdate=now;
+			
+			if (force||memcmp(this->screenTexture,this->screenTextureDisplay,sizeof(this->screenTexture))){
+				float alpha;
+				if (this->p_PARAMETERS->io.crt.decay<1e-14) alpha=0;
+				else alpha=std::exp(-3*dt/this->p_PARAMETERS->io.crt.decay);
+				
+				for (unsigned int i=0;i<sizeof(this->screenTexture)/sizeof(this->screenTexture[0]);i++){
+					this->screenTextureDisplay[i]=std::max((unsigned char)(((float)this->screenTextureDisplay[i])*alpha),this->screenTexture[i]);
+				}
+				glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,3*40*8+2,250+2,0, GL_RGB, GL_UNSIGNED_BYTE,this->screenTextureDisplay);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,this->p_PARAMETERS->io.crt.bilinear_filter?GL_LINEAR:GL_NEAREST);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 			}
 		}
 	private:
@@ -203,78 +268,6 @@ void main(){\n\
 			glDetachShader(this->ProgramID,this->FragmentShaderID);
 			glDeleteShader(this->VertexShaderID);
 			glDeleteShader(this->FragmentShaderID);
-		}
-		void updateTexture(){
-				static unsigned char crtbuffer_data[VIDEO_FRAME_SIZE];
-				this->p_buffer->getVideoFrame(crtbuffer_data);
-				glBindTexture(GL_TEXTURE_2D,this->TextureID);
-				const unsigned char l[]={0,102,179,204,128,153,230,255};
-				if (this->p_PARAMETERS->io.crt.rgb){
-					for (int i=0;i<(250+2)*(3*40*8+2);i++){
-						this->screenTexture[3*i]=crtbuffer_data[i>>1];
-						if ((bool)(i&1)) this->screenTexture[3*i]&=0x0F;
-						else this->screenTexture[3*i]=this->screenTexture[3*i]>>4;
-						// 0000 ABGR
-						if ((bool)(this->screenTexture[3*i]&0x08)){
-							this->screenTexture[3*i+2]=(this->screenTexture[3*i]&0x04)?0xFF:0;
-							this->screenTexture[3*i+1]=(this->screenTexture[3*i]&0x02)?0xFF:0;
-							this->screenTexture[3*i]=(this->screenTexture[3*i]&0x01)?0xFF:0;
-						}
-						else{
-							this->screenTexture[3*i]=0;
-							this->screenTexture[3*i+1]=0;
-							this->screenTexture[3*i+2]=0;
-						}
-						/*this->screenTexture[4*i+3]=(this->screenTexture[4*i]&0x08)?0xFF:0;
-						this->screenTexture[4*i+2]=(this->screenTexture[4*i]&0x04)?0xFF:0;
-						this->screenTexture[4*i+1]=(this->screenTexture[4*i]&0x02)?0xFF:0;
-						this->screenTexture[4*i]=(this->screenTexture[4*i]&0x01)?0xFF:0;*/
-					}
-				}
-				else{
-					for (int i=0;i<(250+2)*(3*40*8+2);i++){
-						this->screenTexture[3*i]=crtbuffer_data[i>>1];
-						if ((bool)(i&1)) this->screenTexture[3*i]&=0x0F;
-						else this->screenTexture[3*i]=this->screenTexture[3*i]>>4;
-						if ((bool)(this->screenTexture[3*i]&0x08)){
-							this->screenTexture[3*i]=l[this->screenTexture[3*i]&0x07];
-							this->screenTexture[3*i+1]=this->screenTexture[3*i];
-							this->screenTexture[3*i+2]=this->screenTexture[3*i];
-						}
-						else{
-							this->screenTexture[3*i]=0;
-							this->screenTexture[3*i+1]=0;
-							this->screenTexture[3*i+2]=0;
-						}
-						/*this->screenTexture[4*i+3]=(this->screenTexture[4*i]&0x08)?0xFF:0;
-						this->screenTexture[4*i]=l[this->screenTexture[4*i]&0x07];
-						this->screenTexture[4*i+1]=this->screenTexture[4*i];
-						this->screenTexture[4*i+2]=this->screenTexture[4*i];*/
-					}
-				}
-				/*glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,3*40*8+2,250+2,0, GL_RGB, GL_UNSIGNED_BYTE,this->screenTexture);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,GL_NEAREST);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);*/
-			auto now = std::chrono::steady_clock::now();
-			float dt=std::chrono::duration_cast<std::chrono::duration<float>>(now-this->lastScreenUpdate).count();
-			this->lastScreenUpdate=now;
-			
-			if (memcmp(this->screenTexture,this->screenTextureDisplay,sizeof(this->screenTexture))){
-				float alpha;
-				if (this->p_PARAMETERS->io.crt.decay<1e-14) alpha=0;
-				else alpha=std::exp(-3*dt/this->p_PARAMETERS->io.crt.decay);
-				
-				for (unsigned int i=0;i<sizeof(this->screenTexture)/sizeof(this->screenTexture[0]);i++){
-					this->screenTextureDisplay[i]=std::max((unsigned char)(((float)this->screenTextureDisplay[i])*alpha),this->screenTexture[i]);
-				}
-				glTexImage2D(GL_TEXTURE_2D,0,GL_RGB,3*40*8+2,250+2,0, GL_RGB, GL_UNSIGNED_BYTE,this->screenTextureDisplay);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			}
 		}
 };
 
