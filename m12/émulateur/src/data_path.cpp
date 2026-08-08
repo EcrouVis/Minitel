@@ -72,20 +72,31 @@ void setLocalDirectoryExe(){
 
 #if defined(unix) || defined(__unix__)
 void setupWorkingDirectory(){
-	const char* home = getenv("HOME");
 	std::filesystem::path wd;
-	if (home==NULL) wd=std::filesystem::path(FALLBACK_DATA_PATH);
+	const char* data = getenv("XDG_DATA_HOME");
+	if (data!=NULL){
+		wd=std::filesystem::path(data);
+			wd/=std::filesystem::path("M12");
+	}
 	else{
-		wd=std::filesystem::path(home);
-		wd/=std::filesystem::path(HOME_DATA_PATH);
+		const char* home = getenv("HOME");
+		if (home==NULL) exit(-1);//The POSIX specification requires the OS to set a value for $HOME
+		else{
+			wd=std::filesystem::path(home);
+			wd/=std::filesystem::path(".local/share/M12");
+		}
 	}
 	
 	std::filesystem::create_directories(std::filesystem::path(wd));
-	std::filesystem::copy(
-		std::filesystem::path(RO_DATA_PATH),
-		std::filesystem::path(wd),
-		std::filesystem::copy_options::skip_existing|std::filesystem::copy_options::recursive
-	);
+	
+	std::filesystem::path ro_path=std::filesystem::path("./../share/M12");
+	if (std::filesystem::exists(ro_path)&&std::filesystem::is_directory(ro_path)){
+		std::filesystem::copy(
+			ro_path,
+			std::filesystem::path(wd),
+			std::filesystem::copy_options::skip_existing|std::filesystem::copy_options::recursive
+		);
+	}
 	
 	std::filesystem::current_path(wd);
 }

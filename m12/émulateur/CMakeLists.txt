@@ -13,7 +13,7 @@ set(CMAKE_CXX_COMPILER gcc)
 set(CMAKE_C_STANDARD 17)
 set( CMAKE_C_COMPILER gcc)
 
-project(M12 VERSION 0.1.2.0 LANGUAGES CXX C)
+project(M12 VERSION 0.1.3.0 LANGUAGES CXX C)
 
 include(FetchContent)
 include(GNUInstallDirs)
