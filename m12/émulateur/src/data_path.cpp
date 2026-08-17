@@ -5,12 +5,14 @@
 #include <winsock2.h>
 //include winsock2 before windows to avoid issues
 #include <windows.h>
+#include <shlobj.h>
 #elif defined(__APPLE__) && defined(__MACH__)
 #include <mach-o/dyld.h>
 #elif defined(unix) || defined(__unix__)
 #include <stdlib.h>
 #include <unistd.h>
 #endif
+#include <cstdlib>
 
 #include "data_path.h"
 
@@ -86,18 +88,46 @@ void setupWorkingDirectory(){
 			wd/=std::filesystem::path(".local/share/M12");
 		}
 	}
-	
-	std::filesystem::create_directories(std::filesystem::path(wd));
-	
+	wd=wd.make_preferred();
+	std::filesystem::create_directories(wd);
+
+	//if appimage ensure that the included files are installed (Bz6 ROM + default charset)
+#ifdef M12_APPIMAGE
 	std::filesystem::path ro_path=std::filesystem::path("./../share/M12");
 	if (std::filesystem::exists(ro_path)&&std::filesystem::is_directory(ro_path)){
 		std::filesystem::copy(
 			ro_path,
-			std::filesystem::path(wd),
+			wd,
+			std::filesystem::copy_options::skip_existing|std::filesystem::copy_options::recursive
+		);
+	}
+#endif
+	
+	std::filesystem::current_path(wd);
+}
+#elif defined(_WIN32)
+void setupWorkingDirectory(){
+	std::filesystem::path wd;
+#ifdef M12_INSTALLED
+	TCHAR data[MAX_PATH];
+	if ( !SUCCEEDED( SHGetFolderPath( NULL, CSIDL_LOCAL_APPDATA, NULL, 0, data ) ) ) exit(-1);
+	wd=std::filesystem::path(data);
+	wd/=std::filesystem::path("M12");
+	wd=wd.make_preferred();
+	std::filesystem::create_directories(wd);
+	
+	std::filesystem::path ro_path=std::filesystem::path("./data");
+	if (std::filesystem::exists(ro_path)&&std::filesystem::is_directory(ro_path)){
+		std::filesystem::copy(
+			ro_path,
+			wd,
 			std::filesystem::copy_options::skip_existing|std::filesystem::copy_options::recursive
 		);
 	}
 	
+#else
+	wd=std::filesystem::path("./data");
+#endif
 	std::filesystem::current_path(wd);
 }
 #else

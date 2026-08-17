@@ -129,7 +129,7 @@ class CRTRenderer{
 					}
 				}
 			}
-			auto now = std::chrono::steady_clock::now();
+			std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();
 			float dt=std::chrono::duration_cast<std::chrono::duration<float>>(now-this->lastScreenUpdate).count();
 			this->lastScreenUpdate=now;
 			

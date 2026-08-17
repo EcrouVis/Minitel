@@ -41,6 +41,7 @@ constexpr int WEBSOCKET_DIN=32;
 constexpr int AUDIO_PHONE_LINE_ON=33;
 constexpr int AUDIO_PHONE_LINE_OFF=34;
 constexpr int PHONE_LINE_BUFFER=35;
+constexpr int CLOCK_UNRESPONSIVE=36;
 
 constexpr int EMU_ON=1;
 constexpr int EMU_OFF=2;

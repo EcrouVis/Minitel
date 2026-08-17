@@ -9,6 +9,9 @@
 #include "encoding.h"
 #include <mutex>
 #include <ixwebsocket/IXWebSocket.h>
+
+#include "thread_affinity.h"
+
 enum PhoneNumberState{
 	NOT_PHONE_NUMBER=0,
 	PHONE_NUMBER_ONGOING=1,
@@ -102,6 +105,10 @@ class RTCNetwork{
 					}
 				}
 			}
+		}
+		
+		void CLKTickIn9600Hz(){
+			if (this->ServiceLinked!=NULL) this->ServiceLinked->CLKTickIn9600Hz();
 		}
 		
 		void CLKTickIn600Hz(){
@@ -283,13 +290,15 @@ class RTCNetwork{
 
 class RTCServiceAudio: public RTCService{
 	public:
+		RTCServiceAudio (std::vector<unsigned char> num):phoneNumber(num){
+		}
+		
 		virtual enum PhoneNumberState isCalled(std::vector<unsigned char>* pPhoneNumber) override final {
-			constexpr unsigned char N[]={0,0,0,0};
-			if (pPhoneNumber->size()>sizeof(N)/sizeof(N[0])) return NOT_PHONE_NUMBER;
+			if (pPhoneNumber->size()>this->phoneNumber.size()) return NOT_PHONE_NUMBER;
 			for (size_t i=0;i<pPhoneNumber->size();i++){
-				if (N[i]!=(*pPhoneNumber)[i]) return NOT_PHONE_NUMBER;
+				if (this->phoneNumber[i]!=(*pPhoneNumber)[i]) return NOT_PHONE_NUMBER;
 			}
-			if (pPhoneNumber->size()==sizeof(N)/sizeof(N[0])) return PHONE_NUMBER_FINISHED;
+			if (pPhoneNumber->size()==this->phoneNumber.size()) return PHONE_NUMBER_FINISHED;
 			return PHONE_NUMBER_ONGOING;
 		}
 		
@@ -324,17 +333,21 @@ class RTCServiceAudio: public RTCService{
 		float sampleIn=0;
 		float sampleOut=0;
 		
+		std::vector<unsigned char> phoneNumber;
+		
 };
 
-class RTCServiceMinipavi: public RTCService{//TODO: make it more robust
+class RTCServiceWebsocket: public RTCService{//TODO: make it more robust
 	public:
+		RTCServiceWebsocket (std::vector<unsigned char> num, const char* url):phoneNumber(num),url(url){
+		}
+		
 		virtual enum PhoneNumberState isCalled(std::vector<unsigned char>* pPhoneNumber) override final {
-			constexpr unsigned char N[]={0,9,7,2,1,0,1,7,2,1};
-			if (pPhoneNumber->size()>sizeof(N)/sizeof(N[0])) return NOT_PHONE_NUMBER;
+			if (pPhoneNumber->size()>this->phoneNumber.size()) return NOT_PHONE_NUMBER;
 			for (size_t i=0;i<pPhoneNumber->size();i++){
-				if (N[i]!=(*pPhoneNumber)[i]) return NOT_PHONE_NUMBER;
+				if (this->phoneNumber[i]!=(*pPhoneNumber)[i]) return NOT_PHONE_NUMBER;
 			}
-			if (pPhoneNumber->size()==sizeof(N)/sizeof(N[0])) return PHONE_NUMBER_FINISHED;
+			if (pPhoneNumber->size()==this->phoneNumber.size()) return PHONE_NUMBER_FINISHED;
 			return PHONE_NUMBER_ONGOING;
 		}
 		
@@ -381,7 +394,7 @@ class RTCServiceMinipavi: public RTCService{//TODO: make it more robust
 		unsigned char Clk;
 		constexpr static unsigned char ClkDivMask75=0x7F;
 		constexpr static unsigned char ClkDivMask1200=0x07;
-		unsigned char RxState=0;
+		unsigned char RxState=10;
 		unsigned char RxBuf=0;
 		std::vector<unsigned char> qRx;
 		unsigned char TxState=0;
@@ -392,6 +405,9 @@ class RTCServiceMinipavi: public RTCService{//TODO: make it more robust
 		
 		ix::WebSocket webSocket;
 		std::mutex wsMutex;
+		
+		std::vector<unsigned char> phoneNumber;
+		const char* url;
 		
 		enum Const{
 			
@@ -477,7 +493,7 @@ class RTCServiceMinipavi: public RTCService{//TODO: make it more robust
 				std::queue<unsigned char> empty;
 				std::swap(qTx,empty);
 				this->TxState=0;
-				this->RxState=0;
+				this->RxState=10;
 			}
 		}
 		
@@ -485,19 +501,14 @@ class RTCServiceMinipavi: public RTCService{//TODO: make it more robust
 			this->phoneLineStateOut=line_v23_1200bps_1;
 			this->sendPhoneLine(this->phoneLineStateOut);
 			
-			this->webSocket.setUrl(
-#ifdef M12_USE_TLS
-			"wss://go.minipavi.fr:8181"
-#else
-			"ws://go.minipavi.fr:8182"
-#endif
-			);
+			this->webSocket.setUrl(this->url);
 			this->webSocket.setPingInterval(45);
 			this->webSocket.disablePerMessageDeflate();
 			this->webSocket.disableAutomaticReconnection();
 			this->webSocket.setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg){
 				switch (msg->type){
 					case ix::WebSocketMessageType::Error:
+						printf("%s\n",msg->errorInfo.reason.c_str());
 						break;
 					case ix::WebSocketMessageType::Open:
 						break;
@@ -513,7 +524,10 @@ class RTCServiceMinipavi: public RTCService{//TODO: make it more robust
 						break;
 				}
 			});
+			
+			resetCurrentThreadAffinity();//reset thread affinity before creating new threads / a bit ugly but works
 			this->webSocket.start();
+			setCurrentThreadAffinity(getCurrentCPU());
 		}
 };
 #endif

@@ -131,6 +131,7 @@ Transfert de numérotation téléphone (microcontrôleur -> clavier):
 	0x11 tonalité 8
 	0x13 tonalité 9
 
+	0x17 ?
 	0x19 attente de 1s
 
 	0x1D tonalité *
@@ -146,7 +147,7 @@ Status du téléphone (clavier -> microcontrôleur):
 	a: reset?
 	b: ligne occupée ou non utilisée? (1 tout le temps sauf quand il n'y a que le haut parleur ou quand le micro est désactivé / se met à 1 quand un autre appareil tente d'utiliser la ligne ou peut-être sous tension) - signal RPL? (relai de prise de ligne)
 	c: numérotation FV (fréquence vocale)/!DC (décimal) - bit MF/DEC
-	d: numérotation en cours? (appui sur une touche seulement: 1 sur une durée de 148ms sauf 0x19 avant de retourner à zéro)
+	d: numérotation en cours? (appui sur une touche seulement: 1 sur une durée de 148ms sauf 0x19 avant de retourner à zéro - 0x17 non testé)
 	e: courant dans la ligne téléphonique - signal DCL (détection de courant de ligne)
 	f: signal d'appel entrant (1 pendant 1.75s puis 0 pendant 6.75s répété autant de fois qu'il y a de sonneries soit 5 fois sur ma ligne téléphonique / d'après mes recherches, historiquement cela était 1.7s et 3.3s http://ylescop.free.fr/mrim/cours/RTC.pdf - et 9 fois d'affilé ?) - la sonnerie s'enclenche quand le signal passe à 1 et est arrêtée si la fin de la sonnerie à été atteinte ou bien le signal est repassé à 0
 	g: combiné téléphonique décroché?

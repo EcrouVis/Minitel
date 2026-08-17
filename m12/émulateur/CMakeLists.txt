@@ -7,13 +7,16 @@ set(CMAKE_COLOR_DIAGNOSTICS On)
 set(CMAKE_COLOR_MAKEFILE On)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake;${CMAKE_MODULE_PATH}")
 
-set(CXX_STANDARD_REQUIRED On)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED On)
+set(CMAKE_CXX_EXTENSIONS On)
 set(CMAKE_CXX_COMPILER gcc)
 set(CMAKE_C_STANDARD 17)
-set( CMAKE_C_COMPILER gcc)
+set(CMAKE_C_STANDARD_REQUIRED On)
+set(CMAKE_C_EXTENSIONS On)
+set(CMAKE_C_COMPILER gcc)
 
-project(M12 VERSION 0.1.3.0 LANGUAGES CXX C)
+project(M12 VERSION 0.1.4.0 LANGUAGES CXX C)
 
 include(FetchContent)
 include(GNUInstallDirs)
@@ -60,6 +63,12 @@ option(USE_SSE2 "Whether to use SSE2 for audio computation" On)
 option(USE_AVX2 "Whether to use AVX2 for audio computation" On)
 option(USE_EXISTING_IXWEBSOCKET_LIB "Use existing IXWebSocket library" Off)
 option(USE_EXISTING_GLFW_LIB "Use existing GLFW library" Off)
+if (LINUX)
+	option(APPIMAGE_BUILD "Build for an AppImage" On)
+endif()
+if (WIN32)
+	option(PORTABLE_BUILD "Build a portable executable" On)
+endif()
 
 
 
@@ -83,6 +92,20 @@ if (USE_DECOMP_TOOLS)
 	list(APPEND 
 		OPT_DEF
 			M12_USE_DECOMP_TOOLS
+	)
+endif()
+
+if (LINUX AND APPIMAGE_BUILD)
+	list(APPEND 
+		OPT_DEF
+			M12_APPIMAGE
+	)
+endif()
+
+if (WIN32 AND NOT PORTABLE_BUILD)
+	list(APPEND 
+		OPT_DEF
+			M12_INSTALLED
 	)
 endif()
 
@@ -251,6 +274,8 @@ if (WIN32)
 	list(APPEND 
 		OPT_LIB 
 			wicon
+			
+			dwmapi
 	)
 elseif(LINUX)
 	configure_file(src/desktop/app.appimage.desktop.in "src/desktop/${CMAKE_PROJECT_NAME}.desktop")
@@ -366,6 +391,11 @@ target_sources(imgui
 
 
 
+list(APPEND 
+	OPT_OPT
+		$<$<CONFIG:Release>:-flto>
+)
+
 target_compile_options(m12 PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers  ${OPT_OPT})
 
 target_link_libraries(m12
@@ -462,6 +492,7 @@ target_sources(m12
 		include/io/KeyboardInput.h
 		include/io/NotificationServer.h
 		include/io/PrinterOutput.h
+		include/io/AudioIO.h
 		
 		include/icon/M12_icon_square.png.h
 		
@@ -501,11 +532,26 @@ if(WIN32)
 		endforeach()
 	]])
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/TS9347/TS9347_Texture_Character_Set_Datasheet.bmp"
-		DESTINATION "ressources"
+		DESTINATION "data/ressources"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
-		DESTINATION "rom"
+		DESTINATION "data/rom"
 	)
+	
+	set(CPACK_GENERATOR ZIP NSIS)
+	
+	#NSIS specific
+	set(CPACK_NSIS_INSTALLED_ICON_NAME "${CMAKE_PROJECT_NAME}.exe")
+	set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+	set(CPACK_PACKAGE_INSTALL_DIRECTORY "${CMAKE_PROJECT_NAME}")
+	list(APPEND CPACK_NSIS_CREATE_ICONS_EXTRA "\
+CreateShortCut '$SMPROGRAMS\\\\$STARTMENU_FOLDER\\\\${CMAKE_PROJECT_NAME}.lnk' '$INSTDIR\\\\${CMAKE_PROJECT_NAME}.exe'\n\
+CreateShortCut '$DESKTOP\\\\${CMAKE_PROJECT_NAME}.lnk' '$INSTDIR\\\\${CMAKE_PROJECT_NAME}.exe'\
+	")
+	list(APPEND CPACK_NSIS_DELETE_ICONS_EXTRA "\
+Delete '$SMPROGRAMS\\\\$START_MENU\\\\${CMAKE_PROJECT_NAME}.lnk'\n\
+Delete '$DESKTOP\\\\${CMAKE_PROJECT_NAME}.lnk'\
+	")
 elseif(LINUX)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/icon/M12_icon_square.svg"
 		DESTINATION "usr/share/icons/hicolor/scalable/apps"
@@ -526,9 +572,13 @@ elseif(LINUX)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
 		DESTINATION "usr/share/M12/rom"
 	)
+	
+	set(CPACK_GENERATOR AppImage)
+	
 	set(CPACK_PACKAGE_ICON "${CMAKE_PROJECT_NAME}.svg")
 	set(CPACK_APPIMAGE_TOOL_EXECUTABLE /home/yves/appimagetool-x86_64.AppImage)
 endif()
 
 set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${CMAKE_PROJECT_VERSION}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_PACKAGE_VENDOR "")
 include(CPack)

@@ -399,33 +399,35 @@ void m80C32::PCONChange(){
 =============== SERIAL + TIMERS/COUNTERS ===============
 */
 void m80C32::CLKTickIn(){
+	constexpr unsigned char t2con_mask1=1<<(this->C_nT2&0x07);
+	constexpr unsigned char t2con_mask2=(1<<(this->C_nT2&0x07))|(1<<(this->RCLK&0x07))|(1<<(this->TCLK&0x07));
+	
 	this->fixedSerialClockTick();
 	
 	this->period++;
-	if ((bool)(this->period&0x01)) return;// f/2->state time
-	
-	unsigned char t2con=this->getSFRByteIn(this->T2CON);
-	constexpr unsigned char t2con_mask1=1<<(this->C_nT2&0x07);
-	constexpr unsigned char t2con_mask2=(1<<(this->C_nT2&0x07))|(1<<(this->RCLK&0x07))|(1<<(this->TCLK&0x07));
-	if ((t2con&t2con_mask1)==0&&(t2con&t2con_mask2)!=0) this->T2Tick();
-	
-	if (this->period<this->periodPerCycle) return;
-	this->period=0;
-	if ((t2con&t2con_mask2)==0) this->T2Tick();
-	unsigned char tmod=this->getSFRByteIn(this->TMOD);
-	if (!(bool)(tmod&(1<<this->C_T_0))) this->T0Tick();
-	if (!(bool)(tmod&(1<<this->C_T_1))) this->T1Tick();
-	
-	this->ResetCountdown();
-	if (this->reset_count!=0){
-		constexpr unsigned char pd_mask=1<<this->PD;
-		constexpr unsigned char idl_mask=1<<this->IDL;
-		unsigned char power_mode=this->getSFRByteIn(this->PCON);//&(pd_mask|idl_mask);
-		if (!(bool)(power_mode&(pd_mask|idl_mask))){
-			this->nextCycleALU();
-		}
-		if (this->i_cycle_n==0){
-			this->checkInterrupts();
+	if ((bool)(this->period&0x01)){// f/2->state time
+		unsigned char t2con=this->getSFRByteIn(this->T2CON);
+		if ((t2con&t2con_mask1)==0&&(t2con&t2con_mask2)!=0) this->T2Tick();
+	}
+	else if (this->period>=this->periodPerCycle){//avoid reloading this->period from memory (because of call to T2Tick()) -> branch faster but cause T2Tick() to be shifted a little in time (not noticeable because the emulation ~ cycle accurate and not period accurate)
+		this->period=0;
+		unsigned char t2con=this->getSFRByteIn(this->T2CON);
+		if ((t2con&t2con_mask2)==0) this->T2Tick();
+		unsigned char tmod=this->getSFRByteIn(this->TMOD);
+		if (!(bool)(tmod&(1<<this->C_T_0))) this->T0Tick();
+		if (!(bool)(tmod&(1<<this->C_T_1))) this->T1Tick();
+		
+		this->ResetCountdown();
+		if (this->reset_count!=0){
+			constexpr unsigned char pd_mask=1<<this->PD;
+			constexpr unsigned char idl_mask=1<<this->IDL;
+			unsigned char power_mode=this->getSFRByteIn(this->PCON);//&(pd_mask|idl_mask);
+			if (!(bool)(power_mode&(pd_mask|idl_mask))){
+				this->nextCycleALU();
+			}
+			if (this->i_cycle_n==0){
+				this->checkInterrupts();
+			}
 		}
 	}
 }

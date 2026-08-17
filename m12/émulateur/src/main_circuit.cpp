@@ -28,8 +28,6 @@
 #include "thread_affinity.h"
 
 void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* p_gState){
-	setCurrentThreadAffinity(getCurrentCPU());//pin this thread to a cpu core to improve performance by ~10% (help with data locality)
-	//TODO: configure the child threads to not inherit this thread affinity for linux (windows: no idea) -> websocket thread
 	
 	//create ic
 	SRAM_64k eram;
@@ -58,9 +56,18 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	SpeakerFilter spkf;
 	
 	RTCNetwork rtcn;
-	RTCServiceMinipavi rtcmp;
-	rtcn.subscribeService((RTCService*)&rtcmp);
-	RTCServiceAudio rtcsa;
+//TODO: TLS seems not to work with minipavi at the moment (Certificate fail)
+	RTCServiceWebsocket rtcsm(std::vector<unsigned char>{0,9,7,2,1,0,1,7,2,1},
+#if defined(M12_USE_TLS)
+			"ws://go.minipavi.fr:8182"//"wss://go.minipavi.fr:8181"
+#else
+			"ws://go.minipavi.fr:8182"
+#endif
+	);
+	rtcn.subscribeService((RTCService*)&rtcsm);
+	RTCServiceWebsocket rtcsh(std::vector<unsigned char>{0,9,7,2,5,2,7,2,5,2},"ws://mntl.joher.com:2018/?echo");
+	rtcn.subscribeService((RTCService*)&rtcsh);
+	RTCServiceAudio rtcsa(std::vector<unsigned char>{0,0,0,0});
 	rtcn.subscribeService((RTCService*)&rtcsa);
 	PhoneLineWire phoneLine;
 	PhoneLineBuffer plb;
@@ -557,10 +564,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		rtcn.CLKTickIn600Hz();
 	};
 	CLKs.subscribe600Hz(CLKTick600);
-	auto CLKTick9600=[&smn,&wt,&rtcmp](){
+	auto CLKTick9600=[&smn,&wt,&rtcn,&rtcsh](){
 		smn.CLKTickIn9600Hz();
 		wt.incrementTimer();
-		rtcmp.CLKTickIn9600Hz();
+		rtcn.CLKTickIn9600Hz();
 	};
 	CLKs.subscribe9600Hz(CLKTick9600);
 	
@@ -593,6 +600,11 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		modem.processRxInSample(sr);
 	};
 	CLKs.subscribeAudioSample(std::cref(CLKAudio));
+	CLKs.subscribeClockUnresponsive([p_mb_video](){
+		thread_message ms_p_notif;
+		ms_p_notif.cmd=CLOCK_UNRESPONSIVE;
+		p_mb_video->send(&ms_p_notif);
+	});
 	
 	
 	
@@ -683,6 +695,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	p_mb_video->send(&ms);
 	
 	//start the emulation
+	
+	setCurrentThreadAffinity(getCurrentCPU());//pin this thread to a cpu core to improve performance by ~10% (help with data locality)
 	
 	CLKs.start();
 	

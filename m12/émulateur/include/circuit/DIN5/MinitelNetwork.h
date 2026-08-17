@@ -8,6 +8,8 @@
 #include "circuit/DIN5/vdt.h"
 #include "encoding.h"
 
+#include "thread_affinity.h"
+
 class SimplifiedMinitelNetworkApp{
 	public:
 		virtual void CLKCallback(){}
@@ -1171,7 +1173,9 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 						break;
 				}
 			});
+			resetCurrentThreadAffinity();//reset thread affinity before creating new threads / a bit ugly but works
 			this->webSocket.start();
+			setCurrentThreadAffinity(getCurrentCPU());
 		}
 		void disconnect(){
 			//if (this->webSocket.getReadyState()==ix::ReadyState::Open||this->webSocket.getReadyState()==ix::ReadyState::Connecting) 

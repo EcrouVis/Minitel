@@ -1,7 +1,6 @@
 #ifndef CLOCKS_H
 #define CLOCKS_H
 #include <functional>
-#include <thread>
 #include <chrono>
 #include <mutex>
 #include <climits>
@@ -33,6 +32,9 @@ class Clocks{
 		void subscribeAudioSample(std::function<void(unsigned long)> f){
 			this->audioSample=f;
 		}
+		void subscribeClockUnresponsive(std::function<void(void)> f){
+			this->clockUnresponsive=f;
+		}
 		
 		void setAudioSampleRate(unsigned long sr){//cannot 
 			this->audio_sample_rate.store(sr,std::memory_order_release);
@@ -55,6 +57,9 @@ class Clocks{
 					this->audio_div_sync-=this->master_clock_rate;
 					this->audioSample(this->audio_sample_rate.load(std::memory_order_relaxed));
 					
+					this->checkMailbox();//check less often mailbox
+					if (this->stop) break;
+					
 					/*
 					because of wait_for there is a case where this->requestedSamples can underflow
 					ex: 
@@ -75,12 +80,11 @@ class Clocks{
 					*/
 					lock.lock();
 					this->requestedSamples--;
-					if (this->requestedSamples==0){
-						this->audioCV.wait_for(lock, std::chrono::milliseconds(500), [this](){return (bool)this->requestedSamples;});//requested samples
-						if (!(bool)this->requestedSamples) this->requestedSamples=1;
-						lock.unlock();//avoid blocking audio thread while checking mailbox
-						this->checkMailbox();//check less often mailbox
-						if (this->stop) return;
+					this->audioCV.wait_for(lock, std::chrono::milliseconds(500), [this](){return (bool)this->requestedSamples;});//requested samples
+					if (!(bool)this->requestedSamples){
+						this->requestedSamples=1;
+						lock.unlock();
+						this->clockUnresponsive();
 					}
 					else lock.unlock();
 				}
@@ -116,6 +120,7 @@ class Clocks{
 		std::function<void()> CLK9600=[](){};
 		std::function<void()> checkMailbox=[](){};
 		std::function<void(unsigned long)> audioSample=[](unsigned long sr){};
+		std::function<void()> clockUnresponsive=[](){};
 		
 		constexpr static unsigned long div9600_max=1536;
 		unsigned long div9600=this->div9600_max;

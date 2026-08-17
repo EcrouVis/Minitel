@@ -64,8 +64,8 @@ void TS9347wVRAM::CLKTickIn(){
 			this->n_frame=0;
 		}
 	}
-	unsigned short n_line=this->clk_frame>>7;
-	unsigned char pos_line=(this->clk_frame>>1)&0x3F;
+	short n_line=(this->clk_frame>>7)-62;
+	bool Plt40=((this->clk_frame>>1)&0x3F)<40;
 	
 	if (this->clk_frame==0x0A80){
 		if (!this->vsync_mask) this->STATUS.fetch_or(this->VSYNC_MASK,std::memory_order_relaxed);
@@ -78,8 +78,8 @@ void TS9347wVRAM::CLKTickIn(){
 		this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);//before cmd exec -> delay 0.5T
 	}
 	
-	if (n_line>=62){
-		switch ((unsigned char)(n_line-62)){
+	if (n_line>=0){
+		switch (n_line){
 			case 9:
 			case 19:
 			case 29:
@@ -105,7 +105,7 @@ void TS9347wVRAM::CLKTickIn(){
 			case 229:
 			case 239:
 			case 249:
-				if (pos_line<40){
+				if (Plt40){
 					//UDS LD
 					if((bool)(this->clk_frame&1)){
 						this->loadRowBuffer();
@@ -146,7 +146,7 @@ void TS9347wVRAM::CLKTickIn(){
 			case 220:
 			case 230:
 			case 240:
-				if (pos_line<40){
+				if (Plt40){
 					//UDS LD
 					if((bool)(this->clk_frame&1)){
 						this->loadRowBuffer();
@@ -161,7 +161,7 @@ void TS9347wVRAM::CLKTickIn(){
 				break;
 			default:
 				if((bool)(this->clk_frame&1)) this->executeCommand();
-				else if (pos_line<40){
+				else if (Plt40){
 					this->loadUDS();
 				}
 				break;
@@ -195,7 +195,7 @@ int TS9347wVRAM::getVideoIndex(const unsigned int line, const unsigned char colu
 	return (line+1)*(40*8*3+2)+1+column*((mode40)?8*3:6*2);
 }
 
-void TS9347wVRAM::setVideoOtputABGR(int index,unsigned char abgr){
+void TS9347wVRAM::setVideoOtputABGR(int index,unsigned char abgr){//TODO: modify to use RGBA2 (format: 2,2,2,2) opengl format to avoid conversions (but buffer is doubled in size)
 	if ((bool)(index&1)){
 		this->VIDEO_OUTPUT[index>>1]=(this->VIDEO_OUTPUT[index>>1]&0xF0)|(abgr&0x0F);
 	}

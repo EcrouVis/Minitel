@@ -3,5 +3,6 @@
 
 long setCurrentThreadAffinity(long i);
 long getCurrentCPU();
+long resetCurrentThreadAffinity();
 
 #endif
