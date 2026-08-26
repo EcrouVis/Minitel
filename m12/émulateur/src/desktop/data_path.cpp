@@ -1,9 +1,6 @@
 #include <limits.h>
 #include <filesystem>
-//TODO: rewrite / could be wrong for certain cases
 #if defined(_WIN32)
-#include <winsock2.h>
-//include winsock2 before windows to avoid issues
 #include <windows.h>
 #include <shlobj.h>
 #elif defined(__APPLE__) && defined(__MACH__)
@@ -14,7 +11,7 @@
 #endif
 #include <cstdlib>
 
-#include "data_path.h"
+#include "desktop/data_path.h"
 
 void setLocalDirectoryExe(){
 	std::filesystem::path exePath;

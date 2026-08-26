@@ -195,7 +195,7 @@ int TS9347wVRAM::getVideoIndex(const unsigned int line, const unsigned char colu
 	return (line+1)*(40*8*3+2)+1+column*((mode40)?8*3:6*2);
 }
 
-void TS9347wVRAM::setVideoOtputABGR(int index,unsigned char abgr){//TODO: modify to use RGBA2 (format: 2,2,2,2) opengl format to avoid conversions (but buffer is doubled in size)
+void TS9347wVRAM::setVideoOtputABGR(int index,unsigned char abgr){
 	if ((bool)(index&1)){
 		this->VIDEO_OUTPUT[index>>1]=(this->VIDEO_OUTPUT[index>>1]&0xF0)|(abgr&0x0F);
 	}

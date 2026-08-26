@@ -33,7 +33,7 @@ class AudioIO{
 		ma_device_config audioDeviceConfig;
 		ma_device audioDevice;
 		ma_device_config phoneLineDeviceConfig;
-		ma_device phoneLineDevice={0};//init memory -> ensure ma_device_state_uninitialized
+		
 		//shared data
 		Clocks* pCLKs=NULL;
 		SpeakerFilter* spkf=NULL;
@@ -42,7 +42,6 @@ class AudioIO{
 		PhoneLineBuffer* plb=NULL;
 		float samplesRemaining[UCHAR_MAX];
 		unsigned char samplesRemainingIndex;
-		unsigned long maxSamplesRemaining=1024;
 		
 		AudioIO(Parameters* p_PARAMETERS,NotificationServer* notif){
 			this->p_PARAMETERS=p_PARAMETERS;
@@ -97,7 +96,6 @@ class AudioIO{
 		}
 		~AudioIO(){
 			if (ma_device_get_state(&(this->audioDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->audioDevice));//uninit audio before stoping -> don't read deleted buffer
-			if (ma_device_get_state(&(this->phoneLineDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->phoneLineDevice));
 			
 			//wait emulator response
 			while (this->p_PARAMETERS->p_gState->minitelOn.load(std::memory_order_relaxed)){
@@ -116,7 +114,6 @@ class AudioIO{
 		
 		void initPhoneLine(){
 			if (ma_device_get_state(&(this->audioDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->audioDevice));
-			if (ma_device_get_state(&(this->phoneLineDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->phoneLineDevice));
 			
 			this->updateAudioDevices();
 			this->phoneLineDeviceConfig.capture.pDeviceID=NULL;
@@ -135,31 +132,30 @@ class AudioIO{
 			}
 			if (this->phoneLineDeviceConfig.capture.pDeviceID==NULL){
 				constexpr static char msg[]="Entrée audio non spécifiée.";
-				this->Notification->notify(msg,false,ImVec4(1,0.5,0,1));
+				this->Notification->notify(msg,ImVec4(1,0.5,0,1));
 			}
 			if (this->phoneLineDeviceConfig.playback.pDeviceID==NULL){
 				constexpr static char msg[]="Sortie audio non spécifiée.";
-				this->Notification->notify(msg,false,ImVec4(1,0.5,0,1));
+				this->Notification->notify(msg,ImVec4(1,0.5,0,1));
 			}
-			if (ma_device_init(NULL, &(this->phoneLineDeviceConfig), &(this->phoneLineDevice)) != MA_SUCCESS) {
+			if (ma_device_init(NULL, &(this->phoneLineDeviceConfig), &(this->audioDevice)) != MA_SUCCESS) {
 				constexpr static char msg[]="Erreur lors de l'initialisation du thread audio.";
-				this->Notification->notify(msg,false,ImVec4(1,0,0,1));
+				this->Notification->notify(msg,ImVec4(1,0,0,1));
 				this->uninitPhoneLine();
 				return;
 			}
-			if (ma_device_start(&(this->phoneLineDevice)) != MA_SUCCESS) {
+			if (ma_device_start(&(this->audioDevice)) != MA_SUCCESS) {
 				constexpr static char msg[]="Erreur lors de l'activation du thread audio.";
-				this->Notification->notify(msg,false,ImVec4(1,0,0,1));
+				this->Notification->notify(msg,ImVec4(1,0,0,1));
 				this->uninitPhoneLine();
 				return;
 			}
 			this->phoneOutput=true;
-			this->pCLKs->setAudioSampleRate(this->phoneLineDevice.sampleRate);
-			printf("Sync emulator to phone line sample rate @%iHz\n",this->phoneLineDevice.sampleRate);
+			this->pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
+			printf("Sync emulator to phone line sample rate @%iHz\n",this->audioDevice.sampleRate);
 		}
 		void uninitPhoneLine(){
 			this->phoneOutput=false;
-			if (ma_device_get_state(&(this->phoneLineDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->phoneLineDevice));
 			if (ma_device_get_state(&(this->audioDevice))!=ma_device_state_uninitialized) ma_device_uninit(&(this->audioDevice));
 			
 			if (ma_device_init(NULL, &this->audioDeviceConfig, &(this->audioDevice)) != MA_SUCCESS) {
@@ -194,7 +190,7 @@ class AudioIO{
 				}
 			}
 			
-			bool audioPhoneLineUsed=(ma_device_get_state(&(this->phoneLineDevice))!=ma_device_state_uninitialized);
+			bool audioPhoneLineUsed=(ma_device_get_state(&(this->audioDevice))!=ma_device_state_uninitialized)&&this->phoneOutput;
 			if (audioPhoneLineUsed) ImGui::BeginDisabled();
 				ImGui::Text("Entrée audio:");
 				ImGui::Indent();
@@ -229,13 +225,16 @@ class AudioIO{
 		}
 		
 		void BufferWidget(){
-			if (ma_device_get_state(&(this->audioDevice))==ma_device_state_started){
+			unsigned long maxSamples=0;
+			if (ma_device_get_state(&(this->audioDevice))==ma_device_state_started&&!this->phoneOutput){
 				ImGui::Text("Tampon audio (échantillons restants après lecture):");
+				maxSamples=this->ab->bufferLength;
 			}
-			if (ma_device_get_state(&(this->phoneLineDevice))==ma_device_state_started){
+			if (ma_device_get_state(&(this->audioDevice))==ma_device_state_started&&this->phoneOutput){
 				ImGui::Text("Tampon ligne télphonique (échantillons restants après lecture):");
+				maxSamples=this->plb->bufferLength;
 			}
-			ImGui::PlotLines("##audio_buffer", this->samplesRemaining, sizeof(this->samplesRemaining)/sizeof(this->samplesRemaining[0]),0,NULL,0,(float)this->maxSamplesRemaining, ImVec2(-1, 80.0f));
+			ImGui::PlotLines("##audio_buffer", this->samplesRemaining, sizeof(this->samplesRemaining)/sizeof(this->samplesRemaining[0]),0,NULL,0,(float)maxSamples, ImVec2(-1, 80.0f));
 		}
 	private:
 		static void audio_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){//playback
@@ -246,7 +245,7 @@ class AudioIO{
 			}
 			
 			if (AIO->pCLKs!=NULL){
-				AIO->pCLKs->requestSamples(frameCount,AIO->maxSamplesRemaining);
+				AIO->pCLKs->requestSamples(frameCount,AIO->ab->bufferLength);
 			}
 		}
 		static void phone_line_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){//duplex
@@ -257,7 +256,7 @@ class AudioIO{
 			}
 			
 			if (AIO->pCLKs!=NULL){
-				AIO->pCLKs->requestSamples(frameCount,AIO->maxSamplesRemaining);
+				AIO->pCLKs->requestSamples(frameCount,AIO->plb->bufferLength);
 			}
 		}
 };

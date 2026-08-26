@@ -1,13 +1,13 @@
+//include first to avoid issues with winsock2.h and windows.h
+#include <ixwebsocket/IXNetSystem.h>
+
 #include <thread>
 #include "m12_threads.h"
 #include <stdlib.h>
 #include <cstdio>
 #include <locale.h>
 
-#include <ixwebsocket/IXNetSystem.h>
-
-//after because winsock2 should be include before windows
-#include "data_path.h"
+#include "desktop/data_path.h"
 
 /*extern "C" {
     __declspec(dllexport) unsigned long NvOptimusEnablement = 1;

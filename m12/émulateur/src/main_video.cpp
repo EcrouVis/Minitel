@@ -24,14 +24,7 @@
 #include "glad/glad.h"
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
-#ifdef _WIN32
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include "GLFW/glfw3native.h"
-#include <dwmapi.h>
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
-#endif
-#endif
+#include "desktop/window_creation.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -64,7 +57,7 @@
 
 #include "miniaudio/miniaudio.h"
 
-#include "data_path.h"
+#include "desktop/data_path.h"
 #include "encoding.h"
 
 
@@ -121,7 +114,8 @@ class M12Window{
 					const char* e=cJSON_GetErrorPtr();
 					if (e!=NULL){
 						printf("Error while parsing config.json before: %s\n",e);
-						this->Notification.notify(5,ImVec4(1,0,0,1));
+						constexpr char msg[]="config.json est malformé, chargement des parmètres par défaut";
+						this->Notification.notify(msg,ImVec4(1,0,0,1));
 					}
 				}
 				else{
@@ -254,6 +248,7 @@ class M12Window{
 			//glfw
 			glfwSetErrorCallback(this->error_callback);
 		 
+			LinuxInitHintBackend();
 			if (!glfwInit())
 				exit(EXIT_FAILURE);
 		 
@@ -275,13 +270,7 @@ class M12Window{
 				glfwTerminate();
 				exit(EXIT_FAILURE);
 			}
-#ifdef _WIN32
-			//black titlebar for windows
-			//DwmSetWindowAttribute defined since Windows Vista
-			BOOL USE_DARK_MODE = true;
-			BOOL SET_IMMERSIVE_DARK_MODE_SUCCESS = SUCCEEDED(DwmSetWindowAttribute(glfwGetWin32Window (this->window), DWMWA_USE_IMMERSIVE_DARK_MODE,&USE_DARK_MODE, sizeof(USE_DARK_MODE)));
-			if (!SET_IMMERSIVE_DARK_MODE_SUCCESS) printf("Dark mode titlebar failed");
-#endif
+			WindowsDarkTitleBar(this->window);
 			
 			GLFWimage images[1]; 
 			images[0].pixels = stbi_load_from_memory(M12_icon_square_png,sizeof(M12_icon_square_png), &images[0].width, &images[0].height, 0, 4); 
@@ -315,7 +304,8 @@ class M12Window{
 			
 			this->p_CRTout=new CRTRenderer(this->window,&(this->PARAMETERS));
 			
-			this->Notification.notify(4,ImVec4(0,1,1,1));
+			constexpr char msg[]="Appuyez sur F1 pour faire apparaitre le menu";
+			this->Notification.notify(msg,ImVec4(0,1,1,1));
 			
 			this->keyboardIndicator.Init();
 			
@@ -657,24 +647,25 @@ class M12Window{
 							this->keyboardIndicator.setKeyboard((Keyboard*)ms.p);
 							this->keyboardInput.setKeyboard((Keyboard*)ms.p);
 							break;
-						case NOTIFICATION:
-							this->Notification.notify((const char*)ms.p,true);
-							//imgui_notify((const char*)ms.p,true);
-							//fprintf(stdout,"notification from thread\n");
-							break;
 						case NOTIFICATION_BUZZER:
-							if (this->PARAMETERS.io.buzzer.notify) this->Notification.notify(0,ImVec4(1,0.5,0,1));
+						{
+							constexpr char msg[]="<Buzzer>";
+							if (this->PARAMETERS.io.buzzer.notify) this->Notification.notify(msg,ImVec4(1,0.5,0,1));
 							break;
+						}
 						case NOTIFICATION_REBOOT:
-							this->Notification.notify(1,ImVec4(0,1,1,1));
+						{
+							constexpr char msg[]="Redémarrage du minitel";
+							this->Notification.notify(msg,ImVec4(0,1,1,1));
 							break;
-						case NOTIFICATION_RED:this->Notification.notify((const char*)ms.p,true,ImVec4(1,0,0,1));break;
-						case NOTIFICATION_GREEN:this->Notification.notify((const char*)ms.p,true,ImVec4(0,1,0,1));break;
-						case NOTIFICATION_BLUE:this->Notification.notify((const char*)ms.p,true,ImVec4(0,0,1,1));break;
-						case NOTIFICATION_ORANGE:this->Notification.notify((const char*)ms.p,true,ImVec4(1,0.5,0,1));break;
-						case NOTIFICATION_YELLOW:this->Notification.notify((const char*)ms.p,true,ImVec4(1,1,0,1));break;
-						case NOTIFICATION_CYAN:this->Notification.notify((const char*)ms.p,true,ImVec4(0,1,1,1));break;
-						case NOTIFICATION_PURPLE:this->Notification.notify((const char*)ms.p,true,ImVec4(1,0,1,1));break;
+						}
+						case NOTIFICATION_RED:this->Notification.notify((const char*)ms.p,ImVec4(1,0,0,1));free(ms.p);break;
+						case NOTIFICATION_GREEN:this->Notification.notify((const char*)ms.p,ImVec4(0,1,0,1));free(ms.p);break;
+						case NOTIFICATION_BLUE:this->Notification.notify((const char*)ms.p,ImVec4(0,0,1,1));free(ms.p);break;
+						case NOTIFICATION_ORANGE:this->Notification.notify((const char*)ms.p,ImVec4(1,0.5,0,1));free(ms.p);break;
+						case NOTIFICATION_YELLOW:this->Notification.notify((const char*)ms.p,ImVec4(1,1,0,1));free(ms.p);break;
+						case NOTIFICATION_CYAN:this->Notification.notify((const char*)ms.p,ImVec4(0,1,1,1));free(ms.p);break;
+						case NOTIFICATION_PURPLE:this->Notification.notify((const char*)ms.p,ImVec4(1,0,1,1));free(ms.p);break;
 						case PRINT_FINISHED:
 							if (this->PARAMETERS.io.peri.printer.last_print!=NULL){
 								free(this->PARAMETERS.io.peri.printer.last_print);
@@ -725,7 +716,7 @@ class M12Window{
 						case CLOCK_UNRESPONSIVE:
 							if (this->AIO->phoneOutput){
 								this->AIO->uninitPhoneLine();
-								this->Notification.notify("La sortie audio n'a pas répondu à temps.\nDésactivation forcée de l'interface audio.",false,ImVec4(1,0,0,1));
+								this->Notification.notify("La sortie audio n'a pas répondu à temps.\nDésactivation forcée de l'interface audio.",ImVec4(1,0,0,1));
 							}
 							break;
 						default:
@@ -774,10 +765,10 @@ class M12Window{
 			if (this->PARAMETERS.debug.eram.mem!=NULL&&this->PARAMETERS.debug.eram.show) memoryWindow("RAM externe",&(this->PARAMETERS.debug.eram));
 			if (this->PARAMETERS.debug.erom.mem!=NULL&&this->PARAMETERS.debug.erom.show) memoryWindow("ROM externe",&(this->PARAMETERS.debug.erom));
 			if (this->PARAMETERS.debug.iram.mem!=NULL&&this->PARAMETERS.debug.iram.show) memoryWindow("RAM interne",&(this->PARAMETERS.debug.iram));
-			if (this->PARAMETERS.debug.sfr.show) sfr80C32Window(&(this->PARAMETERS.debug.sfr));
+			if (this->PARAMETERS.debug.sfr.ACC!=NULL&&this->PARAMETERS.debug.sfr.show) sfr80C32Window(&(this->PARAMETERS.debug.sfr));
 			if (this->PARAMETERS.debug.vram.mem!=NULL&&this->PARAMETERS.debug.vram.show) memoryWindow("VRAM",&(this->PARAMETERS.debug.vram));
-			if (this->PARAMETERS.debug.vreg.show) regTS9347Window(&(this->PARAMETERS.debug.vreg));
-			if (this->PARAMETERS.debug.mreg.show) regTS7514Window(&(this->PARAMETERS.debug.mreg));
+			if (this->PARAMETERS.debug.vreg.STATUS!=NULL&&this->PARAMETERS.debug.vreg.show) regTS9347Window(&(this->PARAMETERS.debug.vreg));
+			if (this->PARAMETERS.debug.mreg.RPROG!=NULL&&this->PARAMETERS.debug.mreg.show) regTS7514Window(&(this->PARAMETERS.debug.mreg));
 			this->Notification.notification_window();
 			if ((!this->PARAMETERS.io.keyboard.auto_hide_indicator)||this->keyboardIndicator.isSignaling()) this->keyboardIndicator.window();
 			if (this->PARAMETERS.io.keyboard.show_teletel_keys){
@@ -793,6 +784,7 @@ class M12Window{
 				this->keyboardInput.KeyboardAzertyWindow();
 			}
 			this->menuPopup();
+			//TODO: pause emulation triggers?
 			
 			//render frame emulator
 			this->p_CRTout->render();
@@ -835,6 +827,12 @@ class M12Window{
 						this->PARAMETERS.io.keyboard.azerty_keys_window_pos[1]=io.MousePos.y;
 					}
 				}
+				ImGui::SeparatorText("Emulateur");
+				ImGui::PushStyleColor(ImGuiCol_Button,ImVec4(0.8,0,0,1));
+				ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(1,0,0,1));
+				ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(1,0,0,1));
+				if (ImGui::Button("Quitter",ImVec2(-1,0))) glfwSetWindowShouldClose(this->window, GLFW_TRUE);
+				ImGui::PopStyleColor(3);
 				ImGui::EndPopup();
 			}
 		}
@@ -1236,7 +1234,7 @@ class M12Window{
 					ImGui::SameLine();
 					if (ImGui::Button("Copier")){
 						glfwSetClipboardString(this->window,std::filesystem::current_path().string().c_str());
-						this->Notification.notify("Texte copié dans le presse-papier",false,ImVec4(0,1,1,1));
+						this->Notification.notify("Texte copié dans le presse-papier",ImVec4(0,1,1,1));
 					}
 					ImGui::Unindent();
 					
@@ -1309,7 +1307,8 @@ class M12Window{
 			char* notif=(char*)malloc(sizeof(screenshot)+strlen(path.string().c_str())+1);
 			strcpy(notif,screenshot);
 			strcat(notif,path.string().c_str());
-			this->Notification.notify(notif,true,ImVec4(0,1,1,1));
+			this->Notification.notify(notif,ImVec4(0,1,1,1));
+			free(notif);
 			
 			//free(path);
 		}
@@ -1324,7 +1323,7 @@ class M12Window{
 			unsigned char *data = stbi_load(cs, &width, &height, &nrChannels, 1);
 			//free(path);
 			if (data==NULL){
-				this->Notification.notify("La texture pour l'affichage vidéo n'a pas chargé correctement.",false,ImVec4(1,0,0,1));
+				this->Notification.notify("La texture pour l'affichage vidéo n'a pas chargé correctement.",ImVec4(1,0,0,1));
 				this->PARAMETERS.io.crt.error_loading_texture=true;
 			}
 			else{
@@ -1332,7 +1331,7 @@ class M12Window{
 				int nW=width/8;
 				int nH=height/10;
 				int n=288;
-				unsigned char d[n*10]={0};
+				unsigned char d[288*10]={0};
 				if ((nW*nH)<n) n=nW*nH;
 				if (nH>nW){
 					for (int i=0;i<n;i++){//char i

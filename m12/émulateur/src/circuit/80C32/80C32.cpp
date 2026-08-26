@@ -89,49 +89,49 @@ unsigned char m80C32::getRAMByte(unsigned char address){
 
 unsigned char m80C32::getSFRByteOut(unsigned char address){
 	/*switch (address){
-		case this->P0:
+		case P0:
 			return this->PX_out[0];
-		case this->P1:
+		case P1:
 			return this->PX_out[1];
-		case this->P2:
+		case P2:
 			return this->PX_out[2];
-		case this->P3:
+		case P3:
 			return this->PX_out[3];
-		case this->ACC:
-		case this->IE:
-		case this->IP:
-		case this->PCON:
-		case this->SBUF:
-		case this->B:
-		case this->DPH:
-		case this->DPL:
-		case this->PSW:
-		case this->RCAP2H:
-		case this->RCAP2L:
-		case this->SCON:
-		case this->SP:
-		case this->TCON:
-		case this->T2CON:
-		case this->TH0:
-		case this->TH1:
-		case this->TH2:
-		case this->TL0:
-		case this->TL1:
-		case this->TL2:
-		case this->TMOD:
+		case ACC:
+		case IE:
+		case IP:
+		case PCON:
+		case SBUF:
+		case B:
+		case DPH:
+		case DPL:
+		case PSW:
+		case RCAP2H:
+		case RCAP2L:
+		case SCON:
+		case SP:
+		case TCON:
+		case T2CON:
+		case TH0:
+		case TH1:
+		case TH2:
+		case TL0:
+		case TL1:
+		case TL2:
+		case TMOD:
 			return this->SFR[address&0x7F].load(std::memory_order_relaxed);
 		default:
 			//printf("read sfr out %02X\n",address);
 			return 0xFF;
 	}*/
 	switch (address){
-		case this->P0:
+		case P0:
 			return this->PX_out[0];
-		case this->P1:
+		case P1:
 			return this->PX_out[1];
-		case this->P2:
+		case P2:
 			return this->PX_out[2];
-		case this->P3:
+		case P3:
 			return this->PX_out[3];
 		default:
 			return this->SFR[address&0x7F].load(std::memory_order_relaxed);
@@ -150,66 +150,66 @@ void m80C32::setRAMByte(unsigned char address, unsigned char d){
 }
 void m80C32::setSFRByte(unsigned char address, unsigned char d){
 	switch (address){
-		case this->ACC:
+		case ACC:
 			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
 			this->setACCParity();
 			break;
-		case this->IE:
-		case this->IP:
+		case IE:
+		case IP:
 			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
 			this->interrupt_change=true;
 			break;
-		case this->P0:
+		case P0:
 			this->PX_out[0]=d;
 			if ((this->getSFRByteIn(address)^d)!=0){
 				this->sendP0(d);
 			}
 			break;
-		case this->P1:
+		case P1:
 			this->PX_out[1]=d;
 			if ((this->getSFRByteIn(address)^d)!=0){
 				this->sendP1(d);
 			}
 			break;
-		case this->P2:
+		case P2:
 			this->PX_out[2]=d;
 			if ((this->getSFRByteIn(address)^d)!=0){
 				this->sendP2(d);
 			}
 			break;
-		case this->P3:
+		case P3:
 			this->PX_out[3]=d;
 			d=d&this->P3_out_alt;
 			if ((this->getSFRByteIn(address)^d)!=0){
 				this->sendP3(d);
 			}
 			break;
-		case this->PCON:
+		case PCON:
 			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
 			this->PCONChange();
 			break;
-		case this->SBUF:
+		case SBUF:
 			//printf("SBUF %02X\n",d);
 			this->SBUF_out=d;
 			this->TEN=true;
 			break;
-		case this->B:
-		case this->DPH:
-		case this->DPL:
-		case this->PSW:
-		case this->RCAP2H:
-		case this->RCAP2L:
-		case this->SCON:
-		case this->SP:
-		case this->TCON:
-		case this->T2CON:
-		case this->TH0:
-		case this->TH1:
-		case this->TH2:
-		case this->TL0:
-		case this->TL1:
-		case this->TL2:
-		case this->TMOD:
+		case B:
+		case DPH:
+		case DPL:
+		case PSW:
+		case RCAP2H:
+		case RCAP2L:
+		case SCON:
+		case SP:
+		case TCON:
+		case T2CON:
+		case TH0:
+		case TH1:
+		case TH2:
+		case TL0:
+		case TL1:
+		case TL2:
+		case TMOD:
 			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
 			break;
 		default:
@@ -399,8 +399,8 @@ void m80C32::PCONChange(){
 =============== SERIAL + TIMERS/COUNTERS ===============
 */
 void m80C32::CLKTickIn(){
-	constexpr unsigned char t2con_mask1=1<<(this->C_nT2&0x07);
-	constexpr unsigned char t2con_mask2=(1<<(this->C_nT2&0x07))|(1<<(this->RCLK&0x07))|(1<<(this->TCLK&0x07));
+	constexpr unsigned char t2con_mask1=1<<(C_nT2&0x07);
+	constexpr unsigned char t2con_mask2=(1<<(C_nT2&0x07))|(1<<(RCLK&0x07))|(1<<(TCLK&0x07));
 	
 	this->fixedSerialClockTick();
 	
@@ -419,8 +419,8 @@ void m80C32::CLKTickIn(){
 		
 		this->ResetCountdown();
 		if (this->reset_count!=0){
-			constexpr unsigned char pd_mask=1<<this->PD;
-			constexpr unsigned char idl_mask=1<<this->IDL;
+			constexpr unsigned char pd_mask=1<<PD;
+			constexpr unsigned char idl_mask=1<<IDL;
 			unsigned char power_mode=this->getSFRByteIn(this->PCON);//&(pd_mask|idl_mask);
 			if (!(bool)(power_mode&(pd_mask|idl_mask))){
 				this->nextCycleALU();

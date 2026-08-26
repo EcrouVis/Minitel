@@ -5,6 +5,14 @@
 #include <mutex>
 #include <climits>
 #include <condition_variable>
+
+#if defined(__GNUC__)||defined(__clang__)
+#define M12_LIKELY(x) __builtin_expect(!!(x), 1)
+#define M12_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#else
+#define M12_LIKELY(x) x
+#define M12_UNLIKELY(x) x
+#endif
 class Clocks{
 	public:
 		void setPause(bool b){
@@ -53,12 +61,9 @@ class Clocks{
 			while (true){
 				//sync to audio
 				this->audio_div_sync+=this->audio_sample_rate.load(std::memory_order_relaxed);
-				if (this->audio_div_sync>=this->master_clock_rate){
+				if (M12_UNLIKELY(this->audio_div_sync>=this->master_clock_rate)){
 					this->audio_div_sync-=this->master_clock_rate;
 					this->audioSample(this->audio_sample_rate.load(std::memory_order_relaxed));
-					
-					this->checkMailbox();//check less often mailbox
-					if (this->stop) break;
 					
 					/*
 					because of wait_for there is a case where this->requestedSamples can underflow
@@ -87,12 +92,15 @@ class Clocks{
 						this->clockUnresponsive();
 					}
 					else lock.unlock();
+					
+					this->checkMailbox();//check less often mailbox
+					if (M12_UNLIKELY(this->stop)) break;
 				}
 				
-				if (!this->pause){
+				if (M12_LIKELY(!this->pause)){
 					this->CLK14745600();
 					
-					if (!(bool)--this->div9600){//test if not 0 slightly more efficient than testing if greater than div9600_max (use TEST instead of CMP)
+					if (M12_UNLIKELY(!(bool)--this->div9600)){//test if not 0 slightly more efficient than testing if greater than div9600_max (use TEST instead of CMP)
 						this->div9600=this->div9600_max;
 						this->CLK9600();
 						

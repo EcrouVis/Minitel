@@ -1,3 +1,4 @@
 build/
 install/
 _CPack_Packages/
+out/

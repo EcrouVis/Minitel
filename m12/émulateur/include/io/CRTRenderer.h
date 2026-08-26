@@ -93,7 +93,7 @@ class CRTRenderer{
 			static unsigned char crtbuffer_data[VIDEO_FRAME_SIZE];
 			this->p_buffer->getVideoFrame(crtbuffer_data);
 			glBindTexture(GL_TEXTURE_2D,this->TextureID);
-			const unsigned char l[]={0,102,179,204,128,153,230,255};
+			constexpr unsigned char l[]={0,102,179,204,128,153,230,255};
 			if (this->p_PARAMETERS->io.crt.rgb){
 				for (int i=0;i<(250+2)*(3*40*8+2);i++){
 					this->screenTexture[3*i]=crtbuffer_data[i>>1];

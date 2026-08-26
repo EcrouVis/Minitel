@@ -5,18 +5,18 @@
 
 class stackMonitor{
 	public:
-		const unsigned char UNDEFINED_DATA=0;
+		static const unsigned char UNDEFINED_DATA=0;
 		
-		const unsigned char ADDRESS_LOW=1;
-		const unsigned char ADDRESS_HIGH=2;
-		const unsigned char MASK_DATA_USAGE=0x0F;
+		static const unsigned char ADDRESS_LOW=1;
+		static const unsigned char ADDRESS_HIGH=2;
+		static const unsigned char MASK_DATA_USAGE=0x0F;
 		
-		const unsigned char RETURN_ADDRESS=1<<4;
-		const unsigned char USER_DATA_WRITE=2<<4;
-		const unsigned char USER_DATA_PUSH=3<<4;
-		const unsigned char MASK_DATA_ORIGIN=0x70;
+		static const unsigned char RETURN_ADDRESS=1<<4;
+		static const unsigned char USER_DATA_WRITE=2<<4;
+		static const unsigned char USER_DATA_PUSH=3<<4;
+		static const unsigned char MASK_DATA_ORIGIN=0x70;
 		
-		const unsigned char OLD_DATA=0x80;
+		static const unsigned char OLD_DATA=0x80;
 		
 		std::function<void(void)> SPManualyModified=[](){};
 		std::function<void(void)> stackPOPed=[](){};

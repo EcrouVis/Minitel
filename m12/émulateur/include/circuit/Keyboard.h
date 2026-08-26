@@ -396,62 +396,29 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 					case 0x3B:this->LED_POWER.store(LED_BLINK_SLOW,std::memory_order_release);printf("blink on/off led slow (guess)\n");break;
 					
 					case 0x41:
-						//printf("set speaker volume 1\n");
-						this->speaker_volume=0;
-						break;
 					case 0x43:
-						//printf("set speaker volume 2\n");
-						this->speaker_volume=1;
-						break;
 					case 0x45:
-						//printf("set speaker volume 3\n");
-						this->speaker_volume=2;
-						break;
 					case 0x47:
-						//printf("set speaker volume 4\n");
-						this->speaker_volume=3;
+						//printf("set speaker volume %u\n",(this->cmd_p2>>1)&0x03+1);
+						this->speaker_volume=(this->cmd_p2>>1)&0x03;
 						break;
+						
 					case 0x49:
-						//printf("set ringtone volume 1\n");
-						this->ringtone_volume=0;
-						break;
 					case 0x4B:
-						//printf("set ringtone volume 2\n");
-						this->ringtone_volume=1;
-						break;
 					case 0x4D:
-						//printf("set ringtone volume 3\n");
-						this->ringtone_volume=2;
-						break;
 					case 0x4F:
-						//printf("set ringtone volume 4\n");
-						this->ringtone_volume=3;
+						//printf("set ringtone volume %u\n",(this->cmd_p2>>1)&0x03+1);
+						this->ringtone_volume=(this->cmd_p2>>1)&0x03;
 						break;
 					
 					case 0x81:
-						//printf("set ringtone 1\n");
-						this->stopRingtone();
-						this->ringtone=0;
-						break;
 					case 0x83:
-						//printf("set ringtone 2\n");
-						this->stopRingtone();
-						this->ringtone=1;
-						break;
 					case 0x85:
-						//printf("set ringtone 3\n");
-						this->stopRingtone();
-						this->ringtone=2;
-						break;
 					case 0x87:
-						//printf("set ringtone 4\n");
-						this->stopRingtone();
-						this->ringtone=3;
-						break;
 					case 0x89:
-						//printf("set ringtone 5\n");
+						//printf("set ringtone %u\n",(this->cmd_p2>>1)&0x07+1);
 						this->stopRingtone();
-						this->ringtone=4;
+						this->ringtone=(this->cmd_p2>>1)&0x07;
 						break;
 					case 0x8B:
 						//printf("play ringtone\n");
@@ -463,7 +430,7 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 				}
 			}
 			else if (!(bool)(this->cmd_p2&0xE0)){//tonalités
-				const char tone[16]={'0','1','2','3','4','5','6','7','8','9','?','?','-','?','*','#'};
+				const char tone[16]={'0','1','2','3','4','5','6','7','8','9','?','%','-','?','*','#'};//TODO: unknown tone 11
 				printf("DTMF tone %c\n",tone[(this->cmd_p2>>1)&0x0F]);
 				DTMF_queue.push((this->cmd_p2>>1)&0x0F);
 				

@@ -8,7 +8,7 @@
 #include "circuit/DIN5/vdt.h"
 #include "encoding.h"
 
-#include "thread_affinity.h"
+#include "desktop/thread_affinity.h"
 
 class SimplifiedMinitelNetworkApp{
 	public:
@@ -57,9 +57,9 @@ class SimplifiedMinitelNetwork{// ! slave process not implemented
 				this->serial_clk=0;
 				this->SerialClockTick();
 			}
-			for (SimplifiedMinitelNetworkApp* app: this->Apps){
+			/*for (SimplifiedMinitelNetworkApp* app: this->Apps){
 				app->CLKCallback();
-			}
+			}*/
 			if (this->AppSelected==NULL){
 				for (SimplifiedMinitelNetworkApp* app: this->Apps){
 					if(!app->getPTout()){
@@ -69,6 +69,7 @@ class SimplifiedMinitelNetwork{// ! slave process not implemented
 					}
 				}
 			}
+			else this->AppSelected->CLKCallback();
 			
 			if (this->AppSelected!=NULL&&this->AppSelected->getPTout()){
 				this->AppSelected=NULL;
@@ -242,30 +243,30 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			constexpr unsigned short P=0b0110100110010110;
 			
 			switch (this->currentState){
-				case this->RESTING:
+				case RESTING:
 					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 					this->RESTINGReceiveCMD(d);
 					break;
-				case this->INIT_MODULE:
+				case INIT_MODULE:
 					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 					this->INIT_MODULEReceiveCMD(d);
 					break;
-				case this->PARAMETERS:
+				case PARAMETERS:
 					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 					this->PARAMETERSReceiveCMD(d);
 					break;
-				case this->CONFIGURE:
+				case CONFIGURE:
 					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 					this->CONFIGUREReceiveCMD(d);
 					break;
-				case this->CONNECTED:
+				case CONNECTED:
 					//d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 					this->CONNECTEDReceiveCMD(d);
 					break;
-				case this->CLOSING:
+				case CLOSING:
 					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 					break;
-				case this->UNINIT_MODULE:
+				case UNINIT_MODULE:
 					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 					this->UNINIT_MODULEReceiveCMD(d);
 					break;
@@ -275,7 +276,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		
 		virtual void TxQueueEmptyCallback() override final{
 			switch (this->currentState){
-				case this->UNINIT_MODULE:this->UNINIT_MODULETxQueueEmpty();break;
+				case UNINIT_MODULE:this->UNINIT_MODULETxQueueEmpty();break;
 				default:break;
 			}
 		}
@@ -294,7 +295,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		}
 		virtual void RxWaitCallback() final override{
 			switch (this->currentState){
-				case this->CONNECTED:this->CONNECTEDRxWait();break;
+				case CONNECTED:this->CONNECTEDRxWait();break;
 				default:break;
 			}
 		};

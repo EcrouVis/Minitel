@@ -3,8 +3,7 @@
 #include "imgui.h"
 
 struct imgui_notification{
-	const char* message;
-	bool free_message=false;
+	char* message;
 	ImVec4 color;
 	double timestamp;
 	imgui_notification* older;
@@ -17,21 +16,18 @@ class NotificationServer{
 			while (tmp!=NULL){
 				tmp2=tmp;
 				tmp=tmp->older;
-				if (tmp2->free_message) free((void*)tmp2->message);
+				free((void*)tmp2->message);
 				delete tmp2;
 			}
 		}
-		void notify(const char* message,bool free_message=false,ImVec4 color=ImVec4(1.,1.,1.,1.)){
+		void notify(const char* message,ImVec4 color=ImVec4(1.,1.,1.,1.)){
 			imgui_notification* notif=new imgui_notification;
-			notif->message=message;
-			notif->free_message=free_message;
+			notif->message=(char*)malloc(strlen(message)+1);
+			strcpy(notif->message,message);
 			notif->color=color;
 			notif->timestamp=glfwGetTime();
 			notif->older=this->notification_list;
 			this->notification_list=notif;
-		}
-		void notify(int message,ImVec4 color=ImVec4(1.,1.,1.,1.)){
-			notify(notification_message_list[message],false,color);
 		}
 		void notification_window(double duration=5,double duration_fading=1,int max_notification=-1){
 			if (delete_old_notifications(duration,max_notification)){
@@ -56,14 +52,6 @@ class NotificationServer{
 		}
 	private:
 		imgui_notification* notification_list=NULL;
-		const char* notification_message_list[6]={
-			"<Buzzer>",
-			"Redémarrage du minitel",
-			"Suspension de l'émulation",
-			"Reprise de l'émulation",
-			"Appuyez sur F1 pour faire apparaitre le menu",
-			"config.json est malformé, chargement des parmètres par défaut"
-		};
 		
 		bool delete_old_notifications(double duration=5,int max_notification=5){
 			double t=glfwGetTime()-duration;
@@ -83,7 +71,7 @@ class NotificationServer{
 				while (tmp!=NULL){
 					tmp2=tmp;
 					tmp=tmp->older;
-					if (tmp2->free_message) free((void*)tmp2->message);
+					free((void*)tmp2->message);
 					delete tmp2;
 				}
 			}

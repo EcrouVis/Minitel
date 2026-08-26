@@ -100,7 +100,7 @@ constexpr int M12_KEY_KP_ADD=334;
 constexpr int M12_KEY_KP_ENTER=335;
 constexpr int M12_KEY_KP_EQUAL=336;
 
-class KeyboardInput{//TODO: special keyboard key symbols
+class KeyboardInput{
 	public:
 		void KeyboardAzertyWindow(){
 			int bs=ImGui::CalcTextSize(" ").x*5+2*ImGui::GetStyle().FramePadding.x;
@@ -113,7 +113,7 @@ class KeyboardInput{//TODO: special keyboard key symbols
 			ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(0.5,0.5,0.5,0.2));
 			ImGui::Begin("##keyboard_azerty",NULL,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize);
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6,0.6,0.6,1));
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0.5));
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0.7));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.1,0.1,0.1,1));
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2,0.2,0.2,1));
 			
@@ -597,7 +597,7 @@ class KeyboardInput{//TODO: special keyboard key symbols
 			ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(0.5,0.5,0.5,0.2));
 			ImGui::Begin("##keyboard_teletel",NULL,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize);
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6,0.6,0.6,1));
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0.5));
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0.7));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.1,0.1,0.1,1));
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2,0.2,0.2,1));
 			ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0,0.5));
@@ -676,7 +676,7 @@ class KeyboardInput{//TODO: special keyboard key symbols
 			
 			activated=this->getKey(0x75);
 			if (activated) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
-			if (ctrl) ImGui::Button("OE",ImVec2(bl,0));
+			if (ctrl) ImGui::Button("\xC2\x8C",ImVec2(bl,0));
 			else ImGui::Button("Retour",ImVec2(bl,0));
 			if (activated) ImGui::PopStyleColor();
 			if(ImGui::IsItemActivated()) this->setKey(0x75,true);
@@ -696,7 +696,7 @@ class KeyboardInput{//TODO: special keyboard key symbols
 			
 			activated=this->getKey(0x65);
 			if (activated) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
-			if (shift) ImGui::Button("oe",ImVec2(bl,0));
+			if (shift) ImGui::Button("\xC2\x9C",ImVec2(bl,0));
 			else if (ctrl) ImGui::Button("{",ImVec2(bl,0));
 			else ImGui::Button("Répétition",ImVec2(bl,0));
 			if (activated) ImGui::PopStyleColor();
@@ -723,8 +723,8 @@ class KeyboardInput{//TODO: special keyboard key symbols
 			
 			activated=this->getKey(0x55);
 			if (activated) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
-			if (shift) ImGui::Button("o-",ImVec2(bs,0));
-			else ImGui::Button("O",ImVec2(bs,0));
+			if (shift) ImGui::Button("o\xC2\xAC",ImVec2(bs,0));
+			else ImGui::Button("(')",ImVec2(bs,0));
 			if (activated) ImGui::PopStyleColor();
 			if(ImGui::IsItemActivated()) this->setKey(0x55,true);
 			if(ImGui::IsItemDeactivated()) this->setKey(0x55,false);
@@ -743,13 +743,13 @@ class KeyboardInput{//TODO: special keyboard key symbols
 			ImGui::PushStyleColor(ImGuiCol_WindowBg,ImVec4(0.5,0.5,0.5,0.2));
 			ImGui::Begin("##keyboard_phone",NULL,ImGuiWindowFlags_NoResize|ImGuiWindowFlags_NoTitleBar|ImGuiWindowFlags_AlwaysAutoResize);
 			ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.6,0.6,0.6,1));
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0.5));
+			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0,0,0.7));
 			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.1,0.1,0.1,1));
 			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2,0.2,0.2,1));
 			
 			activated=this->getKey(0x25);
 			if (activated) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
-			ImGui::Button("--/--",ImVec2(bs,0));
+			ImGui::Button("\xC2\xB7\xC2\xB7""/""\xC2\xB7\xC2\xB7",ImVec2(bs,0));
 			if (activated) ImGui::PopStyleColor();
 			if(ImGui::IsItemActivated()) this->setKey(0x25,true);
 			if(ImGui::IsItemDeactivated()) this->setKey(0x25,false);
@@ -784,7 +784,7 @@ class KeyboardInput{//TODO: special keyboard key symbols
 			
 			activated=this->getKey(0x33);
 			if (activated) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
-			ImGui::Button("[V]>",ImVec2(bs,0));
+			ImGui::Button("[|]>",ImVec2(bs,0));
 			if (activated) ImGui::PopStyleColor();
 			if(ImGui::IsItemActivated()) this->setKey(0x33,true);
 			if(ImGui::IsItemDeactivated()) this->setKey(0x33,false);
@@ -937,7 +937,7 @@ class KeyboardInput{//TODO: special keyboard key symbols
 			this->p_keyboard=kb;
 		}
 		
-		void InputTranslate(int key, int action, int mods){
+		void InputTranslate(int key, int action, int mods){//TODO: sometimes ctrl state is stucked when using altgr?
 			if (action==GLFW_PRESS||action==GLFW_RELEASE){
 				bool keyPressed=(action==GLFW_PRESS);
 				bool altgr=((mods&(GLFW_MOD_CONTROL|GLFW_MOD_ALT))==(GLFW_MOD_CONTROL|GLFW_MOD_ALT));

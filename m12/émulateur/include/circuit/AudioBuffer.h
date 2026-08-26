@@ -10,9 +10,11 @@
 
 class AudioBuffer{
 	public:
+		unsigned long bufferLength;
 		//emulation thread
-		AudioBuffer(){
-			ma_pcm_rb_init(ma_format_f32, 1, 1024, NULL, NULL, &(this->rb));//TODO: buffer length
+		AudioBuffer(unsigned long bufferLength){
+			this->bufferLength=bufferLength;
+			ma_pcm_rb_init(ma_format_f32, 1, bufferLength, NULL, NULL, &(this->rb));
 		}
 		~AudioBuffer(){
 			ma_pcm_rb_uninit(&(this->rb));

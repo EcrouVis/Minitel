@@ -182,6 +182,9 @@ struct P_Info{
 #ifdef M12_USE_MBEDTLS
 		{lib_mbedtls,license_mbedtls},
 #endif
+#if defined(__MINGW64__) || defined(__MINGW32__)
+	{lib_mingw64,license_mingw64},
+#endif
 	};
 	License font_licenses[2]={
 		{font_proggyclean,license_proggyclean},

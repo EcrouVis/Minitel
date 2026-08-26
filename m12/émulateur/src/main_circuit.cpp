@@ -25,7 +25,7 @@
 #include "circuit/DIN5/MinitelNetwork.h"
 #include "circuit/RTC/RTCNetwork.h"
 
-#include "thread_affinity.h"
+#include "desktop/thread_affinity.h"
 
 void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* p_gState){
 	
@@ -51,7 +51,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	smn.registerApp(&smnas);
 	
 	CRTBuffer crtb;
-	AudioBuffer ab;
+	
+	PhoneLineWire phoneLine;
+	PhoneLineBuffer plb(1024);
+	AudioBuffer ab(1024);
 	BuzzerFilter bzf(3000);
 	SpeakerFilter spkf;
 	
@@ -69,8 +72,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	rtcn.subscribeService((RTCService*)&rtcsh);
 	RTCServiceAudio rtcsa(std::vector<unsigned char>{0,0,0,0});
 	rtcn.subscribeService((RTCService*)&rtcsa);
-	PhoneLineWire phoneLine;
-	PhoneLineBuffer plb;
 	
 #ifdef M12_USE_DECOMP_TOOLS
 	RuntimeDecompiler rtd(&uc);
@@ -223,7 +224,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	bool kb_s1=false;
 	bool kb_s2=false;
 	
-	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2,&smn,&phoneLine,p_mb_video,&crtb](unsigned char d){
+	auto CPLDIObus=[&modem,&wt,&kb,&kb_s1,&kb_s2,&smn,&phoneLine,&crtb](unsigned char d){
 		modem.MCnBCChangeIn((bool)(d&1));
 		modem.MODEMnDTMFChangeIn((bool)(d&2));
 		kb_s1=(bool)(d&4);
@@ -367,7 +368,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		if ((cmd&0xF0)==0x30) buzzer=cmd;
 	};
 
-	auto dbgIOIN=[p_gState,p_mb_video](unsigned char a,unsigned char d){
+	auto dbgIOIN=[p_mb_video](unsigned char a,unsigned char d){
 		switch (a){
 			case 0x20:
 			case 0x21:
@@ -430,7 +431,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	iol.subscribeIN(dbgIOIN);
 	
-	auto dbgIOOUT=[p_gState,p_mb_video](unsigned char a,unsigned char d){
+	auto dbgIOOUT=[p_mb_video](unsigned char a,unsigned char d){
 		switch (a){
 			case 0x20:
 			case 0x21:
@@ -507,7 +508,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	//mailbox
 	
-	auto checkMB=[p_mb_circuit,&eram,&erom,&modem,&wt,&CLKs,&kb,p_gState,&rtcn,&rtcsa,&crtb](){
+	auto checkMB=[p_mb_circuit,&eram,&erom,&modem,&wt,&CLKs,p_gState,&rtcn,&rtcsa](){
 		//pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
 		CLKs.setPause(p_gState->stepByStep.load(std::memory_order_relaxed));
 		thread_message ms;
@@ -564,7 +565,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		rtcn.CLKTickIn600Hz();
 	};
 	CLKs.subscribe600Hz(CLKTick600);
-	auto CLKTick9600=[&smn,&wt,&rtcn,&rtcsh](){
+	auto CLKTick9600=[&smn,&wt,&rtcn](){
 		smn.CLKTickIn9600Hz();
 		wt.incrementTimer();
 		rtcn.CLKTickIn9600Hz();
@@ -584,9 +585,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		modem.generateTxInSample(sr);
 		rtcsa.setServiceSample(plb.AudioEmulatorIn());
 		kb.generatePhoneLineSample(sr);
+		rtcn.generatePhoneLineSample(sr);
 		
 		//propagate the samples in the circuit
-		phoneLine.setRTCSample(rtcn.getPhoneLineSample(sr));//TODO: decouple generating and getting samples
+		phoneLine.setRTCSample(rtcn.getPhoneLineSample());
 		phoneLine.setKeyboardSample(kb.getPhoneLineSample());
 		phoneLine.setModemSample(modem.getTxOutSample());
 		
@@ -594,8 +596,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		rtcn.setPhoneLineSample(phoneLine.getPhoneLineSample());
 		modem.setRxSample(phoneLine.getModemSample());
 		
-		//process the samples
-		ab.AudioIn(spkf.filter(kb.getSpeakerSample(sr))+bzf.filter(modem.getBuzzerSample(sr)));//TODO: same
+		//process the samples + generate channel specific samples
+		ab.AudioIn(spkf.filter(kb.getSpeakerSample(sr))+bzf.filter(modem.getBuzzerSample(sr)));
 		plb.AudioEmulatorOut(rtcsa.getServiceSample());
 		modem.processRxInSample(sr);
 	};

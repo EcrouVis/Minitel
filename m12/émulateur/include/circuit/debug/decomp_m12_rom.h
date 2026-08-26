@@ -3,7 +3,7 @@
 #include <cstdio>
 #include "circuit/ROM_256k.h"
 #include "circuit/80C32.h"
-#include "data_path.h"
+#include "desktop/data_path.h"
 
 class RuntimeDecompiler{
 	public:

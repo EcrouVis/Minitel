@@ -10,10 +10,12 @@
 
 class PhoneLineBuffer{
 	public:
+		unsigned long bufferLength;
 		//emulation thread
-		PhoneLineBuffer(){
-			ma_pcm_rb_init(ma_format_f32, 1, 1024, NULL, NULL, &(this->rbPlayback));//TODO: buffer length
-			ma_pcm_rb_init(ma_format_f32, 1, 1024, NULL, NULL, &(this->rbCapture));
+		PhoneLineBuffer(unsigned long bufferLength){
+			this->bufferLength=bufferLength;
+			ma_pcm_rb_init(ma_format_f32, 1, bufferLength, NULL, NULL, &(this->rbPlayback));
+			ma_pcm_rb_init(ma_format_f32, 1, bufferLength, NULL, NULL, &(this->rbCapture));
 		}
 		~PhoneLineBuffer(){
 			ma_pcm_rb_uninit(&(this->rbPlayback));

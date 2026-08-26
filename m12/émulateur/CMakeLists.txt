@@ -10,13 +10,13 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake;${CMAKE_MODULE_PATH}")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 set(CMAKE_CXX_EXTENSIONS On)
-set(CMAKE_CXX_COMPILER gcc)
+#set(CMAKE_CXX_COMPILER g++)#TODO: works with gcc and clang but not msvc
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED On)
 set(CMAKE_C_EXTENSIONS On)
-set(CMAKE_C_COMPILER gcc)
+#set(CMAKE_C_COMPILER gcc)
 
-project(M12 VERSION 0.1.4.0 LANGUAGES CXX C)
+project(M12 VERSION 0.1.5.0 LANGUAGES CXX C)
 
 include(FetchContent)
 include(GNUInstallDirs)
@@ -430,14 +430,15 @@ target_sources(m12
 		
 		src/main_video.cpp
 		
-		src/data_path.cpp
+		src/desktop/data_path.cpp
 		src/FileAccess.cpp
+		src/desktop/window_creation.cpp
 		
 		src/main_circuit.cpp
 		
 		src/encoding.cpp
 		src/thread_messaging.cpp
-		src/thread_affinity.cpp
+		src/desktop/thread_affinity.cpp
 		
 		src/circuit/80C32/80C32.cpp
 		src/circuit/CPLD/MBSL_4000FH5_5.cpp
@@ -450,7 +451,7 @@ target_sources(m12
 	BASE_DIRS
 		include
 	FILES
-		include/data_path.h
+		include/desktop/data_path.h
 		include/encoding.h
 		include/FileAccess.h
 		include/FileSelector.h
@@ -461,7 +462,8 @@ target_sources(m12
 		include/MemoryWindow.h
 		include/Parameters.h
 		include/thread_messaging.h
-		include/thread_affinity.h
+		include/desktop/thread_affinity.h
+		include/desktop/window_creation.h
 		
 		include/circuit/80C32.h
 		include/circuit/AudioBuffer.h
@@ -516,19 +518,18 @@ if(WIN32)
 		DESTINATION "/"
 	)
 	#TODO: rewrite more flexible (if mingw we could use: gcc -print-file-name=libwinpthread-1.dll to have the full path)
+	#TODO: rewrite for cross compiling
 	install(
 		RUNTIME_DEPENDENCY_SET _dependency_set
-		DIRECTORIES "C:/mingw64/bin/../lib/gcc/x86_64-w64-mingw32/15.2.0/../../../../x86_64-w64-mingw32/lib/../lib/"
+		DIRECTORIES "C:/mingw64/x86_64-w64-mingw32/lib" "C:/llvm-mingw/x86_64-w64-mingw32/bin"
 		PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
 		POST_EXCLUDE_REGEXES  ".*system32/.*\\.dll" ".*SysWOW64/.*\\.dll"
 		UNRESOLVED_DEPENDENCIES_VAR UNRES
 		RUNTIME DESTINATION "/"
 	)
-	
 	install(CODE [[
 		foreach(UR ${UNRES})
 			message(WARNING "${UR} dependency not resolved !")
-			message(WARNING "Try 'gcc -print-file-name=${UR}' to get the path")
 		endforeach()
 	]])
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/TS9347/TS9347_Texture_Character_Set_Datasheet.bmp"
@@ -581,4 +582,5 @@ endif()
 
 set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${CMAKE_PROJECT_VERSION}-${CMAKE_SYSTEM_PROCESSOR}")
 set(CPACK_PACKAGE_VENDOR "")
+SET(CPACK_OUTPUT_FILE_PREFIX ./out)
 include(CPack)

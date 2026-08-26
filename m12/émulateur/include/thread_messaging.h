@@ -9,46 +9,47 @@ struct thread_message{
 	void* p;
 };
 
-constexpr int ERAM=1;
-constexpr int NOTIFICATION=3;
-constexpr int NOTIFICATION_BUZZER=4;
-constexpr int NOTIFICATION_REBOOT=15;
-constexpr int NOTIFICATION_RED=5;
-constexpr int NOTIFICATION_GREEN=6;
-constexpr int NOTIFICATION_BLUE=7;
-constexpr int NOTIFICATION_ORANGE=8;
-constexpr int NOTIFICATION_YELLOW=9;
-constexpr int NOTIFICATION_CYAN=10;
-constexpr int NOTIFICATION_PURPLE=11;
-constexpr int EROM=2;
-constexpr int UC=12;
-constexpr int VC=13;
-constexpr int CPLD=14;
-constexpr int KEYBOARD=18;
-constexpr int MODEM=19;
-constexpr int CLOCK=20;
-constexpr int EMULATOR_READY=21;
-//constexpr int BUZZER_NOTIFICATION_CONTROL=22;
-//constexpr int DIN5_INTERFACE_LOCAL_WEBSOCKET=23;
-constexpr int CRT_BUFFER=24;
-constexpr int AUDIO_BUFFER=25;
-constexpr int PRINTER=27;
-constexpr int PRINT_FINISHED=28;
-constexpr int SPEAKER_FILTER=29;
-constexpr int BUZZER_FILTER=30;
-constexpr int AUTO_START_MODULE=31;
-constexpr int WEBSOCKET_DIN=32;
-constexpr int AUDIO_PHONE_LINE_ON=33;
-constexpr int AUDIO_PHONE_LINE_OFF=34;
-constexpr int PHONE_LINE_BUFFER=35;
-constexpr int CLOCK_UNRESPONSIVE=36;
+enum emulator_video{
+	NOTIFICATION_BUZZER,
+	NOTIFICATION_REBOOT,
+	NOTIFICATION_RED,
+	NOTIFICATION_GREEN,
+	NOTIFICATION_BLUE,
+	NOTIFICATION_ORANGE,
+	NOTIFICATION_YELLOW,
+	NOTIFICATION_CYAN,
+	NOTIFICATION_PURPLE,
+	ERAM,
+	EROM,
+	UC,
+	VC,
+	CPLD,
+	KEYBOARD,
+	MODEM,
+	CLOCK,
+	EMULATOR_READY,
+	CRT_BUFFER,
+	AUDIO_BUFFER,
+	PRINTER,
+	PRINT_FINISHED,
+	SPEAKER_FILTER,
+	BUZZER_FILTER,
+	AUTO_START_MODULE,
+	WEBSOCKET_DIN,
+	AUDIO_PHONE_LINE_ON,
+	AUDIO_PHONE_LINE_OFF,
+	PHONE_LINE_BUFFER,
+	CLOCK_UNRESPONSIVE
+};
 
-constexpr int EMU_ON=1;
-constexpr int EMU_OFF=2;
-constexpr int EMU_NEXT_STEP=3;
-constexpr int SPECIAL=4;//for testing purpose
-constexpr int EMU_SHUTDOWN=5;
-constexpr int AUDIO_PHONE_LINE_CALL=6;
+enum video_emulator{
+	EMU_ON,
+	EMU_OFF,
+	EMU_NEXT_STEP,
+	SPECIAL,//for testing purpose
+	EMU_SHUTDOWN,
+	AUDIO_PHONE_LINE_CALL
+};
 /*
 constexpr int RESTART;*/
 

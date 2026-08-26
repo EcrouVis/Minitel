@@ -10,7 +10,7 @@
 #include <mutex>
 #include <ixwebsocket/IXWebSocket.h>
 
-#include "thread_affinity.h"
+#include "desktop/thread_affinity.h"
 
 enum PhoneNumberState{
 	NOT_PHONE_NUMBER=0,
@@ -45,7 +45,7 @@ class RTCNetwork{
 			if (this->phoneLineStateIn==state) return;
 			if ((bool)(state&line_Closed)){
 				switch (this->currentState){
-					case this->IDLE:
+					case IDLE:
 						this->phoneLineStateIn=state;
 						this->currentState=this->WAIT_PHONE_NUMBER;
 						printf("WAIT_PHONE_NUMBER\n");
@@ -53,7 +53,7 @@ class RTCNetwork{
 						this->phoneLineStateOut=line_call_progress_tone;
 						this->sendPhoneLine(this->phoneLineStateOut);
 						break;
-					case this->WAIT_PHONE_NUMBER:
+					case WAIT_PHONE_NUMBER:
 						this->phoneLineStateIn=state;
 						if ((bool)(state&line_DTMF)){
 							this->currentState=this->PHONE_DIALING;
@@ -64,21 +64,21 @@ class RTCNetwork{
 							this->phoneNumber.clear();
 						}
 						break;
-					case this->PHONE_DIALING:
+					case PHONE_DIALING:
 						if ((bool)((state^this->phoneLineStateIn)&line_DTMF)){
 							this->phoneLineStateIn=state;
 							this->timer=0;
 						}
 						else this->phoneLineStateIn=state;
 						break;
-					case this->CONNECTED:
+					case CONNECTED:
 						this->phoneLineStateIn=state;
 						this->ServiceLinked->phoneLineChangeIn(state);
 						break;
-					case this->WAIT_CALL_END:
+					case WAIT_CALL_END:
 						this->phoneLineStateIn=state;
 						break;
-					case this->CALL_INCOMING:
+					case CALL_INCOMING:
 						this->phoneLineStateIn=state;
 						this->currentState=this->CONNECTED;
 						printf("CONNECTED\n");
@@ -233,25 +233,29 @@ class RTCNetwork{
 			this->RTCServices.push_back(rtcs);
 		}
 		
-		float getPhoneLineSample(unsigned long sampleRate){
+		void generatePhoneLineSample(unsigned long sampleRate){
 			if (this->ServiceLinked!=NULL){
-				return this->ServiceLinked->getPhoneLineSample(sampleRate);
+				this->phoneLineSampleOut=this->ServiceLinked->getPhoneLineSample(sampleRate);
 			}
 			else{
 				if ((bool)(this->phoneLineStateOut&line_Ringing)) this->sample_phase+=50;
 				else if ((bool)(this->phoneLineStateOut&line_call_progress_tone)) this->sample_phase+=440;
 				else{
 					this->sample_phase=0;
-					return 0;
+					this->phoneLineSampleOut=0;
 				}
 				if (this->sample_phase>sampleRate) this->sample_phase-=sampleRate;
-				return std::sin(2*M_PI*((float)this->sample_phase)/((float)sampleRate));
+				this->phoneLineSampleOut=std::sin(2*M_PI*((float)this->sample_phase)/((float)sampleRate));
 			}
+		}
+		
+		float getPhoneLineSample(){
+			return this->phoneLineSampleOut;
 		}
 		
 		void setPhoneLineSample(float s){
 			if (this->ServiceLinked!=NULL && (bool)(this->phoneLineStateIn&line_analog)){
-				return this->ServiceLinked->setPhoneLineSample(s);
+				this->ServiceLinked->setPhoneLineSample(s);
 			}
 		}
 		
@@ -276,6 +280,7 @@ class RTCNetwork{
 		RTCService* ServiceLinked;
 		
 		unsigned long sample_phase=0;
+		float phoneLineSampleOut=0;
 		
 		enum State{
 			IDLE,
@@ -337,7 +342,7 @@ class RTCServiceAudio: public RTCService{
 		
 };
 
-class RTCServiceWebsocket: public RTCService{//TODO: make it more robust
+class RTCServiceWebsocket: public RTCService{
 	public:
 		RTCServiceWebsocket (std::vector<unsigned char> num, const char* url):phoneNumber(num),url(url){
 		}

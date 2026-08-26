@@ -136,13 +136,15 @@ class TS7514{//TODO: correct sample gains
 			switch (this->REG[this->RWLO].load(std::memory_order_relaxed)&0x0C){
 				case 0x00:
 				{
-					constexpr float ATx[4]={pow(10.,-4./20.),pow(10.,-14./20.),pow(10.,-25./20.),pow(10.,-36./20.)};
+					constexpr float ATx[4]={0.6309573444801932,0.19952623149688797,0.05623413251903491,0.015848931924611134};
+										 //{pow(10.,-4./20.),  pow(10.,-14./20.),  pow(10.,-25./20.),  pow(10.,-36./20.)};
 					s=ATx[this->REG[this->RWLO].load(std::memory_order_relaxed)&0x03]*this->TxInSample;
 					break;
 				}
 				case 0x04:
 				{
-					constexpr float ARx[4]={pow(10.,6./20.),pow(10.,-4./20.),pow(10.,-14./20.),pow(10.,-25./20.)};
+					constexpr float ARx[4]={0.5011872336272722,0.6309573444801932,0.19952623149688797,0.05623413251903491};
+										 //{pow(10.,6./20.),   pow(10.,-4./20.),  pow(10.,-14./20.),  pow(10.,-25./20.)};
 					s=ARx[this->REG[this->RWLO].load(std::memory_order_relaxed)&0x03]*this->RxSample;
 					break;
 				}
@@ -160,8 +162,8 @@ class TS7514{//TODO: correct sample gains
 		}
 		
 		float getTxOutSample(){
-			constexpr float A[16]={pow(10.,-2./20.), pow(10.,-3./20.), pow(10.,-4./20.), pow(10.,-5./20.), pow(10.,-6./20.), pow(10.,-7./20.), pow(10.,-8./20.), pow(10.,-9./20.),
-								   pow(10.,-10./20.), pow(10.,-11./20.), pow(10.,-12./20.), pow(10.,-13./20.), pow(10.,-14./20.), pow(10.,-15./20.), 0, 0};
+			constexpr float A[16]={0.7943282347242815,0.7079457843841379,0.6309573444801932,0.5623413251903491,0.5011872336272722,0.44668359215096315,0.3981071705534972,0.35481338923357547,0.31622776601683794,0.28183829312644537,0.251188643150958,0.22387211385683395,0.19952623149688797,0.1778279410038923,0,0};
+								//{pow(10.,-2./20.), pow(10.,-3./20.), pow(10.,-4./20.), pow(10.,-5./20.), pow(10.,-6./20.), pow(10.,-7./20.),       pow(10.,-8./20.), pow(10.,-9./20.),pow(10.,-10./20.), pow(10.,-11./20.), pow(10.,-12./20.), pow(10.,-13./20.), pow(10.,-14./20.), pow(10.,-15./20.), 0, 0};
 			
 			float sample=this->ATxI_sample_out;
 			float amp=A[this->REG[this->RATE].load(std::memory_order_relaxed)];
@@ -172,10 +174,11 @@ class TS7514{//TODO: correct sample gains
 		void setRxSample(float s){
 			unsigned char rprf=this->REG[this->RPRF].load(std::memory_order_relaxed);
 			if ((rprf&0x03)==0x03){
-				this->RxSample=pow(10.,-35./20.)*this->TxInSample;
+				this->RxSample=0.01778279410038923*this->TxInSample;//pow(10.,-35./20.)
 			}
 			else{
-				constexpr float A[3]={1.,pow(10.,6./20.),pow(10.,12./20.)};
+				constexpr float A[3]={1,1.9952623149688795,3.9810717055349722};
+								   //{1.,pow(10.,6./20.),pow(10.,12./20.)};
 				this->RxSample=A[rprf&0x03]*s;
 			}
 		}
@@ -243,7 +246,7 @@ class TS7514{//TODO: correct sample gains
 					TxInSample+=sin(2*M_PI*this->fgen1_phase);
 				}
 				else{
-					TxInSample+=pow(10.,-6./20.)*sin(2*M_PI*this->fgen1_phase);
+					TxInSample+=0.5011872336272722*sin(2*M_PI*this->fgen1_phase);//pow(10.,-6./20.)
 				}
 			}
 			else this->fgen1_phase=0;
@@ -262,15 +265,16 @@ class TS7514{//TODO: correct sample gains
 					TxInSample+=sin(2*M_PI*this->fgen2_phase);
 				}
 				else{
-					TxInSample+=pow(10.,-4./20.)*sin(2*M_PI*this->fgen2_phase);
+					TxInSample+=0.6309573444801932*sin(2*M_PI*this->fgen2_phase);//pow(10.,-4./20.)
 				}
 			}
 			else this->fgen2_phase=0;
 		}
 		
 		void processRxInSample(unsigned long sampleRate){
-			constexpr float N2[8]={pow(10.,-49./20.),pow(10.,-47./20.),pow(10.,-45./20.),pow(10.,-43./20.),pow(10.,-41./20.),pow(10.,-39./20.),pow(10.,-37./20.),pow(10.,-35./20.)};
-			constexpr float N1r[2]={pow(10.,3./20.),pow(10.,3.5/20.)};
+			constexpr float N2[8]={0.0035481338923357532,0.0044668359215096305,0.005623413251903491,0.00707945784384138,0.008912509381337459,0.011220184543019636,0.01412537544622754,0.01778279410038923};
+								//{pow(10.,-49./20.),pow(10.,-47./20.),pow(10.,-45./20.),pow(10.,-43./20.),pow(10.,-41./20.),pow(10.,-39./20.),pow(10.,-37./20.),pow(10.,-35./20.)};
+			constexpr float N1r[2]={1.4125375446227544,1.4962356560944334};//{pow(10.,3./20.),pow(10.,3.5/20.)};
 			unsigned char rprf=this->REG[this->RPRF].load(std::memory_order_relaxed);
 			//v23 audio decoding
 			if ((bool)(this->Rx_dout&line_analog)&&(rprf&0x03)!=0x03){
@@ -518,7 +522,7 @@ class TS7514{//TODO: correct sample gains
 			//printf("TS7514 CMD 0x%02X ",this->input_register);
 			if (n_reg==this->RPROG||cmd_ok){
 				switch (n_reg){
-					case this->RPTF:
+					case RPTF:
 						if ((!(bool)(this->input_register&0x0C))&&((bool)(this->REG[this->RPTF].load(std::memory_order_relaxed)&0x0C))){//try to avoid poping when selecting ATxI
 							this->ATxI_sample_out=0;
 							this->ATxI_mean_value=0;
