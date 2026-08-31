@@ -510,6 +510,9 @@ class RTCServiceWebsocket: public RTCService{
 			this->webSocket.setPingInterval(45);
 			this->webSocket.disablePerMessageDeflate();
 			this->webSocket.disableAutomaticReconnection();
+			ix::SocketTLSOptions tlsOptions;
+			tlsOptions.caFile = "NONE";//TODO: when TLS cert error will be fix, remove this option
+			this->webSocket.setTLSOptions(tlsOptions);
 			this->webSocket.setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg){
 				switch (msg->type){
 					case ix::WebSocketMessageType::Error:

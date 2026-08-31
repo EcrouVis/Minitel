@@ -59,10 +59,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	SpeakerFilter spkf;
 	
 	RTCNetwork rtcn;
-//TODO: TLS seems not to work with minipavi at the moment (Certificate fail)
 	RTCServiceWebsocket rtcsm(std::vector<unsigned char>{0,9,7,2,1,0,1,7,2,1},
 #if defined(M12_USE_TLS)
-			"ws://go.minipavi.fr:8182"//"wss://go.minipavi.fr:8181"
+			"wss://go.minipavi.fr:8181"
 #else
 			"ws://go.minipavi.fr:8182"
 #endif
