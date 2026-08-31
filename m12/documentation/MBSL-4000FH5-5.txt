@@ -45,7 +45,7 @@ Voici à quoi sont liés probablement les bits du registre dans le circuit (supp
 	b4: connecte le modem à la ligne téléphonique
 	b5: met sous tension le tube cathodique
 	b6: active l'alimentation sur la prise DIN (M/V L6720)
-	b7: non utilisé, l'utilisateur est dans les menus du M12?
+	b7: non utilisé, l'utilisateur est dans les menus du M12 (dialogue local)?
 
 
 
@@ -54,7 +54,7 @@ Voici à quoi sont liés probablement les bits du registre dans le circuit (supp
 Adresse: 0x50
 
 Une écriture dans ce registre permet d'envoyer des données sur le pin Tx et une lecture permet de lire le dernier message reçu sur le pin Rx.
-La liaison série se faire par message de 8 bit + 1 bit de départ + 1 (ou 2?) bit de fin
+La liaison série échange des messages de 8 bit + 1 bit de départ + 1 (ou 2?) bit de fin
 Pour une description plus détaillée ainsi que les messages échangés: Communication clavier - corps du minitel.txt
 
 
@@ -72,7 +72,7 @@ Voici quelle adresse est liée à quelle partie de la date:
 	0x42: jour du mois
 	0x43: mois
 	0x44: partie basse de l'année
-	0x45: partie haute de l'année (supposition)
+	0x45: partie haute de l'année (supposition / très probable)
 
 
 
