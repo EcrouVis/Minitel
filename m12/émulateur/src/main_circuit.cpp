@@ -18,6 +18,7 @@
 
 #include "circuit/debug/IOLogger.h"
 #include "circuit/debug/dbg_80C32.h"
+#include "circuit/debug/dbg_TS9347.h"
 #include "circuit/debug/decomp_m12_rom.h"
 
 #include "FileAccess.h"
@@ -75,16 +76,16 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 #ifdef M12_USE_DECOMP_TOOLS
 	RuntimeDecompiler rtd(&uc);
 #endif
-	
+	TS9347Logger vcl(&video);
 	
 	
 	//construct circuit
 	auto Dbus=[&cpld,&eram,&video,&uc,&iol](unsigned char d){//in ic
+		iol.DChangeIn(d);
 		cpld.DChangeIn(d);
 		eram.DChangeIn(d);
 		video.DChangeIn(d);
 		uc.PXChangeIn(uc.P0,d);
-		iol.DChangeIn(d);
 	};
 	uc.subscribeP0(std::cref(Dbus));//out ic
 	cpld.subscribeD(std::cref(Dbus));
@@ -111,10 +112,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	uc.subscribenPSEN(nPSENwire);
 	
 	auto ALEwire=[&cpld,&A16Latch,&A17Latch,&video,&iol](bool b){
+		iol.ALEChangeIn(b);
 		cpld.ALEChangeIn(b);
 		A16Latch.CChangeIn(b);
 		A17Latch.CChangeIn(b);
-		iol.ALEChangeIn(b);
 		video.ASChangeIn(b);
 	};
 	uc.subscribeALE(std::cref(ALEwire));
@@ -140,9 +141,9 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		modem.TxDChangeIn((bool)(d&(1<<3)));
 		modem.nRTSChangeIn((bool)(d&(1<<4)));
 		bool nCSVideo=(bool)(d&(1<<5));
+		iol.nCSChangeIn(nCSVideo);
 		video.nCSChangeIn(nCSVideo);
 		cpld.nCSChangeIn(nCSVideo);
-		iol.nCSChangeIn(nCSVideo);
 		uc.PXChangeIn(uc.P1,d);
 	};
 	uc.subscribeP1(std::cref(P1bus));
@@ -168,14 +169,14 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		d&=P3_ext;
 		bool nRD=(bool)(d&0x80);
 		bool nWR=(bool)(d&0x40);
+		iol.nWEChangeIn(nWR);
 		eram.nWEChangeIn(nWR);
 		video.RnWChangeIn(nWR);
 		cpld.nWEChangeIn(nWR);
-		iol.nWEChangeIn(nWR);
+		iol.nOEChangeIn(nRD);
 		eram.nOEChangeIn(nRD);
 		video.DSChangeIn(nRD);
 		cpld.nOEChangeIn(nRD);
-		iol.nOEChangeIn(nRD);
 		
 		//l6720.PTSChangeIn((bool)(d&0x10));
 		P3_ext&=~0x20;
@@ -357,6 +358,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	//debug
 	
+	//video.debug_cmd=[&vcl](unsigned char a,unsigned char d,bool R){vcl.update(a,d,R);};
+	
 	modem.debug_cmd=[p_mb_video](unsigned char cmd){
 		static unsigned char buzzer=0x3F;
 		if (cmd>=0x38&&cmd<=0x3B&&!(buzzer>=0x38&&buzzer<=0x3B)){
@@ -385,37 +388,21 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			case 0x2D:
 			case 0x2E:
 			case 0x2F:
-				//printf("To TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
-				break;
+				
 			case 0x40:
 			case 0x41:
 			case 0x42:
 			case 0x43:
 			case 0x44:
 			case 0x45:
-			{
-				/*const char* type[]={"minute","hour","day","month","year low","year high"};
-				printf("To CPLD RTC %s 0x%02X\n",type[a&0x0F],d);*/
-				break;
-			}
 			case 0x50:
-				//printf("To Keyboard 0x%02X\n",d);
-				break;
 			case 0x51:
-				//printf("To CPLD Status 0x%02X\n",d);
-				break;
 			case 0x70:
-			{
-				/*static unsigned char io=0;
-				if ((bool)((d^io)&(~(1<<3)))){//dont print when watchdog timer kicked
-					io=d&(~(1<<3));
-					printf("To CPLD Pin 0x%02X\n",io);
-				}*/
+				
 				break;
-			}
 			default:
 			{
-				printf("To unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
+				printf("IO: Write to unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
 				//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 				
 				thread_message ms_p_notif;
@@ -448,37 +435,21 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			case 0x2D:
 			case 0x2E:
 			case 0x2F:
-				//printf("From TS9347 A: 0x%02X / D: 0x%02X\n",a,d);
-				break;
+				
 			case 0x40:
 			case 0x41:
 			case 0x42:
 			case 0x43:
 			case 0x44:
 			case 0x45:
-			{
-				/*const char* type[]={"minute","hour","day","month","year low","year high"};
-				printf("From CPLD RTC %s 0x%02X\n",type[a&0x0F],d);*/
-				break;
-			}
 			case 0x50:
-			{
-				/*static unsigned char data=0xFF;
-				if (d!=data){//deduplicate reading of the same data
-					data=d;
-					printf("From Keyboard 0x%02X\n",d);
-				}*/
-				break;
-			}
 			case 0x51:
-				//printf("From CPLD Status 0x%02X\n",d);
-				break;
 			case 0x70:
-				//printf("From CPLD Pin A: 0x%02X / D: 0x%02X\n",a,d);
+				
 				break;
 			default:
 			{
-				printf("From unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
+				printf("IO: Read from unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
 				//p_gState->stepByStep.store(true,std::memory_order_relaxed);
 				
 				thread_message ms_p_notif;

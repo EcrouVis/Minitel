@@ -18,6 +18,18 @@ const int VIDEO_FRAME_SIZE=(250+2)*(3*40*8+2)/2;
 //not accurate implementation (timming/behavior)
 class TS9347wVRAM{
 	public:
+		enum Constants{
+			BUSY_MASK=0b10000000,
+			Al_MASK=0b01000000,
+			LXm_MASK=0b00100000,
+			LXa_MASK=0b00010000,
+			VSYNC_MASK=0b00000100,
+			//RESET_MASK=0b01111000,
+			
+			RnW_MASK=0b00001000,
+			INC_MASK=0b00000001
+		};
+	
 		void DChangeIn(unsigned char d);
 		void nCSChangeIn(bool b);
 		void ASChangeIn(bool b);
@@ -28,6 +40,8 @@ class TS9347wVRAM{
 		void subscribeVideo(std::function<void(unsigned char*)> f);
 		
 		void setROMCharset(const unsigned char* cs);
+		
+		std::function<void(unsigned char,unsigned char,bool)> debug_cmd=[](unsigned char a,unsigned char d,bool r){};
 		
 		std::atomic_uchar VRAM[VRAM_SIZE];
 		std::atomic_uchar ROW_BUFFER[128];
@@ -56,16 +70,6 @@ class TS9347wVRAM{
 		bool DS;//read low
 		bool RnW;//write low
 		bool nCS;//chip select
-		
-		constexpr static unsigned char BUSY_MASK=0b10000000;
-		constexpr static unsigned char Al_MASK=0b01000000;
-		constexpr static unsigned char LXm_MASK=0b00100000;
-		constexpr static unsigned char LXa_MASK=0b00010000;
-		constexpr static unsigned char VSYNC_MASK=0b00000100;
-		constexpr static unsigned char RESET_MASK=0b01111000;
-		
-		constexpr static unsigned char RnW_MASK=0b00001000;
-		constexpr static unsigned char INC_MASK=0b00000001;
 		
 		bool VS_MASK_FLAG=false;
 		

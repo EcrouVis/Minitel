@@ -19,9 +19,15 @@ void TS9347wVRAM::DSChangeIn(bool b){
 				//read reg
 				if (this->isICSelected()){
 					unsigned int addr=this->ADDR_BUF.load(std::memory_order_relaxed);
-					if ((addr&0x07)==0) this->sendD(this->STATUS.load(std::memory_order_relaxed));
-					else if(!this->isBusy()) this->sendD(this->Rx[addr&0x07].load(std::memory_order_relaxed));
-					else printf("TS9347 read garbage!!!\n");
+					if ((addr&0x07)==0){
+						this->debug_cmd((unsigned char)(addr&0xFF),this->STATUS.load(std::memory_order_relaxed),true);
+						this->sendD(this->STATUS.load(std::memory_order_relaxed));
+					}
+					else{
+						this->debug_cmd((unsigned char)(addr&0xFF),this->Rx[addr&0x07].load(std::memory_order_relaxed),true);
+						if(!this->isBusy()) this->sendD(this->Rx[addr&0x07].load(std::memory_order_relaxed));
+						//else printf("TS9347 read garbage!!!\n");
+					}
 				}
 			}
 			else{
@@ -38,12 +44,13 @@ void TS9347wVRAM::RnWChangeIn(bool b){
 			if ((!this->isBusy())||(this->requestExecution()&&(addr&0x07)==0)){
 				this->Rx[addr&0x07].store(this->D,std::memory_order_relaxed);
 			}
-			else printf("TS9347 write inefective!!!\n");
+			//else printf("TS9347 write inefective!!!\n");
 			if (this->requestExecution()){
 				this->STATUS.fetch_or(this->BUSY_MASK,std::memory_order_relaxed);
 				///execute command
 				this->cmd_step=0;
 			}
+			this->debug_cmd((unsigned char)(addr&0xFF),this->D,false);
 		}
 	}
 	else{
@@ -860,7 +867,7 @@ void TS9347wVRAM::executeCommand(){
 						break;
 					default:
 						this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
-						printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
+						//printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 						break;
 				}
 				break;
@@ -881,7 +888,7 @@ void TS9347wVRAM::executeCommand(){
 				if ((this->Rx[0].load(std::memory_order_relaxed)&0x04)==0) this->TSM();
 				else if ((this->Rx[0].load(std::memory_order_relaxed)&0x0D)==0x05) this->CLS();
 				else{
-					printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
+					//printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 					this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 				}
 				break;
@@ -904,7 +911,7 @@ void TS9347wVRAM::executeCommand(){
 						break;
 					default:
 						this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
-						printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
+						//printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 						break;
 				}
 				break;
@@ -922,7 +929,7 @@ void TS9347wVRAM::executeCommand(){
 				break;
 			default:
 				this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
-				printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
+				//printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 				break;
 		}
 	}

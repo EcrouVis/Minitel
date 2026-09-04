@@ -483,6 +483,7 @@ target_sources(m12
 		include/circuit/TS9347.h
 		include/circuit/WatchdogTimer.h
 		include/circuit/debug/dbg_80C32.h
+		include/circuit/debug/dbg_TS9347.h
 		include/circuit/debug/decomp_m12_rom.h
 		include/circuit/debug/IOLogger.h
 		include/circuit/DIN5/MinitelNetwork.h

@@ -411,7 +411,7 @@ const char* getBitAddressName(unsigned char a){
 
 void print_m12_alu_instruction(m80C32* uc){
 	char l=uc->i_length[uc->instruction[0]];
-	printf("c:%05lX ",((unsigned long)uc->PC)-l+(((unsigned long)uc->PX_out[1]&3)<<16));
+	printf("CODE: c:%05lX ",((unsigned long)uc->PC)-l+(((unsigned long)uc->PX_out[1]&3)<<16));
 	for(int i=0;i<3;i++){
 		if (i<l) printf("%02X",uc->instruction[i]);
 		else printf("  ");
