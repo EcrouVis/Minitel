@@ -16,7 +16,7 @@ set(CMAKE_C_STANDARD_REQUIRED On)
 set(CMAKE_C_EXTENSIONS On)
 #set(CMAKE_C_COMPILER gcc)
 
-project(M12 VERSION 0.1.5.0 LANGUAGES CXX C)
+project(M12 VERSION 0.1.6.0 LANGUAGES CXX C)
 
 include(FetchContent)
 include(GNUInstallDirs)
