@@ -22,7 +22,7 @@ class KeyboardIndicator{
 		}
 		bool isSignaling(){
 			if (this->p_keyboard==NULL) return false;
-			return this->p_keyboard->LED_POWER.load(std::memory_order_acquire)!=LED_OFF||this->p_keyboard->LED_SPEAKER.load(std::memory_order_acquire)!=LED_OFF;
+			return this->p_keyboard->LED_POWER.load(std::memory_order_acquire)!=Keyboard::LED_OFF||this->p_keyboard->LED_SPEAKER.load(std::memory_order_acquire)!=Keyboard::LED_OFF;
 		}
 		void window(){
 			if (this->p_keyboard==NULL) return;
@@ -37,19 +37,19 @@ class KeyboardIndicator{
 			double n;
 			ImGui::PushFont(this->font);
 			switch (this->p_keyboard->LED_POWER.load(std::memory_order_acquire)){
-				case LED_ON:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1,0.2,0.2,1));break;
-				case LED_OFF:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0.2,0.2,0.2,1));break;
-				case LED_BLINK_FAST:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4((modf(t*2,&n)<0.5)?1:0.2,0.2,0.2,1));break;
-				case LED_BLINK_SLOW:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4((modf(t*0.5,&n)<0.5)?1:0.2,0.2,0.2,1));break;
+				case Keyboard::LED_ON:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1,0.2,0.2,1));break;
+				case Keyboard::LED_OFF:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0.2,0.2,0.2,1));break;
+				case Keyboard::LED_BLINK_FAST:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4((modf(t*2,&n)<0.5)?1:0.2,0.2,0.2,1));break;
+				case Keyboard::LED_BLINK_SLOW:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4((modf(t*0.5,&n)<0.5)?1:0.2,0.2,0.2,1));break;
 			}
 			ImGui::Text("\uf011");
 			ImGui::PopStyleColor();
 			ImGui::NewLine();
 			switch (this->p_keyboard->LED_SPEAKER.load(std::memory_order_acquire)){
-				case LED_ON:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1,0.2,0.2,1));break;
-				case LED_OFF:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0.2,0.2,0.2,1));break;
-				case LED_BLINK_FAST:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4((modf(t*2,&n)<0.5)?1:0.2,0.2,0.2,1));break;
-				case LED_BLINK_SLOW:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4((modf(t*0.5,&n)<0.5)?1:0.2,0.2,0.2,1));break;
+				case Keyboard::LED_ON:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(1,0.2,0.2,1));break;
+				case Keyboard::LED_OFF:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4(0.2,0.2,0.2,1));break;
+				case Keyboard::LED_BLINK_FAST:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4((modf(t*2,&n)<0.5)?1:0.2,0.2,0.2,1));break;
+				case Keyboard::LED_BLINK_SLOW:ImGui::PushStyleColor(ImGuiCol_Text,ImVec4((modf(t*0.5,&n)<0.5)?1:0.2,0.2,0.2,1));break;
 			}
 			ImGui::Text("\uf028");
 			ImGui::PopStyleColor();

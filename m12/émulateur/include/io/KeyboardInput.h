@@ -102,6 +102,11 @@ constexpr int M12_KEY_KP_EQUAL=336;
 
 class KeyboardInput{
 	public:
+		void PhoneHandsetWidget(){
+			bool state=this->p_keyboard->phoneHandsetState.load(std::memory_order_relaxed);
+			if(ImGui::Button(state?"Racrocher le combiné téléphonique":"Décrocher le combiné téléphonique")) this->p_keyboard->phoneHandsetState.store(!state,std::memory_order_relaxed);
+		}
+		
 		void KeyboardAzertyWindow(){
 			int bs=ImGui::CalcTextSize(" ").x*5+2*ImGui::GetStyle().FramePadding.x;
 			bool ctrl=this->getKey(0x9D);
@@ -703,15 +708,18 @@ class KeyboardInput{
 			if(ImGui::IsItemActivated()) this->setKey(0x65,true);
 			if(ImGui::IsItemDeactivated()) this->setKey(0x65,false);
 			
-			ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0,0.7,0.6,0.5));
-			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.1,0.8,0.7,1));
-			ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2,0.9,0.8,1));
+			ImVec4 cyan=ImVec4(0.,240./255.,160./255.,1);
+			ImVec4 cyan_t=cyan;
+			cyan_t.w=0.7;
+			ImGui::PushStyleColor(ImGuiCol_Button, cyan_t);
+			ImGui::PushStyleColor(ImGuiCol_ButtonHovered, cyan);
+			ImGui::PushStyleColor(ImGuiCol_ButtonActive, cyan);
 			activated=this->getKey(0x63);
 			if (activated) ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1,1,1,1));
+			else ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.4,0.4,0.4,1));
 			if (ctrl) ImGui::Button("}",ImVec2(bl,0));
 			else ImGui::Button("Envoi",ImVec2(bl,0));
-			if (activated) ImGui::PopStyleColor();
-			ImGui::PopStyleColor(3);
+			ImGui::PopStyleColor(4);
 			if(ImGui::IsItemActivated()) this->setKey(0x63,true);
 			if(ImGui::IsItemDeactivated()) this->setKey(0x63,false);
 			
@@ -1040,6 +1048,11 @@ class KeyboardInput{
 							case M12_KEY_I://I
 								kbs.key=0x45;//Impr.
 								kbs.shift=true;
+								break;
+								
+							case M12_KEY_C://C
+								//combiné
+								this->p_keyboard->phoneHandsetState.store(!this->p_keyboard->phoneHandsetState.load(std::memory_order_relaxed),std::memory_order_relaxed);//not thread safe (with Keyboard::Reset()) but te consequences are not a huge issue
 								break;
 						}
 					}

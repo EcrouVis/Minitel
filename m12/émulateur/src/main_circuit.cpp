@@ -555,6 +555,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		modem.generateTxInSample(sr);
 		rtcsa.setServiceSample(plb.AudioEmulatorIn());
 		kb.generatePhoneLineSample(sr);
+		kb.generateRingtoneSample(sr);
 		rtcn.generatePhoneLineSample(sr);
 		
 		//propagate the samples in the circuit
@@ -567,7 +568,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		modem.setRxSample(phoneLine.getModemSample());
 		
 		//process the samples + generate channel specific samples
-		ab.AudioIn(spkf.filter(kb.getSpeakerSample(sr))+bzf.filter(modem.getBuzzerSample(sr)));
+		ab.AudioIn(spkf.filter(kb.getSpeakerSample()+kb.getHandsetSample())+bzf.filter(modem.getBuzzerSample(sr)));//TODO: separate volume for handset and speaker / don't hardcode volume for handset when not taken
 		plb.AudioEmulatorOut(rtcsa.getServiceSample());
 		modem.processRxInSample(sr);
 	};

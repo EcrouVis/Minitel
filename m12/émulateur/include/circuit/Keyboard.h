@@ -11,23 +11,22 @@
 #define GLFW_INCLUDE_NONE
 #include "GLFW/glfw3.h"
 #include "circuit/PhoneLine.h"
-struct keyboard_message{
-	bool focus;
-	int scancode;
-	int action;
-	int mods;
-};
-const unsigned char LED_OFF=0;
-const unsigned char LED_ON=1;
-const unsigned char LED_BLINK_FAST=2;
-const unsigned char LED_BLINK_SLOW=3;
 
 
-class Keyboard{//TODO: fix behavior -> speaker should be able to be activated when connected to a service (wrong phone state?)
+
+class Keyboard{
 	public:
-		
+		enum Constants{
+			LED_OFF,
+			LED_ON,
+			LED_BLINK_FAST,
+			LED_BLINK_SLOW
+		};
+				
 		std::atomic_uchar LED_POWER=LED_OFF;
 		std::atomic_uchar LED_SPEAKER=LED_OFF;
+		
+		std::atomic_bool phoneHandsetState=false;
 	
 		void CLKTickIn(){
 			
@@ -104,7 +103,25 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 			}
 			if (this->DTMF_step>0||this->DTMF_queue.size()!=0){
 				this->DTMF_step++;
-				if (this->DTMF_queue.front()==12){
+				if (this->DTMF_queue.front()==11){
+					switch (this->DTMF_step){
+						case 120:
+							this->openPhoneLine();
+							break;
+						case 342:
+							this->closePhoneLine();
+							break;
+						case 600:
+							this->DTMF_step=0;
+							this->DTMF_queue.pop();
+							break;
+					}
+					if (this->DTMF_step>600){
+						this->DTMF_step=0;
+						this->DTMF_queue.pop();
+					}
+				}
+				else if (this->DTMF_queue.front()==12){
 					if (this->DTMF_step>=600){
 						this->DTMF_step=0;
 						this->DTMF_queue.pop();
@@ -135,6 +152,8 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 				this->sendStatus();
 			}
 			
+			
+			if (this->phoneHandsetState.load(std::memory_order_relaxed)!=(bool)(this->phone_status&0x02)) this->tooglePhoneHandset();
 		}
 		void queueKey(unsigned char keycode,bool keyPressed){
 			unsigned char a=keyPressed?0x00:0x08;
@@ -177,12 +196,24 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 			this->sendPhoneLine=f;
 		}
 		
-		float getSpeakerSample(unsigned long sampleRate){
-			float s;
-			s=this->getRingtoneSample(sampleRate);
-			if (this->speaker_on) s+=this->phoneLineSample;
-			constexpr float v[4]={0.0316227766,0.1,0.316227766,1};//guess TODO
-			s*=v[this->ringtone_volume];
+		float getSpeakerSample(){
+			float s=0;
+			if (this->speaker_on){
+				constexpr float v[4]={0.0316227766,0.1,0.316227766,1};//guess TODO
+				float a=v[this->ringtone_volume];
+				s=a*(this->ringtoneSample+this->phoneLineSample);
+			}
+			return s;
+		}
+		float getHandsetSample(){
+			if (!(bool)(this->phone_status&0x02)) return 0; //simulate audio when handset not taken
+			float s=0;
+			if ((this->phone_status&0x42)!=0x40){
+				float a;
+				if (!(bool)(this->phone_status&0x40)) a=0.0316227766/2.;//TODO: change value / arbitrary value
+				else a=0.0316227766;//TODO: idem
+				s=a*(this->ringtoneSample+this->phoneLineSample);
+			}
 			return s;
 		}
 		void setPhoneLineSample(float f){
@@ -211,8 +242,26 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 			return this->DTMFSample;
 		}
 		
+		void generateRingtoneSample(unsigned long sampleRate){
+			if (this->ringtone_note<16){//ringtone generation
+				this->ringtone_tick+=12;
+				this->ringtone_phase_tick+=this->ringtones[this->ringtone][this->ringtone_note];
+				if (this->ringtone_phase_tick>=sampleRate) this->ringtone_phase_tick-=sampleRate;
+				if (this->ringtone_tick>=sampleRate){
+					this->ringtone_tick-=sampleRate;
+					this->ringtone_note++;
+				}
+				float a=1.-std::exp(-((float)this->ringtone_note+((float)this->ringtone_tick)/((float)sampleRate))/(12.*0.06));
+				this->ringtoneSample=((this->ringtone_phase_tick*4>sampleRate)?-1.:1.)*a;
+			}
+			else this->ringtoneSample=0.;
+		}
+		
 		void Reset(){
-			this->phone_status=0x61;
+			this->phoneHandsetState.store(false,std::memory_order_relaxed);
+			this->DCLint=false;
+			this->DCLext=false;
+			this->phone_status=0x61;//this->phone_status&0x02 should be left but for ease of use, it is reseted
 			
 			this->phoneLineStateIn=0;
 			this->phoneLineStateOut=0;
@@ -245,9 +294,12 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 			
 			this->sendPhoneLine(this->phoneLineStateOut);
 		}
-	private:
-		unsigned char phone_status=0x61;
 		
+	private:
+		
+		unsigned char phone_status=0x61;
+		bool DCLint=false;
+		bool DCLext=false;
 		unsigned short phoneLineStateIn=0;
 		unsigned short phoneLineStateOut=0;
 		std::function<void(unsigned short)> sendPhoneLine=[](unsigned short d){};
@@ -301,6 +353,7 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 		unsigned char speaker_volume=0;
 		
 		float phoneLineSample=0;
+		float ringtoneSample=0;
 		
 		unsigned long dtmf_phase1=0;
 		unsigned long dtmf_phase2=0;
@@ -335,21 +388,16 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 			if ((bool)(this->cmd_p1&0x04)){//commande
 				switch (this->cmd_p2){
 					case 0x01:
-						if((this->phone_status&0x48)!=0x08){//TODO: move code
-							this->phone_status=(this->phone_status&(~0x48))|0x08;
-							this->sendStatus();
-						}
-						this->phoneLineStateOut|=line_Closed;
-						this->sendPhoneLine(this->phoneLineStateOut);
+						this->closePhoneLine();
 						printf("phone line connected\n");
 						break;
 					case 0x03:
-						if((this->phone_status&0x48)!=0x40){//TODO: move code
-							this->phone_status=(this->phone_status&(~0x48))|0x40;
-							this->sendStatus();
+						this->openPhoneLine();
+						{
+						std::queue<unsigned char> empty;
+						std::swap(this->SBUF_out_queue,empty);
 						}
-						this->phoneLineStateOut&=~line_Closed;
-						this->sendPhoneLine(this->phoneLineStateOut);
+						this->DTMF_step=0;
 						printf("phone line disconnected\n");
 						break;
 					case 0x05:
@@ -430,7 +478,7 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 				}
 			}
 			else if (!(bool)(this->cmd_p2&0xE0)){//tonalités
-				const char tone[16]={'0','1','2','3','4','5','6','7','8','9','?','%','-','?','*','#'};//TODO: unknown tone 11
+				constexpr char tone[16]={'0','1','2','3','4','5','6','7','8','9','?','%','-','?','*','#'};//TODO: unknown tone 11
 				printf("DTMF tone %c\n",tone[(this->cmd_p2>>1)&0x0F]);
 				DTMF_queue.push((this->cmd_p2>>1)&0x0F);
 				
@@ -441,26 +489,48 @@ class Keyboard{//TODO: fix behavior -> speaker should be able to be activated wh
 			}
 		}
 		
-		float getRingtoneSample(unsigned long sampleRate){
-			if (this->ringtone_note<16){//ringtone generation
-				this->ringtone_tick+=12;
-				this->ringtone_phase_tick+=this->ringtones[this->ringtone][this->ringtone_note];
-				if (this->ringtone_phase_tick>=sampleRate) this->ringtone_phase_tick-=sampleRate;
-				if (this->ringtone_tick>=sampleRate){
-					this->ringtone_tick-=sampleRate;
-					this->ringtone_note++;
-				}
-				float a=1.-std::exp(-((float)this->ringtone_note+((float)this->ringtone_tick)/((float)sampleRate))/(12.*0.06));
-				return ((this->ringtone_phase_tick*4>sampleRate)?-1.:1.)*a;
-			}
-			return 0.;
-		}
 		void playRingtone(){
 			this->ringtone_note=0;
 			this->ringtone_tick=0;
 		}
 		void stopRingtone(){
 			this->ringtone_note=16;
+		}
+		
+		void openPhoneLine(){
+			this->DCLint=false;
+			if((this->phone_status&0x40)!=0x40){
+				this->phone_status=(this->phone_status&(~0x48))|0x40;//TODO: research flags
+				if (this->DCLext) this->phone_status|=0x08;
+				this->sendStatus();//TODO: research behavior
+			}
+			if (!this->DCLext) this->phoneLineStateOut&=~line_Closed;
+			this->sendPhoneLine(this->phoneLineStateOut);
+		}
+		void closePhoneLine(){
+			this->DCLint=true;
+			if((this->phone_status&0x40)!=0x00){
+				this->phone_status=(this->phone_status&(~0x48))|0x08;//TODO: research flags
+				this->sendStatus();//TODO: research behavior
+			}
+			this->phoneLineStateOut|=line_Closed;
+			this->sendPhoneLine(this->phoneLineStateOut);
+		}
+		void tooglePhoneHandset(){
+			this->phone_status^=0x02;
+			this->DCLext=(bool)this->phone_status&0x02;
+			if (this->phone_status&0x02){
+				this->phone_status|=0x08;
+				this->phoneLineStateOut|=line_Closed;
+			}
+			else{
+				if (!this->DCLint){
+					this->phone_status&=~0x08;
+					this->phoneLineStateOut&=~line_Closed;
+				}
+			}
+			this->sendStatus();
+			this->sendPhoneLine(this->phoneLineStateOut);
 		}
 };
 

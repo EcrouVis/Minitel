@@ -940,15 +940,15 @@ class M12Window{
 							
 							const char *key1[13]={"Escape","Alt","²","Tab","Backspace","F2","F3","F4","F5","F6","F7","F8","F9"};
 							const char *key2[13]={"Esc","Fnct","\'On/Off\'","Connex/Fin","Mem","Sommaire","Guide","Annulation","Correction","Retour","Suite","Répétition","Envoi"};
-							const char *key3[8]={"AltGr+P","AltGr+M","AltGr+A","AltGr+Z","AltGr+R","AltGr+B","AltGr+T","AltGr+I"};
-							const char *key4[8]={"Volume+","Volume-","Appel Annuaire","Appel Express (n°51)","Appel Répertoire","Appel Bis","Décrochage téléphone (haut parleur)","Impr. (Shift+Appel Annuaire)"};
-							for (int i=0;i<13;i++){
+							const char *key3[9]={"AltGr+P","AltGr+M","AltGr+A","AltGr+Z","AltGr+R","AltGr+B","AltGr+I","AltGr+T","AltGr+C"};
+							const char *key4[9]={"Volume +","Volume -","Appel Annuaire","Appel Express (n°51)","Appel Répertoire","Appel Bis","Impr. (Shift+Appel Annuaire)","Décrochage téléphone (haut parleur)","Décrochage téléphone (combiné)"};
+							for (unsigned int i=0;i<sizeof(key1)/sizeof(key1[0]);i++){
 								ImGui::TableNextRow();
 								ImGui::TableSetColumnIndex(0);
 								ImGui::Text("%s",key1[i]);
 								ImGui::TableSetColumnIndex(1);
 								ImGui::Text("%s",key2[i]);
-								if (i<8){
+								if (i<sizeof(key3)/sizeof(key3[0])){
 									ImGui::TableSetColumnIndex(2);
 									ImGui::Text("%s",key3[i]);
 									ImGui::TableSetColumnIndex(3);
@@ -979,6 +979,7 @@ class M12Window{
 								this->PARAMETERS.io.keyboard.azerty_keys_window_pos=ImGui::GetMainViewport()->GetCenter();
 							}
 						}
+						this->keyboardInput.PhoneHandsetWidget();
 						ImGui::TreePop();
 					}
 					
@@ -1093,11 +1094,10 @@ class M12Window{
 						ImGui::TreePop();
 					}
 					
-					ImGui::BeginDisabled();
 					if (ImGui::TreeNode("Combiné téléphonique")){
+						ImGui::TextDisabled("Le microphone n'est pas implémenté");
 						ImGui::TreePop();
 					}
-					ImGui::EndDisabled();
 					
 					ImGui::SeparatorText("Vidéo");
 					if (ImGui::TreeNode("Paramètres d'affichage CRT")){
@@ -1374,6 +1374,11 @@ class M12Window{
 			if (key==GLFW_KEY_F11&&action==GLFW_PRESS){
 				if (glfwGetWindowMonitor(window)==NULL) p_M12Window->setWindowFullscreen();
 				else p_M12Window->setWindowWindowed();
+			}
+			if (key==GLFW_KEY_F12&&action==GLFW_PRESS){
+				thread_message ms;
+				ms.cmd=SPECIAL;
+				p_M12Window->p_mb_circuit->send(&ms);
 			}
 			p_M12Window->PARAMETERS.io.keyboard.num_lock=(bool)(mods&GLFW_MOD_NUM_LOCK);
 			
