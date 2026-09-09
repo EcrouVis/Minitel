@@ -34,7 +34,7 @@ class RTCNetwork{
 		bool requestPhoneLine(RTCService* srv){
 			if (this->currentState!=this->IDLE) return false;
 			this->currentState=this->CALL_INCOMING;
-			printf("CALL_INCOMING\n");
+			//printf("CALL_INCOMING\n");
 			this->timer=0;
 			this->ServiceLinked=srv;
 			this->ServiceLinked->sendPhoneLine=this->sendPhoneLine;
@@ -48,7 +48,7 @@ class RTCNetwork{
 					case IDLE:
 						this->phoneLineStateIn=state;
 						this->currentState=this->WAIT_PHONE_NUMBER;
-						printf("WAIT_PHONE_NUMBER\n");
+						//printf("WAIT_PHONE_NUMBER\n");
 						this->timer=0;
 						this->phoneLineStateOut=line_call_progress_tone;
 						this->sendPhoneLine(this->phoneLineStateOut);
@@ -57,7 +57,7 @@ class RTCNetwork{
 						this->phoneLineStateIn=state;
 						if ((bool)(state&line_DTMF)){
 							this->currentState=this->PHONE_DIALING;
-							printf("PHONE_DIALING\n");
+							//printf("PHONE_DIALING\n");
 							this->timer=0;
 							this->phoneLineStateOut=0;
 							this->sendPhoneLine(this->phoneLineStateOut);
@@ -81,7 +81,7 @@ class RTCNetwork{
 					case CALL_INCOMING:
 						this->phoneLineStateIn=state;
 						this->currentState=this->CONNECTED;
-						printf("CONNECTED\n");
+						//printf("CONNECTED\n");
 						this->timer=0;
 						this->phoneLineStateOut=0;
 						this->sendPhoneLine(this->phoneLineStateOut);
@@ -93,7 +93,7 @@ class RTCNetwork{
 				this->phoneLineStateIn=state;
 				if (this->currentState!=this->CALL_INCOMING){
 					this->currentState=this->IDLE;
-					printf("IDLE\n");
+					//printf("IDLE\n");
 					this->timer=0;
 					this->phoneLineStateOut=0;
 					this->sendPhoneLine(this->phoneLineStateOut);
@@ -118,7 +118,7 @@ class RTCNetwork{
 				if (this->timer>=this->wait_phone_number_timeout){
 					this->timer=0;
 					this->currentState=this->WAIT_CALL_END;
-					printf("WAIT_CALL_END\n");
+					//printf("WAIT_CALL_END\n");
 				}
 			}
 			else if (this->currentState==this->PHONE_DIALING){
@@ -143,19 +143,19 @@ class RTCNetwork{
 									if (pnsg==NOT_PHONE_NUMBER){
 										this->timer=0;
 										this->currentState=this->WAIT_CALL_END;
-										printf("WAIT_CALL_END\n");
+										//printf("WAIT_CALL_END\n");
 									}
 									else if (pnsg==PHONE_NUMBER_FINISHED){
 										this->timer=0;
 										this->currentState=this->CONNECTED;
-										printf("CONNECTED\n");
+										//printf("CONNECTED\n");
 									}
 								}
 							}
 							else{
 								this->timer=0;
 								this->currentState=this->WAIT_CALL_END;
-								printf("WAIT_CALL_END\n");
+								//printf("WAIT_CALL_END\n");
 							}
 							break;
 						case line_DTMF_0:this->pendingNumber=0;break;
@@ -176,7 +176,7 @@ class RTCNetwork{
 				if (this->timer>=this->dialing_timeout&&!(bool)(this->phoneLineStateIn&line_DTMF)){
 					this->timer=0;
 					this->currentState=this->WAIT_CALL_END;
-					printf("WAIT_CALL_END\n");
+					//printf("WAIT_CALL_END\n");
 				}
 			}
 			else if (this->currentState==this->WAIT_CALL_END){
@@ -516,7 +516,7 @@ class RTCServiceWebsocket: public RTCService{
 			this->webSocket.setOnMessageCallback([this](const ix::WebSocketMessagePtr& msg){
 				switch (msg->type){
 					case ix::WebSocketMessageType::Error:
-						printf("%s\n",msg->errorInfo.reason.c_str());
+						printf("WS: %s\n",msg->errorInfo.reason.c_str());
 						break;
 					case ix::WebSocketMessageType::Open:
 						break;

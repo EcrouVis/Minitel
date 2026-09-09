@@ -735,7 +735,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 						case 0x41://envoi
 						{
 							char* url=this->getURL();
-							printf("url:%s\n",url);
+							printf("WS: url=%s\n",url);
 							free(url);
 							/*this->currentState=this->CONFIGURE;
 							this->subState=0;
@@ -1143,7 +1143,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					case ix::WebSocketMessageType::Error:
 						{
 							std::lock_guard<std::mutex> lock(this->pMQMutex);
-							printf("%s\n",msg->errorInfo.reason.c_str());
+							printf("WS: %s\n",msg->errorInfo.reason.c_str());
 							this->subState=3;
 							this->CONNECTEDSendCMD();
 						}

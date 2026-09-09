@@ -170,7 +170,7 @@ class Keyboard{
 			if ((!b)&&this->S_in&&this->S_in_step==0) this->S_in_step=1;
 			if (b&&(!this->S_in)){
 				if(this->S_in_low>=22){
-					printf("Keyboard reset !!!!!!!!!!!!!!!!!!!!!!!!!\n");
+					//printf("Keyboard reset !!!!!!!!!!!!!!!!!!!!!!!!!\n");
 					/////////////////////////////////////////////////reset?
 					this->phone_status|=0x80;
 					this->sendStatus();
@@ -389,7 +389,7 @@ class Keyboard{
 				switch (this->cmd_p2){
 					case 0x01:
 						this->closePhoneLine();
-						printf("phone line connected\n");
+						//printf("phone line connected\n");
 						break;
 					case 0x03:
 						this->openPhoneLine();
@@ -398,22 +398,22 @@ class Keyboard{
 						std::swap(this->SBUF_out_queue,empty);
 						}
 						this->DTMF_step=0;
-						printf("phone line disconnected\n");
+						//printf("phone line disconnected\n");
 						break;
 					case 0x05:
-						printf("speaker activated\n");
+						//printf("speaker activated\n");
 						this->speaker_on=true;
 						break;
 					case 0x07:
-						printf("speaker deactivated\n");
+						//printf("speaker deactivated\n");
 						this->speaker_on=false;
 						break;
 					case 0x09:
-						printf("ringtone activated\n");
+						//printf("ringtone activated\n");
 						this->ringtone_activated=true;
 						break;
 					case 0x0B:
-						printf("ringtone deactivated\n");
+						//printf("ringtone deactivated\n");
 						this->ringtone_activated=false;
 						break;
 					
@@ -422,26 +422,53 @@ class Keyboard{
 							this->phone_status=this->phone_status|0x40;
 							this->sendStatus();
 						}
-						printf("microphone activated\n");
+						//printf("microphone activated\n");
 						break;
 					case 0x13:
 						if ((bool)(this->phone_status&0x40)){
 							this->phone_status=this->phone_status&(~0x40);
 							this->sendStatus();
 						}
-						printf("microphone deactivated\n");
+						//printf("microphone deactivated\n");
 						break;
 						
-					case 0x17:this->sendStatus();printf("request phone status %02X\n",this->phone_status);break;
+					case 0x17:
+						this->sendStatus();
+						//printf("request phone status %02X\n",this->phone_status);
+						break;
 					
-					case 0x21:this->LED_SPEAKER.store(LED_OFF,std::memory_order_release);printf("power off speaker led\n");break;
-					case 0x23:this->LED_POWER.store(LED_OFF,std::memory_order_release);printf("power off on/off led\n");break;
-					case 0x29:this->LED_SPEAKER.store(LED_ON,std::memory_order_release);printf("power on speaker led\n");break;
-					case 0x2B:this->LED_POWER.store(LED_ON,std::memory_order_release);printf("power on on/off led\n");break;
-					case 0x31:this->LED_SPEAKER.store(LED_BLINK_FAST,std::memory_order_release);printf("blink speaker led fast (guess)\n");break;
-					case 0x33:this->LED_POWER.store(LED_BLINK_FAST,std::memory_order_release);printf("blink on/off led fast\n");break;
-					case 0x39:this->LED_SPEAKER.store(LED_BLINK_SLOW,std::memory_order_release);printf("blink speaker led slow\n");break;
-					case 0x3B:this->LED_POWER.store(LED_BLINK_SLOW,std::memory_order_release);printf("blink on/off led slow (guess)\n");break;
+					case 0x21:
+						this->LED_SPEAKER.store(LED_OFF,std::memory_order_release);
+						//printf("power off speaker led\n");
+						break;
+					case 0x23:
+						this->LED_POWER.store(LED_OFF,std::memory_order_release);
+						//printf("power off on/off led\n");
+						break;
+					case 0x29:
+						this->LED_SPEAKER.store(LED_ON,std::memory_order_release);
+						//printf("power on speaker led\n");
+						break;
+					case 0x2B:
+						this->LED_POWER.store(LED_ON,std::memory_order_release);
+						//printf("power on on/off led\n");
+						break;
+					case 0x31:
+						this->LED_SPEAKER.store(LED_BLINK_FAST,std::memory_order_release);
+						//printf("blink speaker led fast (guess)\n");
+						break;
+					case 0x33:
+						this->LED_POWER.store(LED_BLINK_FAST,std::memory_order_release);
+						//printf("blink on/off led fast\n");
+						break;
+					case 0x39:
+						this->LED_SPEAKER.store(LED_BLINK_SLOW,std::memory_order_release);
+						//printf("blink speaker led slow\n");
+						break;
+					case 0x3B:
+						this->LED_POWER.store(LED_BLINK_SLOW,std::memory_order_release);
+						//printf("blink on/off led slow (guess)\n");
+						break;
 					
 					case 0x41:
 					case 0x43:
@@ -478,8 +505,8 @@ class Keyboard{
 				}
 			}
 			else if (!(bool)(this->cmd_p2&0xE0)){//tonalités
-				constexpr char tone[16]={'0','1','2','3','4','5','6','7','8','9','?','%','-','?','*','#'};//TODO: unknown tone 11
-				printf("DTMF tone %c\n",tone[(this->cmd_p2>>1)&0x0F]);
+				//constexpr char tone[16]={'0','1','2','3','4','5','6','7','8','9','?','%','-','?','*','#'};//TODO: unknown tone 11
+				//printf("DTMF tone %c\n",tone[(this->cmd_p2>>1)&0x0F]);
 				DTMF_queue.push((this->cmd_p2>>1)&0x0F);
 				
 				/////////////////////////////

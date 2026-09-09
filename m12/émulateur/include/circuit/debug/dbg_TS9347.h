@@ -147,7 +147,7 @@ class TS9347Logger{
 							break;
 						case 0x02:
 						case 0x03:
-							printf("TS9347: TSM:%c increment=%i\n",RnWc,inc);
+							printf("TS9347: TSM: %c increment=%i\n",RnWc,inc);
 							MP=true;
 							this->R123_value[0]=this->As;
 							this->R123_value[1]=this->Bs;

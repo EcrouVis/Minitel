@@ -95,6 +95,20 @@ if (USE_DECOMP_TOOLS)
 	)
 endif()
 
+if (DEBUG_TS9347)
+	list(APPEND 
+		OPT_DEF
+			M12_DEBUG_TS9347
+	)
+endif()
+
+if (DEBUG_80C32)
+	list(APPEND 
+		OPT_DEF
+			M12_DEBUG_80C32
+	)
+endif()
+
 if (LINUX AND APPIMAGE_BUILD)
 	list(APPEND 
 		OPT_DEF

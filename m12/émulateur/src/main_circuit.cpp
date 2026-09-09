@@ -73,11 +73,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	RTCServiceAudio rtcsa(std::vector<unsigned char>{0,0,0,0});
 	rtcn.subscribeService((RTCService*)&rtcsa);
 	
-#ifdef M12_USE_DECOMP_TOOLS
-	RuntimeDecompiler rtd(&uc);
-#endif
-	TS9347Logger vcl(&video);
-	
 	
 	//construct circuit
 	auto Dbus=[&cpld,&eram,&video,&uc,&iol](unsigned char d){//in ic
@@ -236,8 +231,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 			close_modem=(bool)(d&0x10);
 			phoneLine.closeRelay(close_modem);
 			//modem.RA2ChangeIn(close_modem?0x0400:0);//test
-			if (close_modem) printf("modem connected\n");
-			else printf("modem disconnected\n");
+			//if (close_modem) printf("modem connected\n");
+			//else printf("modem disconnected\n");
 		}
 		//0x20->crt power
 		crtb.CRTPowerChangeIn((bool)(d&0x20));
@@ -305,36 +300,6 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	};
 	crtb.subscribeSignal(VideoSignal);
 	
-	/*unsigned short ModemPhoneLineState=0;
-	unsigned short KeyboardPhoneLineState=0;
-	unsigned short RTCPhoneLineState=0;
-	modem.subscribeATO([&rtcn,&kb,&modem,&ModemPhoneLineState,&KeyboardPhoneLineState,&RTCPhoneLineState](unsigned short d){
-		printf("ATO %04X\n",d);
-		ModemPhoneLineState=d;
-		unsigned short st=ModemPhoneLineState|KeyboardPhoneLineState|RTCPhoneLineState;
-		printf("PL %04X\n",st);
-		rtcn.phoneLineChangeIn(st);
-		kb.phoneLineChangeIn(st);
-		modem.RA2ChangeIn(st);
-	});
-	kb.subscribePhoneLine([&rtcn,&kb,&modem,&ModemPhoneLineState,&KeyboardPhoneLineState,&RTCPhoneLineState](unsigned short d){
-		printf("KB %04X\n",d);
-		KeyboardPhoneLineState=d;
-		unsigned short st=ModemPhoneLineState|KeyboardPhoneLineState|RTCPhoneLineState;
-		printf("PL %04X\n",st);
-		rtcn.phoneLineChangeIn(st);
-		kb.phoneLineChangeIn(st);
-		modem.RA2ChangeIn(st);
-	});
-	rtcn.subscribePhoneLine([&rtcn,&kb,&modem,&ModemPhoneLineState,&KeyboardPhoneLineState,&RTCPhoneLineState](unsigned short d){
-		printf("RTC %04X\n",d);
-		RTCPhoneLineState=d;
-		unsigned short st=ModemPhoneLineState|KeyboardPhoneLineState|RTCPhoneLineState;
-		printf("PL %04X\n",st);
-		rtcn.phoneLineChangeIn(st);
-		kb.phoneLineChangeIn(st);
-		modem.RA2ChangeIn(st);
-	});*/
 	rtcn.subscribePhoneLine([&phoneLine](unsigned short d){phoneLine.wireRTCIn(d);});
 	kb.subscribePhoneLine([&phoneLine](unsigned short d){phoneLine.wireKeyboardIn(d);});
 	modem.subscribeATO([&phoneLine](unsigned short d){phoneLine.wireModemIn(d);});
@@ -358,7 +323,10 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	
 	//debug
 	
-	//video.debug_cmd=[&vcl](unsigned char a,unsigned char d,bool R){vcl.update(a,d,R);};
+#ifdef M12_DEBUG_TS9347
+	TS9347Logger vcl(&video);
+	video.debug_cmd=[&vcl](unsigned char a,unsigned char d,bool R){vcl.update(a,d,R);};
+#endif
 	
 	modem.debug_cmd=[p_mb_video](unsigned char cmd){
 		static unsigned char buzzer=0x3F;
@@ -370,7 +338,7 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		if ((cmd&0xF0)==0x30) buzzer=cmd;
 	};
 
-	auto dbgIOIN=[p_mb_video](unsigned char a,unsigned char d){
+	auto dbgIOIN=[](unsigned char a,unsigned char d){
 		switch (a){
 			case 0x20:
 			case 0x21:
@@ -401,23 +369,13 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 				
 				break;
 			default:
-			{
 				printf("IO: Write to unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
-				//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-				
-				thread_message ms_p_notif;
-				ms_p_notif.cmd=NOTIFICATION_RED;
-				char* buffer=(char*)calloc(51,sizeof(char));
-				snprintf(buffer,50,"E/S inconnue (0x%02X)<=0x%02X",a,d);
-				ms_p_notif.p=(void*)buffer;
-				p_mb_video->send(&ms_p_notif);
 				break;
-			}
 		}
 	};
 	iol.subscribeIN(dbgIOIN);
 	
-	auto dbgIOOUT=[p_mb_video](unsigned char a,unsigned char d){
+	auto dbgIOOUT=[](unsigned char a,unsigned char d){
 		switch (a){
 			case 0x20:
 			case 0x21:
@@ -448,39 +406,32 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 				
 				break;
 			default:
-			{
 				printf("IO: Read from unknown IO A: 0x%02X / D: 0x%02X\n",a,d);
-				//p_gState->stepByStep.store(true,std::memory_order_relaxed);
-				
-				thread_message ms_p_notif;
-				ms_p_notif.cmd=NOTIFICATION_RED;
-				char* buffer=(char*)calloc(51,sizeof(char));
-				snprintf(buffer,50,"E/S inconnue (0x%02X)=>0x%02X",a,d);
-				ms_p_notif.p=(void*)buffer;
-				p_mb_video->send(&ms_p_notif);
 				break;
-			}
 		}
 	};
 	iol.subscribeOUT(dbgIOOUT);
 	
 #ifdef M12_USE_DECOMP_TOOLS
+	RuntimeDecompiler rtd(&uc);
 	uc.debug_signal_alu_before_exec=[p_gState,&CLKs,&rtd,&uc](){
 		rtd.update();
 #else
 	uc.debug_signal_alu_before_exec=[p_gState,&CLKs,&uc](){
 #endif
 		CLKs.setPause(p_gState->stepByStep.load(std::memory_order_relaxed));
+#ifdef M12_DEBUG_80C32
 		if (p_gState->stepByStep.load(std::memory_order_relaxed)){
 			print_m12_alu_instruction(&uc);
 		}
+#endif
 	};
 	
 	//mailbox
 	
 	auto checkMB=[p_mb_circuit,&eram,&erom,&modem,&wt,&CLKs,p_gState,&rtcn,&rtcsa](){
 		//pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
-		CLKs.setPause(p_gState->stepByStep.load(std::memory_order_relaxed));
+		if (!p_gState->stepByStep.load(std::memory_order_relaxed)) CLKs.setPause(false);
 		thread_message ms;
 		static unsigned char erom_cpy[EROM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
 		static unsigned char eram_cpy[ERAM_SIZE];

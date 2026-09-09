@@ -862,6 +862,7 @@ class M12Window{
 						ImGui::PushStyleColor(ImGuiCol_ButtonHovered,ImVec4(0,1,0,1));
 						ImGui::PushStyleColor(ImGuiCol_ButtonActive,ImVec4(0,1,0,1));
 						if(ImGui::Button("(  O)")){
+							this->PARAMETERS.p_gState->stepByStep.store(false,std::memory_order_relaxed);
 							thread_message ms;
 							ms.cmd=EMU_OFF;
 							this->p_mb_circuit->send(&ms);
