@@ -1246,6 +1246,7 @@ class M12Window{
 					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
 					ImGui::Text("%s (ver.:%s)",this->PARAMETERS.info.title,this->PARAMETERS.info.version);
+					ImGui::TextLinkOpenURL("Ouvrir la page des mises à jour",this->PARAMETERS.info.releases);
 					ImGui::SeparatorText("Développeurs");
 					ImGui::Text("%s",this->PARAMETERS.info.programmers);
 					ImGui::SeparatorText("Bibliothèques");

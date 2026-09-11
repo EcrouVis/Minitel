@@ -167,6 +167,7 @@ struct P_Info{
 	const char* title="Minitel 12 Philips";
 	const char* version=M12_VERSION;
 	const char* programmers="Yves Landemarre";
+	const char* releases="https://github.com/EcrouVis/Minitel/releases";
 	constexpr static License lib_licenses[]={
 		{lib_imgui,license_imgui},
 		{lib_glfw,license_glfw},
