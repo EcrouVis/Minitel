@@ -1,0 +1,36 @@
+Simulation:
+
+- Rechercher plus en profondeur comment fonctionne le MBSL-4000FH5-5 et le clavier
+	- création d'une alimentation basse tension (pour travailler en toute sécurité)
+	- achat d'une EEPROM compatible (pins, TTL, …)
+	- création d'une rom de test
+	- mesure des signaux sur tout le pcb
+
+- Vérifier le fonctionnement du TS9347 quand X>=40
+
+
+
+Code:
+
+- Créer un algorithme pour analyser les transmissions vidéotex pour simplifier les interfaces / assainir les données / mieux supporter les séquences d'échappement
+
+- Nettoyage du code
+
+
+
+Fonctionnalités:
+
+- Supporter le retournement de modem sur l'interface numérique
+	- détection de la coupure à 75bauds
+	- support de PRO1 RET2 dans le cas où le serveur émet à 75bauds (non conforme aux STUM mais simple à mettre en œuvre pour commander le retournement)
+
+- Supporter la correction d'erreur sur l'interface numérique du modem ? (ou le laisser aux applications)
+
+- Ajouter un système de plugin pour l'interface série et l'interface modem ?
+	- mettre en place un système pour partager les ressources globales de ImGui entre les dlls
+	- mettre en place un système de sauvegarde des préférences
+	- créer un dll pour les algorithmes communs
+
+- Ajouter un système de patch ? (format .ups ?)
+
+- Créer un module pour l'échange de mails / s'interfacer avec le forum ?
