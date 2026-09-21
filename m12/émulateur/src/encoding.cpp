@@ -15,6 +15,7 @@ char* videotex_to_utf8(std::vector<unsigned char>* vdt, bool G1){//SEP/REP/US/ES
 				case 0x0F:
 					graphics=false;
 					break;
+				case 0x16:
 				case 0x19:
 					break;
 				case 0x10:
@@ -48,7 +49,7 @@ char* videotex_to_utf8(std::vector<unsigned char>* vdt, bool G1){//SEP/REP/US/ES
 				}
 			}
 			else{
-				if (i>=1&&(*vdt)[i-1]==0x19){
+				if (i>=1&&((*vdt)[i-1]==0x19||(*vdt)[i-1]==0x16)){
 					if (((*vdt)[i]&0xF0)!=0x40){
 						switch ((*vdt)[i]){
 							case 0x23: str.push_back(0xC2); str.push_back(0xA3); break;
@@ -72,7 +73,7 @@ char* videotex_to_utf8(std::vector<unsigned char>* vdt, bool G1){//SEP/REP/US/ES
 						}
 					}
 				}
-				else if (i>=2&&(*vdt)[i-2]==0x19&&((*vdt)[i-1]&0xF0)==0x40){
+				else if (i>=2&&((*vdt)[i-2]==0x19||(*vdt)[i-2]==0x16)&&((*vdt)[i-1]&0xF0)==0x40){
 					switch ((*vdt)[i-1]){
 						case 0x41://àèù
 							switch ((*vdt)[i]){
