@@ -247,123 +247,157 @@ constexpr std::vector<unsigned char>* utf8_to_videotex_ts9347(const char* cstr, 
 	if (G1&&!graphics) vdt->push_back(0x0E);//SI
 	return vdt;
 }
-
-class cmdSplitterVideotex{
+class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 	public:
-		cmdSplitterVideotex(){
-			this->cmdnestq.push_back(new std::vector<unsigned char>);
-		}
-		void updateCmd(unsigned char d){
-			resync:
+		bool sequenceEnded=false;
+		std::vector<unsigned char> sequence;
+		
+		bool updateSequence(unsigned char d){
+			if (this->sequenceEnded){
+				resync:
+				this->sequenceEnded=false;
+				this->sequence.clear();
+			}
 			
-			if (d==0x1B||d==0x00) this->cmdnestq.push_back(new std::vector<unsigned char>);
-			std::vector<unsigned char>* pcmd=cmdnestq.back();//avoid issues with sequences nesting
-			pcmd->push_back(d);
-			switch (pcmd->front()){
+			this->sequence.push_back(d);
+			
+			switch (this->sequence.front()){
+				default:
+					this->sequenceEnded=true;
+					break;
+					
 				case 0x00://NUL
-				{
-					this->callback(pcmd);
-					this->cmdnestq.pop_back();
-					delete pcmd;
+					this->sequenceEnded=false;
 					break;
-				}
-				case 0x10://DLE
-					if (pcmd->size()==2){
-						this->callback(pcmd);
-						pcmd->clear();
-					}
-					break;
+					
 				case 0x12://REP
-					if (pcmd->size()==2){
-						if (pcmd->back()<0x20){
-							pcmd->clear();
+					if (this->sequence.size()==2){
+						if (this->sequence.back()<0x40){
 							goto resync;
 						}
 						else{
-							if (pcmd->back()>=0x40) this->callback(pcmd);
-							pcmd->clear();
+							this->sequenceEnded=true;
 						}
 					}
 					break;
+					
 				case 0x13://SEP
-					if (pcmd->size()==2){
-						this->callback(pcmd);
-						pcmd->clear();
+					if (this->sequence.size()==2){
+						this->sequenceEnded=true;
 					}
 					break;
+					
+				case 0x16://SYN
 				case 0x19://SS2
-					if (pcmd->size()>=2&&pcmd->back()<0x20){
-						pcmd->clear();
+					if (this->sequence.size()>=2&&this->sequence.back()<0x20){
 						goto resync;
 					}
 					else{
-						if ((*pcmd)[1]>=0x40) this->callback(pcmd);
-						pcmd->clear();
+						if ((this->sequence[1]&0x70)!=0x40||this->sequence.size()==3) this->sequenceEnded=true;
 					}
 					break;
+					
 				case 0x1D://SS3
-					if (pcmd->size()==2){
-						if ((*pcmd)[1]<0x20){
-							pcmd->clear();
+					if (this->sequence.size()==2){
+						if (this->sequence.back()<0x20){
 							goto resync;
 						}
 						else{
-							this->callback(pcmd);
-							pcmd->clear();
+							this->sequenceEnded=true;
 						}
 					}
 					break;
-				case 0x1F://US
-					//STUTEL (ETS 300 075) -> 0x15 0x3E ...
-					//STUCAM -> 0x15 0x3C ...
-					if (pcmd->size()==2){
-						if (pcmd->back()<0x20){
-							pcmd->clear();
+					
+				case 0x1F://US / TODO: support sequences other than US XX+64 YY+64
+					if (this->sequence.size()>=2){
+						if (this->sequence.back()<0x40||this->sequence.back()>0x58){
 							goto resync;
 						}
 						else{
-							this->callback(pcmd);
-							pcmd->clear();
+							if (this->sequence.size()==3){
+								this->sequenceEnded=true;
+							}
 						}
 					}
 					break;
-				//case 0x1A://SUB
+					
 				case 0x1B://ESC
-					if (pcmd->size()>=2){
-						if (pcmd->back()<0x20||pcmd->back()==0x7F){
-							this->cmdnestq.pop_back();
-							delete pcmd;
+					if (this->sequence.size()>=2){
+						if (this->sequence.back()<0x20||this->sequence.back()==0x7F){
 							goto resync;
 						}
-						else{
-							if((*pcmd)[1]<0x30){//nF escape sequence
-								if (pcmd->back()>=0x30){
-									this->callback(pcmd);
-									this->cmdnestq.pop_back();
-									delete pcmd;
+						else if(this->sequence[1]<0x30){//nF escape sequence
+							if (this->sequence.back()>=0x30){
+								this->sequenceEnded=true;
+							}
+						}
+						else if (this->sequence[1]<0x40){//Fp escape sequence
+							switch(this->sequence[1]){
+								case 0x35 ... 0x37:
+									if (this->sequence.size()==3){
+										if ((this->sequence[2]&0x70)==0x40){
+											this->sequenceEnded=true;
+										}
+										else{
+											goto resync;
+										}
+									}
+									break;
+								case 0x39:
+									if (this->sequence.size()==3){
+										this->sequenceEnded=true;
+									}
+									break;
+								case 0x3A:
+									if (this->sequence.size()==4){
+										this->sequenceEnded=true;
+									}
+									break;
+								case 0x3B:
+									if (this->sequence.size()==5){
+										this->sequenceEnded=true;
+									}
+									break;
+								default:
+									goto resync;
+							}
+						}
+						else if (this->sequence[1]<0x60){//Fe escape sequence
+							if (this->sequence[1]==0x5B){//CSI
+								if(this->sequence.size()>=3){
+									switch(this->sequence.back()){
+										case 0x30 ... 0x3F:
+											if((this->sequence[this->sequence.size()-2]<0x30||this->sequence[this->sequence.size()-2]>0x3F)&&this->sequence.size()!=3){
+												goto resync;
+											}
+											break;
+										case 0x20 ... 0x2F:
+											if((this->sequence[this->sequence.size()-2]<0x20||this->sequence[this->sequence.size()-2]>0x3F)&&this->sequence.size()!=3){
+												goto resync;
+											}
+											break;
+										case 0x40 ... 0x7E:
+											this->sequenceEnded=true;
+											break;
+										default:
+											goto resync;
+									}
 								}
 							}
-							else{//Fp/Fe/Fs escape sequence
-								this->callback(pcmd);
-								this->cmdnestq.pop_back();
-								delete pcmd;
+							else{//C1
+								this->sequenceEnded=true;
 							}
+						}
+						else{//Fs escape sequence
+							//if (this->sequence.size()==2)
+							this->sequenceEnded=true;
 						}
 					}
 					break;
-				default:
-					this->callback(pcmd);
-					pcmd->clear();
-					break;
 			}
+			
+			return this->sequenceEnded;
 		}
-		void setCmdCallback(std::function<void(std::vector<unsigned char>*)> f){
-			this->callback=f;
-		}
-		
-	private:
-		std::function<void(std::vector<unsigned char>*)> callback;
-		std::vector<std::vector<unsigned char>*> cmdnestq;
 };
 
 std::vector<unsigned char>* DProtocolTranslationMode4Encode(const std::vector<unsigned char>* data,bool C0=false,bool space=false);
