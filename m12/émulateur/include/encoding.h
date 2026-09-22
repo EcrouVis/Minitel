@@ -252,6 +252,27 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 		bool sequenceEnded=false;
 		std::vector<unsigned char> sequence;
 		
+		enum SequenceType{
+			OTHER,
+			REP,
+			SEP,
+			SS2,
+			SS3,
+			US_CURSOR_POSITION,
+			US_CURSOR_LINE,
+			US_DRCS,
+			US_STUCAM,
+			US_STUTEL,
+			ESC_nF,
+			ESC_Fp_DA,
+			ESC_Fp_PRO1,
+			ESC_Fp_PRO2,
+			ESC_Fp_PRO3,
+			ESC_Fe_CSI,
+			ESC_Fe_C1,
+			ESC_Fs
+		} sequenceType=OTHER;
+		
 		bool updateSequence(unsigned char d){
 			if (this->sequenceEnded){
 				resync:
@@ -264,6 +285,7 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 			switch (this->sequence.front()){
 				default:
 					this->sequenceEnded=true;
+					this->sequenceType=SequenceType::OTHER;
 					break;
 					
 				case 0x00://NUL
@@ -277,6 +299,7 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 						}
 						else{
 							this->sequenceEnded=true;
+							this->sequenceType=SequenceType::REP;
 						}
 					}
 					break;
@@ -284,16 +307,20 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 				case 0x13://SEP
 					if (this->sequence.size()==2){
 						this->sequenceEnded=true;
+						this->sequenceType=SequenceType::SEP;
 					}
 					break;
 					
 				case 0x16://SYN
 				case 0x19://SS2
-					if (this->sequence.size()>=2&&this->sequence.back()<0x20){
-						goto resync;
-					}
-					else{
-						if ((this->sequence[1]&0x70)!=0x40||this->sequence.size()==3) this->sequenceEnded=true;
+					if (this->sequence.size()>=2){
+						if (this->sequence.back()<0x20){
+							goto resync;
+						}
+						else if ((this->sequence[1]&0x70)!=0x40||this->sequence.size()==3){
+							this->sequenceEnded=true;
+							this->sequenceType=SequenceType::SS2;
+						}
 					}
 					break;
 					
@@ -304,19 +331,118 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 						}
 						else{
 							this->sequenceEnded=true;
+							this->sequenceType=SequenceType::SS3;
 						}
 					}
 					break;
 					
-				case 0x1F://US / TODO: support sequences other than US XX+64 YY+64
+				case 0x1F://US
 					if (this->sequence.size()>=2){
-						if (this->sequence.back()<0x40||this->sequence.back()>0x58){
-							goto resync;
-						}
-						else{
-							if (this->sequence.size()==3){
-								this->sequenceEnded=true;
-							}
+						switch (this->sequence[1]){
+							case 0x40 ... 0x58://cursor position
+								if (this->sequence.back()<0x40||this->sequence.back()>0x58){
+									goto resync;
+								}
+								else{
+									if (this->sequence.size()==3){
+										this->sequenceEnded=true;
+										this->sequenceType=SequenceType::US_CURSOR_POSITION;
+									}
+								}
+								break;
+							case 0x30 ... 0x32://cursor line / should not be used
+								if (this->sequence.size()==3){
+									if (this->sequence.back()>=0x30&&this->sequence.back()<=0x39){
+										this->sequenceEnded=true;
+										this->sequenceType=SequenceType::US_CURSOR_LINE;
+									}
+									else{
+										goto resync;
+									}
+								}
+								break;
+							case 0x3E://STUTEL / not perfect but sufficient for delimiting the sequences / does not check if data is malformed
+								if (this->sequence.back()==0x0D){
+									this->sequenceEnded=true;
+									this->sequenceType=SequenceType::US_STUTEL;
+								}
+								else if (this->sequence.back()<0x20){
+									goto resync;
+								}
+								break;
+							case 0x3C://STUCAM
+								if (this->sequence.size()==3){
+									switch(this->sequence.back()){
+										case 0x28:
+										case 0x38:
+										case 0x2B:
+										case 0x2E:
+											this->sequenceEnded=true;
+											this->sequenceType=SequenceType::US_STUCAM;
+											break;
+										case 0x2A:
+										case 0x3A:
+											break;
+										case 0x40 ... 0x7F:
+											if (!(bool)(this->sequence.back()&1)){
+												this->sequenceEnded=true;
+												this->sequenceType=SequenceType::US_STUCAM;
+											}
+											break;
+										default:
+											goto resync;
+									}
+								}
+								else if (this->sequence.size()==4){
+									if ((this->sequence.back()&0x60)==0x60){
+										this->sequenceEnded=true;
+										this->sequenceType=SequenceType::US_STUCAM;
+									}
+									else{
+										goto resync;
+									}
+								}
+								break;
+							case 0x23://DRCS
+								if (this->sequence.back()<0x20){
+									goto resync;
+								}
+								else{
+									switch(this->sequence.size()){
+										case 3:
+											if(this->sequence.back()==0x7F){
+												goto resync;
+											}
+											else if (this->sequence.back()!=0x20){
+												this->sequenceEnded=true;
+												this->sequenceType=SequenceType::US_DRCS;
+											}
+											break;
+										case 4:
+										case 5:
+											if(this->sequence.back()!=0x20){
+												goto resync;
+											}
+											break;
+										case 6:
+											if(this->sequence.back()!=0x42&&this->sequence.back()!=0x43){
+												goto resync;
+											}
+											break;
+										case 7:
+											if(this->sequence.back()!=0x49){
+												goto resync;
+											}
+											else{
+												this->sequenceEnded=true;
+												this->sequenceType=SequenceType::US_DRCS;
+											}
+											break;
+									}
+								}
+								break;
+							default:
+								goto resync;
 						}
 					}
 					break;
@@ -329,6 +455,7 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 						else if(this->sequence[1]<0x30){//nF escape sequence
 							if (this->sequence.back()>=0x30){
 								this->sequenceEnded=true;
+								this->sequenceType=SequenceType::ESC_nF;
 							}
 						}
 						else if (this->sequence[1]<0x40){//Fp escape sequence
@@ -337,6 +464,7 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 									if (this->sequence.size()==3){
 										if ((this->sequence[2]&0x70)==0x40){
 											this->sequenceEnded=true;
+											this->sequenceType=SequenceType::ESC_Fp_DA;
 										}
 										else{
 											goto resync;
@@ -346,16 +474,19 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 								case 0x39:
 									if (this->sequence.size()==3){
 										this->sequenceEnded=true;
+										this->sequenceType=SequenceType::ESC_Fp_PRO1;
 									}
 									break;
 								case 0x3A:
 									if (this->sequence.size()==4){
 										this->sequenceEnded=true;
+										this->sequenceType=SequenceType::ESC_Fp_PRO2;
 									}
 									break;
 								case 0x3B:
 									if (this->sequence.size()==5){
 										this->sequenceEnded=true;
+										this->sequenceType=SequenceType::ESC_Fp_PRO3;
 									}
 									break;
 								default:
@@ -378,6 +509,7 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 											break;
 										case 0x40 ... 0x7E:
 											this->sequenceEnded=true;
+											this->sequenceType=SequenceType::ESC_Fe_CSI;
 											break;
 										default:
 											goto resync;
@@ -386,11 +518,13 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 							}
 							else{//C1
 								this->sequenceEnded=true;
+								this->sequenceType=SequenceType::ESC_Fe_C1;
 							}
 						}
 						else{//Fs escape sequence
 							//if (this->sequence.size()==2)
 							this->sequenceEnded=true;
+							this->sequenceType=SequenceType::ESC_Fs;
 						}
 					}
 					break;
