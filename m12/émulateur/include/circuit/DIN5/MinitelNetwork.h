@@ -26,8 +26,8 @@ class SimplifiedMinitelNetworkApp{
 	protected:
 		bool PTout=true;
 };
-class SimplifiedMinitelNetwork{// ! slave process not implemented
-	public:
+class SimplifiedMinitelNetwork{//TODO: slave process not implemented
+	public://TODO: baudrate change can be interpreted when it should not
 		void RxChangeIn(bool b){
 			if (b!=this->Rx){
 				this->Rx=b;
@@ -1669,11 +1669,6 @@ class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
 	public:
 		std::atomic_bool fr=true;//ASCII or ISO/CEI 646 FR
 		std::atomic_bool activated=true;
-		enum Const{
-			NOT_CMD=0x00,
-			CMD_ONGOING=0x01,
-			CMD_FINISHED=0x02
-		};
 		
 		virtual void PWRCallback(bool b) override final{
 			if (this->PWR&&!b) this->PTout=true;
@@ -1686,56 +1681,35 @@ class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
 		virtual void RxCallback(unsigned char d) override final{
 			constexpr unsigned short P=0b0110100110010110;
 			d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-			this->CMDBuffer.push_back(d);
-			unsigned char cmd=this->NOT_CMD;
 			
-			resync:
-			if (!this->PTout){
-				if (!(bool)(cmd&this->CMD_FINISHED)){
-					cmd|=this->isPrintCMD();
-					if ((bool)(cmd&this->CMD_FINISHED)){
-						this->printPage();
-					}
-				}
-				if (!(bool)(cmd&this->CMD_FINISHED)){
-					cmd|=this->isILCPrinterCMD()|this->isCDGCMD();
-					if ((bool)(cmd&this->CMD_FINISHED)){
-						this->PTout=true;
-					}
+			if (!this->vdts.updateSequence(d)) return;
+			
+			if (this->PTout){
+				if (this->activated.load(std::memory_order_relaxed)&&this->isDCPrinterCMD()){
+					this->PTout=false;
+					this->TxBuffer.push(0x1B);
+					this->TxBuffer.push(0x21);
+					this->TxBuffer.push(0x39);
 				}
 			}
 			else{
-				if (!(bool)(cmd&this->CMD_FINISHED)){
-					cmd|=this->isDCPrinterCMD();
-					if (this->activated.load(std::memory_order_relaxed)&&(bool)(cmd&this->CMD_FINISHED)){
-						this->PTout=false;
-						this->TxBuffer.push(0x1B);
-						this->TxBuffer.push(0x21);
-						this->TxBuffer.push(0x39);
+				if (this->isPrintCMD()){
+					this->printPage();
+				}
+				else if (this->isILCPrinterCMD()||this->isCDGCMD()){
+					this->PTout=true;
+				}
+				else if (this->vdts.sequenceType==VideotexSplitter::SequenceType::OTHER){
+					if (d==0x0C) this->PrintBuffer.clear();
+					else{
+						if (this->PrintBuffer.size()>=2&&d==0x0A&&this->PrintBuffer[this->PrintBuffer.size()-1]==0x0D&&this->PrintBuffer[this->PrintBuffer.size()-2]==0x08){//BS CR LF -> CR LF
+							this->PrintBuffer.erase(this->PrintBuffer.end()-2);
+						}
+						if (this->fr.load(std::memory_order_relaxed)) this->printISO646FRChar(d);
+						else this->printASCIIChar(d);
 					}
 				}
-			}
-			cmd|=this->isACKCMD()|isISO2022CMD();
-			
-			if (cmd==this->NOT_CMD){
-				if (this->CMDBuffer.size()>1){
-					this->CMDBuffer.clear();
-					this->CMDBuffer.push_back(d);
-					goto resync;
-				}
-				this->CMDBuffer.clear();
-			}
-			if (cmd==this->CMD_FINISHED) this->CMDBuffer.clear();
-			
-			if (!(bool)cmd){
-				if (d==0x0C) this->PrintBuffer.clear();
-				else{
-					if (this->PrintBuffer.size()>=2&&d==0x0A&&this->PrintBuffer[this->PrintBuffer.size()-1]==0x0D&&this->PrintBuffer[this->PrintBuffer.size()-2]==0x08){//BS CR LF -> CR LF
-						this->PrintBuffer.erase(this->PrintBuffer.end()-2);
-					}
-					if (this->fr.load(std::memory_order_relaxed)) this->printISO646FRChar(d);
-					else this->printASCIIChar(d);
-				}
+				
 			}
 		}
 		
@@ -1758,134 +1732,16 @@ class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
 	private:
 		bool PTin=false;
 		bool PWR=false;
-		std::vector<unsigned char> CMDBuffer;
+		VideotexSplitter vdts;
+		
 		std::vector<unsigned char> PrintBuffer;
 		std::queue<unsigned char> TxBuffer;
 		std::function<void(const char*)> printFinished=[](const char* p){};
 		
-		unsigned char isACKPrintCMD(){
-			switch (this->CMDBuffer.size()){
-				case 0:break;
-				case 1:
-					if (this->CMDBuffer[0]!=0x13) return this->NOT_CMD;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]!=0x13||this->CMDBuffer[1]!=0x5C) return this->NOT_CMD;
-					else return this->CMD_FINISHED;
-				default:
-					return this->NOT_CMD;
-			}
-			return this->CMD_ONGOING;
-		}
-		
-		unsigned char isDCPrinterCMD(){
-			switch (this->CMDBuffer.size()){
-				case 0:break;
-				case 1:
-					if (this->CMDBuffer[0]!=0x1B) return this->NOT_CMD;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x21) return this->NOT_CMD;
-					break;
-				default:
-					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x21&&this->CMDBuffer[2]==0x38) return this->CMD_FINISHED;
-					return this->NOT_CMD;
-					break;
-			}
-			return this->CMD_ONGOING;
-		}
-		
-		unsigned char isILCPrinterCMD(){
-			switch (this->CMDBuffer.size()){
-				case 0:break;
-				case 1:
-					if (this->CMDBuffer[0]!=0x1B) return this->NOT_CMD;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x21) return this->NOT_CMD;
-					break;
-				default:
-					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x21&&this->CMDBuffer[2]==0x3A) return this->CMD_FINISHED;
-					return this->NOT_CMD;
-					break;
-			}
-			return this->CMD_ONGOING;
-		}
-		
-		unsigned char isCDGCMD(){
-			switch (this->CMDBuffer.size()){
-				case 0:break;
-				case 1:
-					if (this->CMDBuffer[0]!=0x1B) return this->NOT_CMD;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x22) return this->NOT_CMD;
-					break;
-				case 3:
-					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x22&&this->CMDBuffer[2]==0x3C) return this->CMD_FINISHED;
-					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x22||(this->CMDBuffer[2]&0xF0)!=0x20) return this->NOT_CMD;
-					break;
-				default:
-					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x22||(this->CMDBuffer[2]&0xF0)!=0x20||this->CMDBuffer[3]!=0x3C) return this->NOT_CMD;
-					else return this->CMD_FINISHED;
-					break;
-			}
-			return this->CMD_ONGOING;
-		}
-		
-		unsigned char isPrintCMD(){
-			switch (this->CMDBuffer.size()){
-				case 0:break;
-				case 1:
-					if (this->CMDBuffer[0]!=0x1B) return this->NOT_CMD;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]!=0x1B||this->CMDBuffer[1]!=0x35) return this->NOT_CMD;
-					break;
-				default:
-					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x35&&this->CMDBuffer[2]==0x40) return this->CMD_FINISHED;
-					return this->NOT_CMD;
-					break;
-			}
-			return this->CMD_ONGOING;
-		}
-		
-		unsigned char isACKCMD(){
-			if (this->CMDBuffer.size()<2){
-				if (this->CMDBuffer[0]==0x13){
-					return this->CMD_ONGOING;
-				}
-			}
-			else if (this->CMDBuffer.size()==2){
-				if (this->CMDBuffer[0]==0x13){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isISO2022CMD(){
-			switch(this->CMDBuffer.size()){
-				case 1:
-					if (this->CMDBuffer[0]==0x1B) return this->CMD_ONGOING;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]==0x1B&&(this->CMDBuffer[1]&0xF0)==0x20) return this->CMD_ONGOING;
-					break;
-				default:
-					if (this->CMDBuffer[0]==0x1B){
-						for (size_t i=1;i<this->CMDBuffer.size()-1;i++){
-							if ((this->CMDBuffer[i]&0xF0)!=0x20) return this->NOT_CMD;
-						}
-						switch (this->CMDBuffer[this->CMDBuffer.size()-1]){
-							case 0x20 ... 0x2F:return this->CMD_ONGOING;
-							case 0x30 ... 0x7E:return this->CMD_FINISHED;
-						}
-					}
-					break;
-			}
-			return this->NOT_CMD;
-		}
+		bool isDCPrinterCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_nF&&this->vdts.sequence[1]==0x21&&this->vdts.sequence[2]==0x38;}
+		bool isPrintCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_Fp_DA&&this->vdts.sequence[1]==0x35&&this->vdts.sequence[2]==0x40;}
+		bool isILCPrinterCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_nF&&this->vdts.sequence[1]==0x21&&this->vdts.sequence[2]==0x3A;}
+		bool isCDGCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_nF&&this->vdts.sequence.back()==0x3C&&this->vdts.sequence[1]==0x22;}
 		
 		void printPage(){
 			this->PrintBuffer.push_back(0);
