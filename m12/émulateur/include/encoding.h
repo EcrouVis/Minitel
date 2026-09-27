@@ -247,7 +247,11 @@ constexpr std::vector<unsigned char>* utf8_to_videotex_ts9347(const char* cstr, 
 	if (G1&&!graphics) vdt->push_back(0x0E);//SI
 	return vdt;
 }
-class VideotexSplitter{//TODO: does not support minitel network sequence nesting
+class VideotexSplitter{
+	/*
+	PRO2 TRANSPARENCE is not supported -> should be implemented at an higher level
+	DLE sequence (DLE 4X / DLE 5X) is not supported -> should be implemented at an higher level (see STURM for examples)
+	*/
 	public:
 		bool sequenceEnded=false;
 		std::vector<unsigned char> sequence;
@@ -281,8 +285,32 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 		bool updateSequence(unsigned char d){
 			if (this->sequenceEnded){
 				resync:
-				this->sequenceEnded=false;
+				
+				if ((!this->sequenceEnded)&&d==0x1B){//PRO1/2/3 + ESC 0x61 sequence nesting
+					//this->sequence should contain an unfinished sequence
+					this->sequence.pop_back();
+					std::swap(this->sequence,this->outerSequence);
+				}
+				
 				this->sequence.clear();
+				
+				if (this->sequenceEnded){//restore outerSequence if there is sequence nesting
+					switch (this->sequenceType){
+						case SequenceType::ESC_Fs:
+							if (this->sequence[1]!=0x61) break;
+							[[fallthrough]];
+						case SequenceType::ESC_Fp_PRO1:
+						case SequenceType::ESC_Fp_PRO2:
+						case SequenceType::ESC_Fp_PRO3:
+							//this->sequence should be of size 0
+							std::swap(this->sequence,this->outerSequence);
+							break;
+						default:
+							break;
+					}
+				}
+				
+				this->sequenceEnded=false;
 			}
 			
 			this->sequence.push_back(d);
@@ -543,6 +571,8 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 			
 			return this->sequenceEnded;
 		}
+	private:
+		std::vector<unsigned char> outerSequence;
 };
 
 std::vector<unsigned char>* DProtocolTranslationMode4Encode(const std::vector<unsigned char>* data,bool C0=false,bool space=false);
