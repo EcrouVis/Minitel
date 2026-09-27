@@ -280,6 +280,7 @@ class VideotexSplitter{
 		void reset(){
 			this->sequenceEnded=false;
 			this->sequence.clear();
+			this->outerSequence.clear();
 		}
 		
 		bool updateSequence(unsigned char d){
