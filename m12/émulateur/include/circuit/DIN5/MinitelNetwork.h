@@ -218,7 +218,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			PARAMETERS,
 			CONFIGURE,
 			CONNECTED,
-			CLOSING,
 			UNINIT_MODULE
 		};
 		enum State currentState=this->RESTING;

@@ -414,13 +414,6 @@ class RTCServiceWebsocket: public RTCService{
 		std::vector<unsigned char> phoneNumber;
 		const char* url;
 		
-		enum Const{
-			
-			NOT_CMD=0x00,
-			CMD_ONGOING=0x01,
-			CMD_FINISHED=0x02
-		};
-		
 		void TxClkTick(){
 			switch (this->TxState){
 				case 0:
