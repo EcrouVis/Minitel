@@ -454,11 +454,14 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 					
 				case 0x1B://ESC
 					if (this->sequence.size()>=2){
-						if (this->sequence.back()<0x20||this->sequence.back()==0x7F){
+						if (this->sequence.back()<0x20){
 							goto resync;
 						}
 						else if(this->sequence[1]<0x30){//nF escape sequence
-							if (this->sequence.back()>=0x30){
+							if (this->sequence.back()==0x7F){
+								goto resync;
+							}
+							else if (this->sequence.back()>=0x30){
 								this->sequenceEnded=true;
 								this->sequenceType=SequenceType::ESC_nF;
 							}
@@ -526,10 +529,13 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 								this->sequenceType=SequenceType::ESC_Fe_C1;
 							}
 						}
-						else{//Fs escape sequence
+						else if (this->sequence[1]!=0x7F){//Fs escape sequence
 							//if (this->sequence.size()==2)
 							this->sequenceEnded=true;
 							this->sequenceType=SequenceType::ESC_Fs;
+						}
+						else{
+							goto resync;
 						}
 					}
 					break;
