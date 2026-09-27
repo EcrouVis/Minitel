@@ -432,14 +432,14 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 		}
 		
-		bool isSEP49CMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::SEP&&this->vdts.sequence[1]==0x49;}
-		bool isModuleWakeCMD(){return this->lastSEP49&&this->vdts.sequenceType==VideotexSplitter::SequenceType::OTHER&&this->vdts.sequence[0]==0x57;}
+		bool isSEP49CMD(){return this->vdts.getSequenceType()==VideotexSplitter::SequenceType::SEP&&this->vdts.sequence[1]==0x49;}
+		bool isModuleWakeCMD(){return this->lastSEP49&&this->vdts.getSequenceType()==VideotexSplitter::SequenceType::OTHER&&this->vdts.sequence[0]==0x57;}
 		bool isModuleForceRestCMD(){return this->lastSEP49&&this->isSEP49CMD();}
 		bool isModuleRestCMD(){return this->isSEP49CMD();}
-		bool isACKCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::SEP;}
-		bool isPRO1CMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_Fp_PRO1;}
-		bool isPRO2CMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_Fp_PRO2;}
-		bool isPRO3CMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_Fp_PRO3;}
+		bool isACKCMD(){return this->vdts.getSequenceType()==VideotexSplitter::SequenceType::SEP;}
+		bool isPRO1CMD(){return this->vdts.getSequenceType()==VideotexSplitter::SequenceType::ESC_Fp_PRO1;}
+		bool isPRO2CMD(){return this->vdts.getSequenceType()==VideotexSplitter::SequenceType::ESC_Fp_PRO2;}
+		bool isPRO3CMD(){return this->vdts.getSequenceType()==VideotexSplitter::SequenceType::ESC_Fp_PRO3;}
 		
 		void RESTINGReceiveCMD(){
 			if (this->PTin){
@@ -492,7 +492,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 				this->UNINIT_MODULESendCMD();
 			}
 			else{
-				switch(this->vdts.sequenceType){
+				switch(this->vdts.getSequenceType()){
 					case VideotexSplitter::SequenceType::SEP://isACKCMD
 						switch (this->vdts.sequence[1]){
 							case 0x41://envoi
@@ -1426,7 +1426,7 @@ class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
 				else if (this->isILCPrinterCMD()||this->isCDGCMD()){
 					this->PTout=true;
 				}
-				else if (this->vdts.sequenceType==VideotexSplitter::SequenceType::OTHER){
+				else if (this->vdts.getSequenceType()==VideotexSplitter::SequenceType::OTHER){
 					if (d==0x0C) this->PrintBuffer.clear();
 					else{
 						if (this->PrintBuffer.size()>=2&&d==0x0A&&this->PrintBuffer[this->PrintBuffer.size()-1]==0x0D&&this->PrintBuffer[this->PrintBuffer.size()-2]==0x08){//BS CR LF -> CR LF
@@ -1465,10 +1465,10 @@ class SimplifiedMinitelNetworkAppPrinter: public SimplifiedMinitelNetworkApp{
 		std::queue<unsigned char> TxBuffer;
 		std::function<void(const char*)> printFinished=[](const char* p){};
 		
-		bool isDCPrinterCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_nF&&this->vdts.sequence[1]==0x21&&this->vdts.sequence[2]==0x38;}
-		bool isPrintCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_Fp_DA&&this->vdts.sequence[1]==0x35&&this->vdts.sequence[2]==0x40;}
-		bool isILCPrinterCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_nF&&this->vdts.sequence[1]==0x21&&this->vdts.sequence[2]==0x3A;}
-		bool isCDGCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_nF&&this->vdts.sequence.back()==0x3C&&this->vdts.sequence[1]==0x22;}
+		bool isDCPrinterCMD(){return this->vdts.getSequenceType()==VideotexSplitter::SequenceType::ESC_nF&&this->vdts.sequence[1]==0x21&&this->vdts.sequence[2]==0x38;}
+		bool isPrintCMD(){return this->vdts.getSequenceType()==VideotexSplitter::SequenceType::ESC_Fp_DA&&this->vdts.sequence[1]==0x35&&this->vdts.sequence[2]==0x40;}
+		bool isILCPrinterCMD(){return this->vdts.getSequenceType()==VideotexSplitter::SequenceType::ESC_nF&&this->vdts.sequence[1]==0x21&&this->vdts.sequence[2]==0x3A;}
+		bool isCDGCMD(){return this->vdts.getSequenceType()==VideotexSplitter::SequenceType::ESC_nF&&this->vdts.sequence.back()==0x3C&&this->vdts.sequence[1]==0x22;}
 		
 		void printPage(){
 			this->PrintBuffer.push_back(0);

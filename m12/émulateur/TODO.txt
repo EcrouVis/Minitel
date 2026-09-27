@@ -12,8 +12,6 @@ Simulation:
 
 Code:
 
-- Créer un algorithme pour analyser les transmissions vidéotex pour simplifier les interfaces / assainir les données / mieux supporter les séquences d'échappement
-
 - Nettoyage du code
 
 

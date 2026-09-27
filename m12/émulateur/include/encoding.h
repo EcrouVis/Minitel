@@ -253,7 +253,6 @@ class VideotexSplitter{
 	DLE sequence (DLE 4X / DLE 5X) is not supported -> should be implemented at an higher level (see STURM for examples)
 	*/
 	public:
-		bool sequenceEnded=false;
 		std::vector<unsigned char> sequence;
 		
 		enum SequenceType{
@@ -275,12 +274,16 @@ class VideotexSplitter{
 			ESC_Fe_CSI,
 			ESC_Fe_C1,
 			ESC_Fs
-		} sequenceType=OTHER;
+		};
 		
 		void reset(){
 			this->sequenceEnded=false;
-			this->sequence.clear();
+			this->ongoingSequence.clear();
 			this->outerSequence.clear();
+		}
+		
+		SequenceType getSequenceType(){
+			return this->sequenceType;
 		}
 		
 		bool updateSequence(unsigned char d){
@@ -288,23 +291,23 @@ class VideotexSplitter{
 				resync:
 				
 				if ((!this->sequenceEnded)&&d==0x1B){//PRO1/2/3 + ESC 0x61 sequence nesting
-					//this->sequence should contain an unfinished sequence
-					this->sequence.pop_back();
-					std::swap(this->sequence,this->outerSequence);
+					//this->ongoingSequence should contain an unfinished sequence
+					this->ongoingSequence.pop_back();
+					std::swap(this->ongoingSequence,this->outerSequence);
 				}
 				
-				this->sequence.clear();
+				this->ongoingSequence.clear();
 				
-				if (this->sequenceEnded){//restore outerSequence if there is sequence nesting
+				if (this->sequenceEnded){//restore sequence if there is sequence nesting
 					switch (this->sequenceType){
 						case SequenceType::ESC_Fs:
-							if (this->sequence[1]!=0x61) break;
+							if (this->ongoingSequence[1]!=0x61) break;
 							[[fallthrough]];
 						case SequenceType::ESC_Fp_PRO1:
 						case SequenceType::ESC_Fp_PRO2:
 						case SequenceType::ESC_Fp_PRO3:
-							//this->sequence should be of size 0
-							std::swap(this->sequence,this->outerSequence);
+							//this->ongoingSequence should be of size 0
+							std::swap(this->ongoingSequence,this->outerSequence);
 							break;
 						default:
 							break;
@@ -314,9 +317,9 @@ class VideotexSplitter{
 				this->sequenceEnded=false;
 			}
 			
-			this->sequence.push_back(d);
+			this->ongoingSequence.push_back(d);
 			
-			switch (this->sequence.front()){
+			switch (this->ongoingSequence.front()){
 				default:
 					this->sequenceEnded=true;
 					this->sequenceType=SequenceType::OTHER;
@@ -327,8 +330,8 @@ class VideotexSplitter{
 					break;
 					
 				case 0x12://REP
-					if (this->sequence.size()==2){
-						if (this->sequence.back()<0x40){
+					if (this->ongoingSequence.size()==2){
+						if (this->ongoingSequence.back()<0x40){
 							goto resync;
 						}
 						else{
@@ -339,7 +342,7 @@ class VideotexSplitter{
 					break;
 					
 				case 0x13://SEP
-					if (this->sequence.size()==2){
+					if (this->ongoingSequence.size()==2){
 						this->sequenceEnded=true;
 						this->sequenceType=SequenceType::SEP;
 					}
@@ -347,11 +350,11 @@ class VideotexSplitter{
 					
 				case 0x16://SYN
 				case 0x19://SS2
-					if (this->sequence.size()>=2){
-						if (this->sequence.back()<0x20){
+					if (this->ongoingSequence.size()>=2){
+						if (this->ongoingSequence.back()<0x20){
 							goto resync;
 						}
-						else if ((this->sequence[1]&0x70)!=0x40||this->sequence.size()==3){
+						else if ((this->ongoingSequence[1]&0x70)!=0x40||this->ongoingSequence.size()==3){
 							this->sequenceEnded=true;
 							this->sequenceType=SequenceType::SS2;
 						}
@@ -359,8 +362,8 @@ class VideotexSplitter{
 					break;
 					
 				case 0x1D://SS3
-					if (this->sequence.size()==2){
-						if (this->sequence.back()<0x20){
+					if (this->ongoingSequence.size()==2){
+						if (this->ongoingSequence.back()<0x20){
 							goto resync;
 						}
 						else{
@@ -371,22 +374,22 @@ class VideotexSplitter{
 					break;
 					
 				case 0x1F://US
-					if (this->sequence.size()>=2){
-						switch (this->sequence[1]){
+					if (this->ongoingSequence.size()>=2){
+						switch (this->ongoingSequence[1]){
 							case 0x40 ... 0x58://cursor position
-								if (this->sequence.back()<0x40||this->sequence.back()>0x58){
+								if (this->ongoingSequence.back()<0x40||this->ongoingSequence.back()>0x58){
 									goto resync;
 								}
 								else{
-									if (this->sequence.size()==3){
+									if (this->ongoingSequence.size()==3){
 										this->sequenceEnded=true;
 										this->sequenceType=SequenceType::US_CURSOR_POSITION;
 									}
 								}
 								break;
 							case 0x30 ... 0x32://cursor line / should not be used
-								if (this->sequence.size()==3){
-									if (this->sequence.back()>=0x30&&this->sequence.back()<=0x39){
+								if (this->ongoingSequence.size()==3){
+									if (this->ongoingSequence.back()>=0x30&&this->ongoingSequence.back()<=0x39){
 										this->sequenceEnded=true;
 										this->sequenceType=SequenceType::US_CURSOR_LINE;
 									}
@@ -396,17 +399,17 @@ class VideotexSplitter{
 								}
 								break;
 							case 0x3E://STUTEL / not perfect but sufficient for delimiting the sequences / does not check if data is malformed
-								if (this->sequence.back()==0x0D){
+								if (this->ongoingSequence.back()==0x0D){
 									this->sequenceEnded=true;
 									this->sequenceType=SequenceType::US_STUTEL;
 								}
-								else if (this->sequence.back()<0x20){
+								else if (this->ongoingSequence.back()<0x20){
 									goto resync;
 								}
 								break;
 							case 0x3C://STUCAM
-								if (this->sequence.size()==3){
-									switch(this->sequence.back()){
+								if (this->ongoingSequence.size()==3){
+									switch(this->ongoingSequence.back()){
 										case 0x28:
 										case 0x38:
 										case 0x2B:
@@ -418,7 +421,7 @@ class VideotexSplitter{
 										case 0x3A:
 											break;
 										case 0x40 ... 0x7F:
-											if (!(bool)(this->sequence.back()&1)){
+											if (!(bool)(this->ongoingSequence.back()&1)){
 												this->sequenceEnded=true;
 												this->sequenceType=SequenceType::US_STUCAM;
 											}
@@ -427,8 +430,8 @@ class VideotexSplitter{
 											goto resync;
 									}
 								}
-								else if (this->sequence.size()==4){
-									if ((this->sequence.back()&0x60)==0x60){
+								else if (this->ongoingSequence.size()==4){
+									if ((this->ongoingSequence.back()&0x60)==0x60){
 										this->sequenceEnded=true;
 										this->sequenceType=SequenceType::US_STUCAM;
 									}
@@ -438,33 +441,33 @@ class VideotexSplitter{
 								}
 								break;
 							case 0x23://DRCS
-								if (this->sequence.back()<0x20){
+								if (this->ongoingSequence.back()<0x20){
 									goto resync;
 								}
 								else{
-									switch(this->sequence.size()){
+									switch(this->ongoingSequence.size()){
 										case 3:
-											if(this->sequence.back()==0x7F){
+											if(this->ongoingSequence.back()==0x7F){
 												goto resync;
 											}
-											else if (this->sequence.back()!=0x20){
+											else if (this->ongoingSequence.back()!=0x20){
 												this->sequenceEnded=true;
 												this->sequenceType=SequenceType::US_DRCS;
 											}
 											break;
 										case 4:
 										case 5:
-											if(this->sequence.back()!=0x20){
+											if(this->ongoingSequence.back()!=0x20){
 												goto resync;
 											}
 											break;
 										case 6:
-											if(this->sequence.back()!=0x42&&this->sequence.back()!=0x43){
+											if(this->ongoingSequence.back()!=0x42&&this->ongoingSequence.back()!=0x43){
 												goto resync;
 											}
 											break;
 										case 7:
-											if(this->sequence.back()!=0x49){
+											if(this->ongoingSequence.back()!=0x49){
 												goto resync;
 											}
 											else{
@@ -482,24 +485,24 @@ class VideotexSplitter{
 					break;
 					
 				case 0x1B://ESC
-					if (this->sequence.size()>=2){
-						if (this->sequence.back()<0x20){
+					if (this->ongoingSequence.size()>=2){
+						if (this->ongoingSequence.back()<0x20){
 							goto resync;
 						}
-						else if(this->sequence[1]<0x30){//nF escape sequence
-							if (this->sequence.back()==0x7F){
+						else if(this->ongoingSequence[1]<0x30){//nF escape sequence
+							if (this->ongoingSequence.back()==0x7F){
 								goto resync;
 							}
-							else if (this->sequence.back()>=0x30){
+							else if (this->ongoingSequence.back()>=0x30){
 								this->sequenceEnded=true;
 								this->sequenceType=SequenceType::ESC_nF;
 							}
 						}
-						else if (this->sequence[1]<0x40){//Fp escape sequence
-							switch(this->sequence[1]){
+						else if (this->ongoingSequence[1]<0x40){//Fp escape sequence
+							switch(this->ongoingSequence[1]){
 								case 0x35 ... 0x37:
-									if (this->sequence.size()==3){
-										if ((this->sequence[2]&0x70)==0x40){
+									if (this->ongoingSequence.size()==3){
+										if ((this->ongoingSequence[2]&0x70)==0x40){
 											this->sequenceEnded=true;
 											this->sequenceType=SequenceType::ESC_Fp_DA;
 										}
@@ -509,19 +512,19 @@ class VideotexSplitter{
 									}
 									break;
 								case 0x39:
-									if (this->sequence.size()==3){
+									if (this->ongoingSequence.size()==3){
 										this->sequenceEnded=true;
 										this->sequenceType=SequenceType::ESC_Fp_PRO1;
 									}
 									break;
 								case 0x3A:
-									if (this->sequence.size()==4){
+									if (this->ongoingSequence.size()==4){
 										this->sequenceEnded=true;
 										this->sequenceType=SequenceType::ESC_Fp_PRO2;
 									}
 									break;
 								case 0x3B:
-									if (this->sequence.size()==5){
+									if (this->ongoingSequence.size()==5){
 										this->sequenceEnded=true;
 										this->sequenceType=SequenceType::ESC_Fp_PRO3;
 									}
@@ -530,17 +533,17 @@ class VideotexSplitter{
 									goto resync;
 							}
 						}
-						else if (this->sequence[1]<0x60){//Fe escape sequence
-							if (this->sequence[1]==0x5B){//CSI
-								if(this->sequence.size()>=3){
-									switch(this->sequence.back()){
+						else if (this->ongoingSequence[1]<0x60){//Fe escape sequence
+							if (this->ongoingSequence[1]==0x5B){//CSI
+								if(this->ongoingSequence.size()>=3){
+									switch(this->ongoingSequence.back()){
 										case 0x30 ... 0x3F:
-											if((this->sequence[this->sequence.size()-2]<0x30||this->sequence[this->sequence.size()-2]>0x3F)&&this->sequence.size()!=3){
+											if((this->ongoingSequence[this->ongoingSequence.size()-2]<0x30||this->ongoingSequence[this->ongoingSequence.size()-2]>0x3F)&&this->ongoingSequence.size()!=3){
 												goto resync;
 											}
 											break;
 										case 0x20 ... 0x2F:
-											if((this->sequence[this->sequence.size()-2]<0x20||this->sequence[this->sequence.size()-2]>0x3F)&&this->sequence.size()!=3){
+											if((this->ongoingSequence[this->ongoingSequence.size()-2]<0x20||this->ongoingSequence[this->ongoingSequence.size()-2]>0x3F)&&this->ongoingSequence.size()!=3){
 												goto resync;
 											}
 											break;
@@ -558,8 +561,8 @@ class VideotexSplitter{
 								this->sequenceType=SequenceType::ESC_Fe_C1;
 							}
 						}
-						else if (this->sequence[1]!=0x7F){//Fs escape sequence
-							//if (this->sequence.size()==2)
+						else if (this->ongoingSequence[1]!=0x7F){//Fs escape sequence
+							//if (this->ongoingSequence.size()==2)
 							this->sequenceEnded=true;
 							this->sequenceType=SequenceType::ESC_Fs;
 						}
@@ -570,9 +573,13 @@ class VideotexSplitter{
 					break;
 			}
 			
+			if (this->sequenceEnded) std::swap(this->sequence,this->ongoingSequence);
 			return this->sequenceEnded;
 		}
 	private:
+		SequenceType sequenceType=OTHER;
+		bool sequenceEnded=false;
+		std::vector<unsigned char> ongoingSequence;
 		std::vector<unsigned char> outerSequence;
 };
 
