@@ -222,13 +222,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		};
 		enum State currentState=this->RESTING;
 		
-		enum Const{
-			
-			NOT_CMD=0x00,
-			CMD_ONGOING=0x01,
-			CMD_FINISHED=0x02
-		};
-		
 		virtual void PWRCallback(bool b) final override{
 			if (this->PWR&&!b){
 				this->forceReset();
@@ -241,36 +234,32 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		virtual void RxCallback(unsigned char d) override final{
 			constexpr unsigned short P=0b0110100110010110;
 			
+			if (this->currentState==CONNECTED) CONNECTEDReceivePassthrough(d);
+			
+			if (!this->vdts.updateSequence(((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F)) return;
+			
 			switch (this->currentState){
 				case RESTING:
-					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-					this->RESTINGReceiveCMD(d);
+					this->RESTINGReceiveCMD();
 					break;
 				case INIT_MODULE:
-					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-					this->INIT_MODULEReceiveCMD(d);
+					this->INIT_MODULEReceiveCMD();
 					break;
 				case PARAMETERS:
-					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-					this->PARAMETERSReceiveCMD(d);
+					this->PARAMETERSReceiveCMD();
 					break;
 				case CONFIGURE:
-					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-					this->CONFIGUREReceiveCMD(d);
+					this->CONFIGUREReceiveCMD();
 					break;
 				case CONNECTED:
-					//d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-					this->CONNECTEDReceiveCMD(d);
-					break;
-				case CLOSING:
-					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
+					this->CONNECTEDReceiveCMD();
 					break;
 				case UNINIT_MODULE:
-					d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-					this->UNINIT_MODULEReceiveCMD(d);
+					this->UNINIT_MODULEReceiveCMD();
 					break;
 			}
 			
+			this->lastSEP49=this->isSEP49CMD();
 		}
 		
 		virtual void TxQueueEmptyCallback() override final{
@@ -355,7 +344,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 		}
 		
-		char* getURL(){//TODO: sanitize url needed
+		char* getURL(){
 			std::lock_guard<std::mutex> lock(this->parameters.wsMutex);
 			char* d=videotex_to_utf8(&(this->parameters.wsBuffer));
 			return d;
@@ -367,7 +356,8 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 		std::mutex pMQMutex;
 		std::queue<unsigned char> qTx;
 		std::vector<unsigned char> qRx;
-		std::vector<unsigned char> CMDBuffer;
+		bool lastSEP49=false;
+		VideotexSplitter vdts;
 		unsigned char subState=0;
 		bool PWR=false;
 		
@@ -375,7 +365,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			std::queue<unsigned char> empty;
 			std::swap(this->qTx,empty);
 			this->qRx.clear();
-			this->CMDBuffer.clear();
+			this->vdts.reset();
 			this->subState=0;
 			this->currentState=this->RESTING;
 			this->disconnect();
@@ -389,11 +379,11 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 				this->print(bell,sizeof(bell)/sizeof(bell[0]));
 			}
 			else{
-				for (unsigned char d: this->CMDBuffer){
+				for (unsigned char d: this->vdts.sequence){
 					this->qTx.push(d);
 					this->parameters.wsBuffer.push_back(d);
 				}
-				this->parameters.wsSplit.push_back(this->CMDBuffer.size());
+				this->parameters.wsSplit.push_back(this->vdts.sequence.size());
 				if (this->parameters.wsSplit.size()==29){
 					lock.unlock();
 					this->moveCursor(4,12);
@@ -442,213 +432,25 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 		}
 		
-		unsigned char isModuleWakeCMD(){
-			constexpr unsigned char CMD[3]={0x13,0x49,0x57};
-			if (this->CMDBuffer.size()<sizeof(CMD)/sizeof(CMD[0])){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
-					return this->CMD_ONGOING;
-				}
-			}
-			else if (this->CMDBuffer.size()==sizeof(CMD)/sizeof(CMD[0])){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
+		bool isSEP49CMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::SEP&&this->vdts.sequence[1]==0x49;}
+		bool isModuleWakeCMD(){return this->lastSEP49&&this->vdts.sequenceType==VideotexSplitter::SequenceType::OTHER&&this->vdts.sequence[0]==0x57;}
+		bool isModuleForceRestCMD(){return this->lastSEP49&&this->isSEP49CMD();}
+		bool isModuleRestCMD(){return this->isSEP49CMD();}
+		bool isACKCMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::SEP;}
+		bool isPRO1CMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_Fp_PRO1;}
+		bool isPRO2CMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_Fp_PRO2;}
+		bool isPRO3CMD(){return this->vdts.sequenceType==VideotexSplitter::SequenceType::ESC_Fp_PRO3;}
 		
-		unsigned char isModuleRestCMD(){
-			constexpr unsigned char CMD[2]={0x13,0x49};
-			if (this->CMDBuffer.size()<sizeof(CMD)/sizeof(CMD[0])){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
-					return this->CMD_ONGOING;
-				}
-			}
-			else if (this->CMDBuffer.size()==sizeof(CMD)/sizeof(CMD[0])){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isModuleForceRestCMD(){
-			constexpr unsigned char CMD[4]={0x13,0x49,0x13,0x49};
-			if (this->CMDBuffer.size()<sizeof(CMD)/sizeof(CMD[0])){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
-					return this->CMD_ONGOING;
-				}
-			}
-			else if (this->CMDBuffer.size()==sizeof(CMD)/sizeof(CMD[0])){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isACKCMD(){
-			if (this->CMDBuffer.size()<2){
-				if (this->CMDBuffer[0]==0x13){
-					return this->CMD_ONGOING;
-				}
-			}
-			else if (this->CMDBuffer.size()==2){
-				if (this->CMDBuffer[0]==0x13){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isPRO1CMD(){
-			constexpr unsigned char CMD[2]={0x1B,0x39};
-			if (this->CMDBuffer.size()<3){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,this->CMDBuffer.size()*sizeof(unsigned char))){
-					return this->CMD_ONGOING;
-				}
-			}
-			else if (this->CMDBuffer.size()==3){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,2*sizeof(unsigned char))){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isPRO2CMD(){
-			constexpr unsigned char CMD[2]={0x1B,0x3A};
-			if (this->CMDBuffer.size()<4){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,(this->CMDBuffer.size()<2?this->CMDBuffer.size():2)*sizeof(unsigned char))){
-					return this->CMD_ONGOING;
-				}
-			}
-			else if (this->CMDBuffer.size()==4){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,2*sizeof(unsigned char))){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isPRO3CMD(){
-			constexpr unsigned char CMD[2]={0x1B,0x3B};
-			if (this->CMDBuffer.size()<5){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,(this->CMDBuffer.size()<2?this->CMDBuffer.size():2)*sizeof(unsigned char))){
-					return this->CMD_ONGOING;
-				}
-			}
-			else if (this->CMDBuffer.size()==5){
-				if (!(bool)memcmp(this->CMDBuffer.data(),CMD,2*sizeof(unsigned char))){
-					return this->CMD_FINISHED;
-				}
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isCursorPositionCMD(){
-			switch(this->CMDBuffer.size()){
-				case 1:
-					if (this->CMDBuffer[0]==0x1F) return this->CMD_ONGOING;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]==0x1F&&((bool)(this->CMDBuffer[1]&0x40))) return this->CMD_ONGOING;
-					break;
-				case 3:
-					if (this->CMDBuffer[0]==0x1F&&((bool)(this->CMDBuffer[1]&0x40))&&((bool)(this->CMDBuffer[2]&0x40))) return this->CMD_FINISHED;
-					break;
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isSS2(){
-			switch(this->CMDBuffer.size()){
-				case 1:
-					if (this->CMDBuffer[0]==0x19) return this->CMD_ONGOING;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]==0x19&&(this->CMDBuffer[1]&0xF0)==0x40) return this->CMD_ONGOING;
-					else if (this->CMDBuffer[0]==0x19&&this->CMDBuffer[1]>=0x21&&this->CMDBuffer[1]<=0x7E) return this->CMD_FINISHED;
-					break;
-				case 3:
-					if (this->CMDBuffer[0]==0x19&&(this->CMDBuffer[1]&0xF0)==0x40&&this->CMDBuffer[2]>=0x20&&this->CMDBuffer[2]<=0x7F) return this->CMD_FINISHED;
-					break;
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isCSICMD(){
-			switch(this->CMDBuffer.size()){
-				case 1:
-					if (this->CMDBuffer[0]==0x1B) return this->CMD_ONGOING;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x5B) return this->CMD_ONGOING;
-					break;
-				default:
-					if (this->CMDBuffer[0]==0x1B&&this->CMDBuffer[1]==0x5B){
-						size_t i=2;
-						while (i<this->CMDBuffer.size()&&(this->CMDBuffer[i]&0xF0)==0x30) i++;
-						while (i<this->CMDBuffer.size()&&(this->CMDBuffer[i]&0xF0)==0x20) i++;
-						if (i==this->CMDBuffer.size()){
-							return this->CMD_ONGOING;
-						}
-						if (i==this->CMDBuffer.size()-1&&this->CMDBuffer[i]>=0x40&&this->CMDBuffer[i]<=0x7E){
-							return this->CMD_FINISHED;
-						}
-					}
-					break;
-			}
-			return this->NOT_CMD;
-		}
-		
-		unsigned char isISO2022CMD(){
-			switch(this->CMDBuffer.size()){
-				case 1:
-					if (this->CMDBuffer[0]==0x1B) return this->CMD_ONGOING;
-					break;
-				case 2:
-					if (this->CMDBuffer[0]==0x1B&&(this->CMDBuffer[1]&0xF0)==0x20) return this->CMD_ONGOING;
-					break;
-				default:
-					if (this->CMDBuffer[0]==0x1B){
-						for (size_t i=1;i<this->CMDBuffer.size()-1;i++){
-							if ((this->CMDBuffer[i]&0xF0)!=0x20) return this->NOT_CMD;
-						}
-						switch (this->CMDBuffer[this->CMDBuffer.size()-1]){
-							case 0x20 ... 0x2F:return this->CMD_ONGOING;
-							case 0x30 ... 0x7E:return this->CMD_FINISHED;
-						}
-					}
-					break;
-			}
-			return this->NOT_CMD;
-		}
-		
-		void RESTINGReceiveCMD(unsigned char d){
+		void RESTINGReceiveCMD(){
 			if (this->PTin){
-				resync:
-				this->CMDBuffer.push_back(d);
-				unsigned char s=this->isModuleWakeCMD();
-				if (s==this->NOT_CMD){
-					if (this->CMDBuffer.size()>1){
-						this->CMDBuffer.clear();
-						goto resync;
-					}
-					else this->CMDBuffer.clear();
-				}
-				else if (s==this->CMD_FINISHED){
-					this->INIT_MODULESendCMD();
-				}
+				if (this->isModuleWakeCMD()) this->INIT_MODULESendCMD();
 			}
-			else if (this->CMDBuffer.size()!=0) this->CMDBuffer.clear();
 		}
 		
 		void INIT_MODULESendCMD(){
 			if (this->currentState!=this->INIT_MODULE){
 				this->subState=0;
 				this->currentState=this->INIT_MODULE;
-				this->CMDBuffer.clear();
 			}
 			switch (this->subState){
 				case 0:this->PTout=false;break;
@@ -656,35 +458,24 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 		}
 		
-		void INIT_MODULEReceiveCMD(unsigned char d){
-			resync:
-			this->CMDBuffer.push_back(d);
-			unsigned char s=this->NOT_CMD;
+		void INIT_MODULEReceiveCMD(){
 			switch (this->subState){
 				case 0:
-					s=this->isACKCMD();
-					if (s==this->CMD_FINISHED&&this->CMDBuffer.back()==0x54){
+					if (this->isACKCMD()&&this->vdts.sequence.back()==0x54){
 						this->subState=1;
 						this->INIT_MODULESendCMD();
 					}
 					break;
 				case 1:
-					s=this->isPRO2CMD();
-					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x75){
+					if (this->isPRO2CMD()&&this->vdts.sequence[2]==0x75){
 						this->PARAMETERSSendCMD();
 					}
 					break;
 			}
-			if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
-				this->CMDBuffer.clear();
-				goto resync;
-			}
-			if (s==this->NOT_CMD||s==this->CMD_FINISHED) this->CMDBuffer.clear();
 		}
 		
 		void PARAMETERSSendCMD(){
 			this->currentState=this->PARAMETERS;
-			this->CMDBuffer.clear();
 			this->printParametersStaticPage();
 			{
 			std::unique_lock<std::mutex> lock(this->parameters.wsMutex);
@@ -696,92 +487,69 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			this->changeSelection(this->parameters.currentLine);
 		}
 		
-		void PARAMETERSReceiveCMD(unsigned char d){
-			resync:
-			this->CMDBuffer.push_back(d);
-			unsigned char s=this->isModuleRestCMD();
-			if (s==this->NOT_CMD){
-				s=this->isACKCMD();
-				if (s==this->NOT_CMD){
-					s=this->isPRO1CMD()|this->isPRO2CMD()|this->isPRO3CMD()|this->isCursorPositionCMD()|this->isCSICMD()|this->isISO2022CMD();
-					if (s==this->NOT_CMD){
-						s=this->isSS2();
-						if (s==this->NOT_CMD){
-							if (this->CMDBuffer.size()>1){
-								this->CMDBuffer.clear();
-								goto resync;
-							}
-							if (this->parameters.currentLine!=0){
-								if (this->CMDBuffer.size()==1&&this->CMDBuffer[0]==0x20) this->cycleParameterOption(this->parameters.currentLine);
-								else this->print(bell,sizeof(bell)/sizeof(bell[0]));
-							}
-							else{
-								if (this->CMDBuffer[0]>=0x20&&this->CMDBuffer[0]<=0x7E) this->addCharWsBuffer();
-								else this->print(bell,sizeof(bell)/sizeof(bell[0]));
-							}
-							this->CMDBuffer.clear();
-						}
-						else if (s==this->CMD_FINISHED){
-							if (this->parameters.currentLine==0) this->addCharWsBuffer();
-							else this->print(bell,sizeof(bell)/sizeof(bell[0]));
-							this->CMDBuffer.clear();
-						}
-					}
-					else if ((bool)(s&this->CMD_FINISHED)) this->CMDBuffer.clear();
-				}
-				else if (s==this->CMD_FINISHED){
-					switch (this->CMDBuffer[1]){
-						case 0x41://envoi
-						{
-							char* url=this->getURL();
-							printf("WS: url=%s\n",url);
-							free(url);
-							/*this->currentState=this->CONFIGURE;
-							this->subState=0;
-							this->qTx.push(0x1B);this->qTx.push(0x3A);this->qTx.push(0x32);
-							if ((bool)(this->parameters.display&1)) this->qTx.push(0x7D);
-							else this->qTx.push(0x7E);*/
-							this->CONFIGURESendCMD();
-							break;
-						}
-						case 0x48://suite
-							this->changeSelection(this->parameters.currentLine+1);
-							break;
-						case 0x42://retour
-							this->changeSelection(this->parameters.currentLine-1);
-							break;
-						case 0x45://annulation
-							if (this->parameters.currentLine!=0) this->print(bell,sizeof(bell)/sizeof(bell[0]));
-							else{
-								this->deleteWsBuffer();
-							}
-							break;
-						case 0x47://correction
-							if (this->parameters.currentLine!=0) this->print(bell,sizeof(bell)/sizeof(bell[0]));
-							else{
-								this->removeCharWsBuffer();
-							}
-							break;
-						case 0x43:
-						case 0x44:
-						case 0x46:
-							this->print(bell,sizeof(bell)/sizeof(bell[0]));
-							break;
-						case 0x53:
-						case 0x5B://re disable local echo
-							this->print(disable_local_echo,sizeof(disable_local_echo)/sizeof(disable_local_echo[0]));
-							break;
-						/*default:
-							printf("SEP %02X\n",this->CMDBuffer[1]);
-							this->print(bell,sizeof(bell)/sizeof(bell[0]));
-							break;*/
-					}
-					this->CMDBuffer.clear();
-				}
-			}
-			else if (s==this->CMD_FINISHED){
+		void PARAMETERSReceiveCMD(){
+			if (this->isModuleRestCMD()){
 				this->UNINIT_MODULESendCMD();
-				this->CMDBuffer.clear();
+			}
+			else{
+				switch(this->vdts.sequenceType){
+					case VideotexSplitter::SequenceType::SEP://isACKCMD
+						switch (this->vdts.sequence[1]){
+							case 0x41://envoi
+							{
+								char* url=this->getURL();
+								printf("WS: url=%s\n",url);
+								free(url);
+								this->CONFIGURESendCMD();
+								break;
+							}
+							case 0x48://suite
+								this->changeSelection(this->parameters.currentLine+1);
+								break;
+							case 0x42://retour
+								this->changeSelection(this->parameters.currentLine-1);
+								break;
+							case 0x45://annulation
+								if (this->parameters.currentLine!=0) this->print(bell,sizeof(bell)/sizeof(bell[0]));
+								else{
+									this->deleteWsBuffer();
+								}
+								break;
+							case 0x47://correction
+								if (this->parameters.currentLine!=0) this->print(bell,sizeof(bell)/sizeof(bell[0]));
+								else{
+									this->removeCharWsBuffer();
+								}
+								break;
+							case 0x43:
+							case 0x44:
+							case 0x46:
+								this->print(bell,sizeof(bell)/sizeof(bell[0]));
+								break;
+							case 0x53:
+							case 0x5B://re disable local echo
+								this->print(disable_local_echo,sizeof(disable_local_echo)/sizeof(disable_local_echo[0]));
+								break;
+						}
+						break;
+					case VideotexSplitter::SequenceType::OTHER:
+						if (this->parameters.currentLine!=0){
+							if (this->vdts.sequence.size()==1&&this->vdts.sequence[0]==0x20) this->cycleParameterOption(this->parameters.currentLine);
+							else this->print(bell,sizeof(bell)/sizeof(bell[0]));
+						}
+						else{
+							if (this->vdts.sequence[0]>=0x20&&this->vdts.sequence[0]<=0x7E) this->addCharWsBuffer();
+							else this->print(bell,sizeof(bell)/sizeof(bell[0]));
+						}
+						break;
+					case VideotexSplitter::SequenceType::SS2://isSS2
+						if (this->parameters.currentLine==0) this->addCharWsBuffer();
+						else this->print(bell,sizeof(bell)/sizeof(bell[0]));
+						this->vdts.sequence.clear();
+						break;
+					default:
+						break;
+				}
 			}
 		}
 		
@@ -789,7 +557,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			if (this->currentState!=this->UNINIT_MODULE){
 				this->subState=0;
 				this->currentState=this->UNINIT_MODULE;
-				this->CMDBuffer.clear();
 			}
 			switch (this->subState){
 				case 0:this->print(reset_minitel,sizeof(reset_minitel)/sizeof(reset_minitel[0]));break;
@@ -798,22 +565,13 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			
 		}
 		
-		void UNINIT_MODULEReceiveCMD(unsigned char d){
-			resync:
-			this->CMDBuffer.push_back(d);
-			unsigned char s=this->NOT_CMD;
+		void UNINIT_MODULEReceiveCMD(){
 			if(this->subState==0){
-				s=this->isACKCMD();
-				if (s==this->CMD_FINISHED&&this->CMDBuffer[1]==0x5E){
+				if (this->isACKCMD()&&this->vdts.sequence[1]==0x5E){
 					this->subState=1;
 					this->UNINIT_MODULESendCMD();
 				}
 			}
-			if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
-				this->CMDBuffer.clear();
-				goto resync;
-			}
-			if (s==this->NOT_CMD||s==this->CMD_FINISHED) this->CMDBuffer.clear();
 		}
 		
 		void UNINIT_MODULETxQueueEmpty(){
@@ -840,7 +598,6 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			if (this->currentState!=this->CONFIGURE){
 				this->subState=0;
 				this->currentState=this->CONFIGURE;
-				this->CMDBuffer.clear();
 			}
 			switch(this->subState){
 				case 0://modem status
@@ -893,50 +650,42 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 		}
 		
-		void CONFIGUREReceiveCMD(unsigned char d){
-			resync:
-			this->CMDBuffer.push_back(d);
-			unsigned char s=this->NOT_CMD;
+		void CONFIGUREReceiveCMD(){
 			switch(this->subState){
 				case 0 ... 2://local echo
-					s=this->isPRO3CMD();
-					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x63&&this->CMDBuffer[3]==0x5A){
-						if (this->parameters.echo.load(std::memory_order_relaxed)==(bool)(this->CMDBuffer[4]&0x02)) this->subState=3;
+					if (this->isPRO3CMD()&&this->vdts.sequence[2]==0x63&&this->vdts.sequence[3]==0x5A){
+						if (this->parameters.echo.load(std::memory_order_relaxed)==(bool)(this->vdts.sequence[4]&0x02)) this->subState=3;
 						else if (this->parameters.echo.load(std::memory_order_relaxed)) this->subState=2;
 						else this->subState=1;
 						this->CONFIGURESendCMD();
 					}
 					break;
 				case 3://standard
-					s=this->isPRO2CMD();
-					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x73){
-						if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&0x01)==(bool)(this->CMDBuffer[3]&0x01)) this->subState=6;
+					if (this->isPRO2CMD()&&this->vdts.sequence[2]==0x73){
+						if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&0x01)==(bool)(this->vdts.sequence[3]&0x01)) this->subState=6;
 						else if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&0x01)) this->subState=5;
 						else this->subState=4;
 						this->CONFIGURESendCMD();
 					}
 					break;
 				case 4 ... 5://ack standard
-					s=this->isACKCMD();
-					if (s==this->CMD_FINISHED&&this->CMDBuffer[1]==0x70){
+					if (this->isACKCMD()&&this->vdts.sequence[1]==0x70){
 						this->subState=6;
 						this->CONFIGURESendCMD();
 					}
 					break;
 				case 6 ... 8://keyboard
-					s=this->isPRO3CMD();
-					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x73&&this->CMDBuffer[3]==0x59){
-						if (this->parameters.extendedKeyboard.load(std::memory_order_relaxed)==(bool)(this->CMDBuffer[4]&0x01)) this->subState=9;
+					if (this->isPRO3CMD()&&this->vdts.sequence[2]==0x73&&this->vdts.sequence[3]==0x59){
+						if (this->parameters.extendedKeyboard.load(std::memory_order_relaxed)==(bool)(this->vdts.sequence[4]&0x01)) this->subState=9;
 						else if (this->parameters.extendedKeyboard.load(std::memory_order_relaxed)) this->subState=8;
 						else this->subState=7;
 						this->CONFIGURESendCMD();
 					}
 					break;
 				case 9 ... 13://case+page/roll
-					s=this->isPRO2CMD();
-					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x73){
-						if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&0x02)==(bool)(this->CMDBuffer[3]&0x02)){
-							if ((!this->parameters.upperCase.load(std::memory_order_relaxed))==(bool)(this->CMDBuffer[3]&0x08)) this->subState=14;
+					if (this->isPRO2CMD()&&this->vdts.sequence[2]==0x73){
+						if ((bool)(this->parameters.display.load(std::memory_order_relaxed)&0x02)==(bool)(this->vdts.sequence[3]&0x02)){
+							if ((!this->parameters.upperCase.load(std::memory_order_relaxed))==(bool)(this->vdts.sequence[3]&0x08)) this->subState=14;
 							else if (this->parameters.upperCase.load(std::memory_order_relaxed)) this->subState=13;
 							else this->subState=12;
 						}
@@ -946,33 +695,24 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					}
 					break;
 				case 14://baudrate
-					s=this->isPRO2CMD();
-					if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x75){
+					if (this->isPRO2CMD()&&this->vdts.sequence[2]==0x75){
 						this->subState=15;
 						this->CONFIGURESendCMD();
 					}
-					else if (s==this->NOT_CMD){//fail
+					else{//fail
 						unsigned char bdr=this->parameters.baudrate.load(std::memory_order_relaxed);
 						if (bdr<2) this->parameters.baudrate.store(bdr+1,std::memory_order_relaxed);
 						else if (bdr>2) this->parameters.baudrate.store(bdr+1,std::memory_order_relaxed);
 						this->CONFIGURESendCMD();
 					}
 					break;
-					
 			}
-			if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
-				this->CMDBuffer.clear();
-				goto resync;
-			}
-			if (s==this->NOT_CMD||s==this->CMD_FINISHED) this->CMDBuffer.clear();
-					
 		}
 		
 		void CONNECTEDSendCMD(){
 			if (this->currentState!=this->CONNECTED){
 				this->currentState=this->CONNECTED;
 				this->subState=0;
-				this->CMDBuffer.clear();
 			}
 			switch (this->subState){
 				case 0:
@@ -1059,50 +799,38 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 		}
 		
-		void CONNECTEDReceiveCMD(unsigned char d){
-			constexpr unsigned short P=0b0110100110010110;
+		void CONNECTEDReceiveCMD(){
 			bool closeWS=false;
-			unsigned char s=this->NOT_CMD;
 			{
 				std::lock_guard<std::mutex> lock(this->pMQMutex);//protect qTx+subState
 				switch (this->subState){
 					case 2:
-						if (this->parameters.parity.load(std::memory_order_relaxed)) this->qRx.push_back(d);
-						d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-						if (!this->parameters.parity.load(std::memory_order_relaxed)) this->qRx.push_back(d);
-						resync1:
-						this->CMDBuffer.push_back(d);
-						s=this->isModuleForceRestCMD();
-						if (s==this->CMD_FINISHED){
+						if (this->isModuleForceRestCMD()){
 							this->subState=7;
 							closeWS=true;
-						}
-						if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
-							this->CMDBuffer.clear();
-							goto resync1;
 						}
 						break;
 					case 3:
 					case 5:
 					case 7:
-						d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
-						resync2:
-						this->CMDBuffer.push_back(d);
-						s=this->isPRO2CMD();
-						if (s==this->NOT_CMD&&this->CMDBuffer.size()>1){
-							this->CMDBuffer.clear();
-							goto resync2;
-						}
-						if (s==this->CMD_FINISHED&&this->CMDBuffer[2]==0x75){
+						if (this->isPRO2CMD()&&this->vdts.sequence[2]==0x75){
 							this->subState++;
 							this->CONNECTEDSendCMD();
 						}
 						break;
 				}
 			}
-			if (s==this->NOT_CMD||s==this->CMD_FINISHED) this->CMDBuffer.clear();
 			
 			if (closeWS) this->disconnect();//avoid deadlock
+		}
+		
+		void CONNECTEDReceivePassthrough(unsigned char d){
+			constexpr unsigned short P=0b0110100110010110;
+			std::lock_guard<std::mutex> lock(this->pMQMutex);//protect qTx+subState
+			if (this->subState==2){
+				if (!this->parameters.parity.load(std::memory_order_relaxed)) d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
+				this->qRx.push_back(d);
+			}
 		}
 		
 		unsigned short connection_poll_div=0;
