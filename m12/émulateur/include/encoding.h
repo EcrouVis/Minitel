@@ -273,6 +273,11 @@ class VideotexSplitter{//TODO: does not support minitel network sequence nesting
 			ESC_Fs
 		} sequenceType=OTHER;
 		
+		void reset(){
+			this->sequenceEnded=false;
+			this->sequence.clear();
+		}
+		
 		bool updateSequence(unsigned char d){
 			if (this->sequenceEnded){
 				resync:
