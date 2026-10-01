@@ -290,7 +290,7 @@ class VideotexSplitter{
 			if (this->sequenceEnded){
 				resync:
 				
-				if ((!this->sequenceEnded)&&d==0x1B){//PRO1/2/3 + ESC 0x61 sequence nesting
+				if (!this->sequenceEnded){
 					//this->ongoingSequence should contain an unfinished sequence
 					this->ongoingSequence.pop_back();
 					std::swap(this->ongoingSequence,this->outerSequence);
@@ -298,11 +298,9 @@ class VideotexSplitter{
 				
 				this->ongoingSequence.clear();
 				
-				if (this->sequenceEnded){//restore sequence if there is sequence nesting
+				if (this->sequenceEnded){//restore sequence if there is sequence nesting / PRO1/2/3 + US cursor position
 					switch (this->sequenceType){
-						case SequenceType::ESC_Fs:
-							if (this->ongoingSequence[1]!=0x61) break;
-							[[fallthrough]];
+						case SequenceType::US_CURSOR_POSITION:
 						case SequenceType::ESC_Fp_PRO1:
 						case SequenceType::ESC_Fp_PRO2:
 						case SequenceType::ESC_Fp_PRO3:
@@ -312,6 +310,7 @@ class VideotexSplitter{
 						default:
 							break;
 					}
+					if (this->outerSequence.size()!=0) this->outerSequence.clear();
 				}
 				
 				this->sequenceEnded=false;
