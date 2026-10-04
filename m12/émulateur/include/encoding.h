@@ -251,14 +251,17 @@ class VideotexSplitter{
 	/*
 	PRO2 TRANSPARENCE is not supported -> should be implemented at an higher level
 	DLE sequence (DLE 4X / DLE 5X) is not supported -> should be implemented at an higher level (see STURM for examples)
+	PCE encoding is not implemented, it should be decoded before the videotex splitter
 	*/
 	public:
 		std::vector<unsigned char> sequence;
 		
 		enum SequenceType{
 			OTHER,
+			ID,
 			REP,
 			SEP,
+			NACK,
 			SS2,
 			SS3,
 			US_CURSOR_POSITION,
@@ -304,7 +307,6 @@ class VideotexSplitter{
 						case SequenceType::ESC_Fp_PRO1:
 						case SequenceType::ESC_Fp_PRO2:
 						case SequenceType::ESC_Fp_PRO3:
-							//this->ongoingSequence should be of size 0
 							std::swap(this->ongoingSequence,this->outerSequence);
 							break;
 						default:
@@ -325,7 +327,15 @@ class VideotexSplitter{
 					break;
 					
 				case 0x00://NUL
-					this->sequenceEnded=false;
+					this->ongoingSequence.clear();
+					break;
+					
+				case 0x01://SOH
+					if (this->ongoingSequence.size()>=16||this->ongoingSequence.back()==0x04){
+							this->sequenceEnded=true;
+							this->sequenceType=SequenceType::ID;
+					}
+					if (this->ongoingSequence.back()==0x00) this->ongoingSequence.pop_back();
 					break;
 					
 				case 0x12://REP
@@ -342,8 +352,24 @@ class VideotexSplitter{
 					
 				case 0x13://SEP
 					if (this->ongoingSequence.size()==2){
-						this->sequenceEnded=true;
-						this->sequenceType=SequenceType::SEP;
+						if (this->ongoingSequence.back()<0x40){
+							goto resync;
+						}
+						else{
+							this->sequenceEnded=true;
+							this->sequenceType=SequenceType::SEP;
+						}
+					}
+					break;
+					
+				case 0x15://NACK -> implicit ACK PCE (NACK 0x40)
+					if (this->ongoingSequence.size()==2){
+						if ((this->ongoingSequence.back()&0x70)!=0x40){
+							goto resync;
+						}
+						else{
+							this->sequenceEnded=true;
+							this->sequenceType=SequenceType::NACK;
 					}
 					break;
 					
