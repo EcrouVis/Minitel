@@ -303,6 +303,7 @@ class VideotexSplitter{
 				
 				if (this->sequenceEnded){//restore sequence if there is sequence nesting / PRO1/2/3 + US cursor position
 					switch (this->sequenceType){
+						case SequenceType::ID:
 						case SequenceType::US_CURSOR_POSITION:
 						case SequenceType::ESC_Fp_PRO1:
 						case SequenceType::ESC_Fp_PRO2:
@@ -370,6 +371,7 @@ class VideotexSplitter{
 						else{
 							this->sequenceEnded=true;
 							this->sequenceType=SequenceType::NACK;
+						}
 					}
 					break;
 					
