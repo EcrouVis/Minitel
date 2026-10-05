@@ -6,7 +6,7 @@ Simulation:
 	- création d'une rom de test
 	- mesure des signaux sur tout le pcb
 
-- Vérifier le fonctionnement du TS9347 quand X>=40
+- Vérifier le fonctionnement du TS9347 quand X>=40 (accès en mémoire seulement / retour à 0 fixé)
 
 
 

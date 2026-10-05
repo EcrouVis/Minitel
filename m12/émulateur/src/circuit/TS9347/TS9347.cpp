@@ -751,7 +751,7 @@ bool TS9347wVRAM::requestExecution(){return (this->ADDR_BUF.load(std::memory_ord
 
 bool TS9347wVRAM::incrementX(bool MP){
 	unsigned char r=this->Rx[MP?7:5].load(std::memory_order_relaxed);
-	if ((r&0x3F)>=39) r&=0xC0;
+	if ((r&39)==39) r&=0xC0;//see https://github.com/fabio-d/minitel-ef9345-testsuite/commit/813c04f2b48487a27584f87153299225f1888ff6 : 39, 47, 55, 63
 	else r++;
 	this->Rx[MP?7:5].store(r,std::memory_order_relaxed);
 	return (r&0x3F)==0;
