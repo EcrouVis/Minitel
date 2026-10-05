@@ -14,6 +14,8 @@ Code:
 
 - Nettoyage du code
 
+- Plein écran sur l'écran contenant la fenêtre
+
 
 
 Fonctionnalités:
@@ -32,3 +34,5 @@ Fonctionnalités:
 - Ajouter un système de patch ? (format .ups ?)
 
 - Créer un module pour l'échange de mails / s'interfacer avec le forum ?
+
+- Clavier configurable
