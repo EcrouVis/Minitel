@@ -1276,7 +1276,7 @@ class M12Window{
 		void setWindowFullscreen(){
 			glfwGetWindowPos(this->window,&(this->PARAMETERS.imgui.window_position[0]),&(this->PARAMETERS.imgui.window_position[1]));
 			glfwGetWindowSize(this->window,&(this->PARAMETERS.imgui.window_size[0]),&(this->PARAMETERS.imgui.window_size[1]));
-			GLFWmonitor* monitor=glfwGetPrimaryMonitor();
+			GLFWmonitor* monitor=glfwGetPrimaryMonitor();//TODO: get current monitor: https://github.com/glfw/glfw/issues/1699
 			const GLFWvidmode* mode=glfwGetVideoMode(monitor);
 			glfwSetWindowMonitor(this->window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
 		}
