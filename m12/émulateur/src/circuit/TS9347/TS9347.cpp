@@ -801,10 +801,7 @@ unsigned char TS9347wVRAM::getD(bool MP){
 int TS9347wVRAM::pointer2RAMAddress(bool MP){
 	unsigned char r1=this->Rx[MP?6:4].load(std::memory_order_relaxed);
 	unsigned char r2=this->Rx[MP?7:5].load(std::memory_order_relaxed);
-	if ((r2&0x3F)>=40){//protect against X>=40 - ex: mem fnct+T F mem mem -> service row corrupted at X=0 (position 0 and 1 because 80 collumn display)
-		r2&=0xC0;
-		this->Rx[MP?7:5].store(r2,std::memory_order_relaxed);
-	}
+	//TODO: get the ram address when X>=40 / case when in 80 column mode and returning from the local dialog (fnct+T F mem mem)
 	
 	int A=(r1&0xE0)<<7;
 	A|=(r2&0x40)<<5;
