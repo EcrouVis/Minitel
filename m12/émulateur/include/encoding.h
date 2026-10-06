@@ -337,7 +337,6 @@ class VideotexSplitter{
 							this->sequenceEnded=true;
 							this->sequenceType=SequenceType::SOH;
 					}
-					if (this->ongoingSequence.back()==0x00) this->ongoingSequence.pop_back();
 					break;
 					
 				case 0x02://STX / downloaded phone number
@@ -345,7 +344,6 @@ class VideotexSplitter{
 							this->sequenceEnded=true;
 							this->sequenceType=SequenceType::STX;
 					}
-					if (this->ongoingSequence.back()==0x1B) this->ongoingSequence.pop_back();//TODO: test behavior
 					break;
 					
 				case 0x10://DLE
