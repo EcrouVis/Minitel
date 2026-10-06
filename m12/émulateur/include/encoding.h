@@ -250,7 +250,6 @@ constexpr std::vector<unsigned char>* utf8_to_videotex_ts9347(const char* cstr, 
 class VideotexSplitter{
 	/*
 	PRO2 TRANSPARENCE is not supported -> should be implemented at an higher level
-	DLE sequence (DLE 4X / DLE 5X) is not supported -> should be implemented at an higher level (see STURM for examples)
 	PCE encoding is not implemented, it should be decoded before the videotex splitter
 	*/
 	public:
@@ -260,6 +259,7 @@ class VideotexSplitter{
 			OTHER,
 			SOH,
 			STX,
+			DLE,
 			REP,
 			SEP,
 			NACK,
@@ -346,6 +346,18 @@ class VideotexSplitter{
 							this->sequenceType=SequenceType::STX;
 					}
 					if (this->ongoingSequence.back()==0x1B) this->ongoingSequence.pop_back();//TODO: test behavior
+					break;
+					
+				case 0x10://DLE
+					if (this->ongoingSequence.size()==2){
+						if ((this->ongoingSequence.back()&0xE0)!=0x40){
+							goto resync;
+						}
+						else{
+							this->sequenceEnded=true;
+							this->sequenceType=SequenceType::DLE;
+						}
+					}
 					break;
 					
 				case 0x12://REP
