@@ -129,16 +129,7 @@ Quand P1.5=1, la ROM et la RAM externe sont accédées de manière normale. On p
 
 Quand P1.5=0, la puce vidéo est virtuellement montée aux adresses 0xXX20 à 0xXX2F à la place de la RAM externe. On peut supposer que les autres entrées sorties du CPLD peuvent être accédées de la même manière mais à d'autres adresses.
 
-De potentielles adresses (en recherchant la séquence 0xC2 0x95 - CLR P1.5 dans la ROM partie 1 et 2) utilisées pour communiquer avec le CPLD sont:
-0x0040
-0x0041
-0x0042
-0x0048
-0x0050
-0x0051
-0x0052
-0x0053
-0x0070
+Les adresses (connues) utilisées pour communiquer avec le CPLD sont décrites dans MBSL-4000FH5-5.txt.
 
 
 
@@ -344,7 +335,7 @@ Changement de vitesse:
 0x072F - taille du mot de passe (10 charactères max)
 0x0730-0x0739 - mot de passe
 0x073A - taille de l'identification serveur  (15 charactères max)
-0x073B-0x0749 - identification serveur
+0x073B-0x0749 - identification serveur (mouchard RAM1)
 
 ??? - structure des mails et du message d'accueil
 0x171C-... - stockage des mails et du message d'accueil (mail: nom de l'émetteur | jour format BCD | mois format BCD | année partie basse format BCD | objet | ligne 1 | ligne 2 | … )
