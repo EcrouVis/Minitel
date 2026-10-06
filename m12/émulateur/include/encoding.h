@@ -258,7 +258,8 @@ class VideotexSplitter{
 		
 		enum SequenceType{
 			OTHER,
-			ID,
+			SOH,
+			STX,
 			REP,
 			SEP,
 			NACK,
@@ -301,9 +302,9 @@ class VideotexSplitter{
 				
 				this->ongoingSequence.clear();
 				
-				if (this->sequenceEnded){//restore sequence if there is sequence nesting / PRO1/2/3 + US cursor position
+				if (this->sequenceEnded){//restore sequence if there is sequence nesting / PRO1/2/3 + US cursor position + ROM/RAM ID
 					switch (this->sequenceType){
-						case SequenceType::ID:
+						case SequenceType::SOH:
 						case SequenceType::US_CURSOR_POSITION:
 						case SequenceType::ESC_Fp_PRO1:
 						case SequenceType::ESC_Fp_PRO2:
@@ -331,12 +332,20 @@ class VideotexSplitter{
 					this->ongoingSequence.clear();
 					break;
 					
-				case 0x01://SOH
+				case 0x01://SOH / ROM/RAM ID / downloaded phone rank
 					if (this->ongoingSequence.size()>=16||this->ongoingSequence.back()==0x04){
 							this->sequenceEnded=true;
-							this->sequenceType=SequenceType::ID;
+							this->sequenceType=SequenceType::SOH;
 					}
 					if (this->ongoingSequence.back()==0x00) this->ongoingSequence.pop_back();
+					break;
+					
+				case 0x02://STX / downloaded phone number
+					if (this->ongoingSequence.size()>=16||this->ongoingSequence.back()==0x03){
+							this->sequenceEnded=true;
+							this->sequenceType=SequenceType::STX;
+					}
+					if (this->ongoingSequence.back()==0x1B) this->ongoingSequence.pop_back();//TODO: test behavior
 					break;
 					
 				case 0x12://REP
