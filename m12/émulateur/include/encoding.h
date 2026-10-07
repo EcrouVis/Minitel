@@ -361,7 +361,12 @@ class VideotexSplitter{
 				case 0x12://REP
 					if (this->ongoingSequence.size()==2){
 						if (this->ongoingSequence.back()<0x40){
-							goto resync;
+							if (this->ongoingSequence.back()==0){
+								this->ongoingSequence.pop_back();
+							}
+							else{
+								goto resync;
+							}
 						}
 						else{
 							this->sequenceEnded=true;
@@ -373,7 +378,12 @@ class VideotexSplitter{
 				case 0x13://SEP
 					if (this->ongoingSequence.size()==2){
 						if (this->ongoingSequence.back()<0x40){
-							goto resync;
+							if (this->ongoingSequence.back()==0){
+								this->ongoingSequence.pop_back();
+							}
+							else{
+								goto resync;
+							}
 						}
 						else{
 							this->sequenceEnded=true;
@@ -398,7 +408,12 @@ class VideotexSplitter{
 				case 0x19://SS2
 					if (this->ongoingSequence.size()>=2){
 						if (this->ongoingSequence.back()<0x20){
-							goto resync;
+							if (this->ongoingSequence.back()==0){
+								this->ongoingSequence.pop_back();
+							}
+							else{
+								goto resync;
+							}
 						}
 						else if ((this->ongoingSequence[1]&0x70)!=0x40||this->ongoingSequence.size()==3){
 							this->sequenceEnded=true;
@@ -410,7 +425,12 @@ class VideotexSplitter{
 				case 0x1D://SS3
 					if (this->ongoingSequence.size()==2){
 						if (this->ongoingSequence.back()<0x20){
-							goto resync;
+							if (this->ongoingSequence.back()==0){
+								this->ongoingSequence.pop_back();
+							}
+							else{
+								goto resync;
+							}
 						}
 						else{
 							this->sequenceEnded=true;
@@ -424,7 +444,12 @@ class VideotexSplitter{
 						switch (this->ongoingSequence[1]){
 							case 0x40 ... 0x58://cursor position
 								if (this->ongoingSequence.back()<0x40||this->ongoingSequence.back()>0x58){
-									goto resync;
+									if (this->ongoingSequence.back()==0){
+										this->ongoingSequence.pop_back();
+									}
+									else{
+										goto resync;
+									}
 								}
 								else{
 									if (this->ongoingSequence.size()==3){
@@ -440,7 +465,12 @@ class VideotexSplitter{
 										this->sequenceType=SequenceType::US_CURSOR_LINE;
 									}
 									else{
-										goto resync;
+										if (this->ongoingSequence.back()==0){
+											this->ongoingSequence.pop_back();
+										}
+										else{
+											goto resync;
+										}
 									}
 								}
 								break;
