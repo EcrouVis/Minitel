@@ -307,7 +307,7 @@ class RTCServiceAudio: public RTCService{
 			return PHONE_NUMBER_ONGOING;
 		}
 		
-		virtual void phoneLineChangeIn(unsigned short s) final override{
+		virtual void phoneLineChangeIn(unsigned short s) override final{
 			if (((bool)(s&line_Closed))!=this->selected){
 				this->selected=!this->selected;
 				this->sendIOState(this->selected);
@@ -342,7 +342,150 @@ class RTCServiceAudio: public RTCService{
 		
 };
 
-class RTCServiceWebsocket: public RTCService{
+class RTCDigitalService: public RTCService{
+	protected:
+		virtual void Init(){};
+		virtual void Uninit(){};
+		virtual void CLKTick9600(){};
+		virtual void RxUpdate(unsigned char d)=0;
+		virtual void RxWaiting(){};
+		virtual std::pair<bool,unsigned char> TxNext()=0;
+		void setTxSpeed(bool fast){
+			if (fast!=this->TxFast){
+				this->resetSerialState();
+			}
+			this->TxFast=fast;
+		}
+		virtual void RxStateChange(bool carrier){};
+		
+	public:
+		virtual void phoneLineChangeIn(unsigned short s) override final{
+			if (((bool)(s&line_Closed))!=this->selected){
+				this->selected=!this->selected;
+				if (this->selected){
+					this->resetSerialState();
+					
+					this->Init();
+				}
+				else{
+					this->Uninit();
+				}
+			}
+			unsigned short mask=this->TxFast?(line_v23_75bps_0|line_v23_75bps_1):(line_v23_1200bps_0|line_v23_1200bps_1);
+			if ((bool)((s^this->phoneLineStateIn)&mask)){
+				this->RxStateChange((bool)(s&mask));
+			}
+			this->phoneLineStateIn=s;
+		};
+		
+		virtual void CLKTickIn9600Hz() override final{
+			this->Clk++;
+			if ((this->Clk&ClkDivMask75)==0){
+				this->RxClkTick();
+			}
+			if ((this->Clk&ClkDivMask1200)==0){
+				this->TxClkTick();
+			}
+			this->CLKTick9600();
+		}
+		
+		virtual float getPhoneLineSample(unsigned long sr) override final{
+			switch (this->phoneLineStateOut&(line_v23_1200bps_0|line_v23_1200bps_1|line_v23_75bps_0|line_v23_75bps_1)){
+				case line_v23_1200bps_0:this->v23Phase+=2100;break;
+				case line_v23_1200bps_1:this->v23Phase+=1300;break;
+				case line_v23_75bps_0:this->v23Phase+=450;break;
+				case line_v23_75bps_1:this->v23Phase+=390;break;
+				default:this->v23Phase=0;break;
+			}
+			if (this->v23Phase>sr) this->v23Phase-=sr;
+			return pow(10.,-0.5)*sin(2*M_PI*((float)this->v23Phase)/((float)sr));
+		}
+		
+	private:
+		bool selected=false;
+		bool TxFast=true;
+		
+		unsigned short phoneLineStateIn=0;
+		unsigned short phoneLineStateOut=0;
+		
+		unsigned char Clk;
+		constexpr static unsigned char ClkDivMask75=0x7F;
+		constexpr static unsigned char ClkDivMask1200=0x07;
+		
+		unsigned char RxState=10;
+		unsigned char RxBuf=0;
+		unsigned char TxState=0;
+		unsigned char TxBuf=0;
+		
+		unsigned long v23Phase=0;
+		
+		void TxClkTick(){
+			unsigned short b0=this->TxFast?line_v23_1200bps_0:line_v23_75bps_0;
+			unsigned short b1=this->TxFast?line_v23_1200bps_1:line_v23_75bps_1;
+			switch (this->TxState){
+				case 0:
+				{
+					std::pair<bool,unsigned char> tx=this->TxNext();//1 function to implement atomic operation (to work with multiple threads)
+					if (std::get<bool>(tx)){
+						this->phoneLineStateOut=b0;
+						this->sendPhoneLine(this->phoneLineStateOut);
+						this->TxBuf=std::get<unsigned char>(tx);
+						this->TxState=1;
+					}
+					break;
+				}
+				default:
+					this->phoneLineStateOut=((bool)(this->TxBuf&0x01))?b1:b0;
+					this->sendPhoneLine(this->phoneLineStateOut);
+					this->TxBuf=this->TxBuf>>1;
+					this->TxState++;
+					break;
+				case 9:
+					this->phoneLineStateOut=b1;
+					this->sendPhoneLine(this->phoneLineStateOut);
+					this->TxState=0;
+					break;
+			}
+		}
+		
+		void RxClkTick(){
+			unsigned short mask=this->TxFast?line_v23_75bps_0:line_v23_1200bps_0;
+			switch (this->RxState){
+				case 0:
+					if ((bool)(this->phoneLineStateIn&mask))this->RxState=1;
+					else{
+						this->RxWaiting();
+						this->RxState=11;
+					}
+					break;
+				case 11:
+					if ((bool)(this->phoneLineStateIn&mask))this->RxState=1;
+					break;
+				default:
+					this->RxBuf=(this->RxBuf>>1)|(((bool)(this->phoneLineStateIn&mask))?0:0x80);
+					this->RxState++;
+					break;
+				case 9:
+					if (!(bool)(this->phoneLineStateIn&mask)) this->RxState=0;
+					else this->RxState=10;
+					this->RxUpdate(this->RxBuf);
+					break;
+				case 10:
+					if (!(bool)(this->phoneLineStateIn&mask)) this->RxState=0;
+					break;
+			}
+		}
+		
+		void resetSerialState(){
+			this->TxState=0;
+			this->RxState=10;
+			this->phoneLineStateOut=this->TxFast?line_v23_1200bps_1:line_v23_75bps_1;
+			this->sendPhoneLine(this->phoneLineStateOut);
+		}
+};
+
+
+class RTCServiceWebsocket: public RTCDigitalService{
 	public:
 		RTCServiceWebsocket (std::vector<unsigned char> num, const char* url):phoneNumber(num),url(url){
 		}
@@ -356,57 +499,11 @@ class RTCServiceWebsocket: public RTCService{
 			return PHONE_NUMBER_ONGOING;
 		}
 		
-		virtual void phoneLineChangeIn(unsigned short s) final override{
-			if (((bool)(s&line_Closed))!=this->selected){
-				this->selected=!this->selected;
-				if (this->selected){
-					this->Init();
-				}
-				else{
-					this->Reset();
-				}
-			}
-			this->phoneLineStateIn=s;
-		};
-		
-		virtual void CLKTickIn9600Hz() final override {
-			this->Clk++;
-			if ((this->Clk&ClkDivMask75)==0){
-				this->RxClkTick();
-			}
-			if ((this->Clk&ClkDivMask1200)==0){
-				this->TxClkTick();
-			}
-		}
-		
-		virtual float getPhoneLineSample(unsigned long sr) override final{
-			if ((this->phoneLineStateOut&(line_v23_1200bps_0|line_v23_1200bps_1))==line_v23_1200bps_0){
-				this->v23Phase+=2100;
-			}
-			else if ((this->phoneLineStateOut&(line_v23_1200bps_0|line_v23_1200bps_1))==line_v23_1200bps_1){
-				this->v23Phase+=1300;
-			}
-			else{
-				this->v23Phase=0;
-			}
-			if (this->v23Phase>sr) this->v23Phase-=sr;
-			return pow(10.,-0.5)*sin(2*M_PI*((float)this->v23Phase)/((float)sr));
-		}
 	private:
-		bool selected=false;
-		unsigned short phoneLineStateIn=0;
-		unsigned short phoneLineStateOut=0;
-		unsigned char Clk;
-		constexpr static unsigned char ClkDivMask75=0x7F;
-		constexpr static unsigned char ClkDivMask1200=0x07;
-		unsigned char RxState=10;
-		unsigned char RxBuf=0;
+		unsigned char waitConnectionACK=0;
+	
 		std::vector<unsigned char> qRx;
-		unsigned char TxState=0;
-		unsigned char TxBuf=0;
 		std::queue<unsigned char> qTx;
-		
-		unsigned long v23Phase=0;
 		
 		ix::WebSocket webSocket;
 		std::mutex wsMutex;
@@ -414,90 +511,63 @@ class RTCServiceWebsocket: public RTCService{
 		std::vector<unsigned char> phoneNumber;
 		const char* url;
 		
-		void TxClkTick(){
-			switch (this->TxState){
-				case 0:
-				{
-					std::lock_guard<std::mutex> lock(this->wsMutex);
-					if ((bool)this->qTx.size()&&(bool)(this->phoneLineStateIn&(line_v23_75bps_0|line_v23_75bps_1))){
-						this->phoneLineStateOut=line_v23_1200bps_0;
-						this->sendPhoneLine(this->phoneLineStateOut);
-						this->TxBuf=this->qTx.front();
-						this->qTx.pop();
-						constexpr unsigned short P=0b0110100110010110;
-						this->TxBuf^=((P>>(this->TxBuf&0x0F))^(P>>(this->TxBuf>>4)))<<7;
-						this->TxState=1;
-					}
-				}
-					break;
-				default:
-					this->phoneLineStateOut=((bool)(this->TxBuf&0x01))?line_v23_1200bps_1:line_v23_1200bps_0;
-					this->sendPhoneLine(this->phoneLineStateOut);
-					this->TxBuf=this->TxBuf>>1;
-					this->TxState++;
-					break;
-				case 9:
-					this->phoneLineStateOut=line_v23_1200bps_1;
-					this->sendPhoneLine(this->phoneLineStateOut);
-					this->TxState=0;
-					break;
-			}
-		}
-		
-		void RxClkTick(){
-			switch (this->RxState){
-				case 0:
-					if ((bool)(this->phoneLineStateIn&line_v23_75bps_0))this->RxState=1;
-					else{
-						this->RxWaiting();
-						this->RxState=11;
-					}
-					break;
-				case 11:
-					if ((bool)(this->phoneLineStateIn&line_v23_75bps_0))this->RxState=1;
-					break;
-				default:
-					this->RxBuf=(this->RxBuf>>1)|(((bool)(this->phoneLineStateIn&line_v23_75bps_0))?0:0x80);
-					this->RxState++;
-					break;
-				case 9:
-					this->qRx.push_back(this->RxBuf&0x7F);
-					if ((bool)(this->phoneLineStateIn&line_v23_75bps_1)) this->RxState=0;
-					else this->RxState=10;
-					this->RxUpdate();
-					break;
-				case 10:
-					if ((bool)(this->phoneLineStateIn&line_v23_75bps_1)) this->RxState=0;
-					break;
-			}
-		}
-		
-		void RxUpdate(){
+		void RxUpdate(unsigned char d) override final{
+			std::lock_guard<std::mutex> lock(this->wsMutex);
+			constexpr unsigned short P=0b0110100110010110;
+			d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
+			this->qRx.push_back(d);
 			
+			switch (this->waitConnectionACK){
+				case 0:
+					if (d==0x13) this->waitConnectionACK=1;
+					break;
+				case 1:
+					if (d==0x53) this->waitConnectionACK=2;
+					break;
+			}
 		}
 		
-		void RxWaiting(){
+		void RxWaiting() override final{
 			if (!this->qRx.empty()){
 				if (this->webSocket.getReadyState()==ix::ReadyState::Open) this->webSocket.sendBinary(this->qRx);
 				this->qRx.clear();
 			}
 		}
 		
-		void Reset(){
+		virtual std::pair<bool,unsigned char> TxNext() override final{
+			std::pair<bool,unsigned char> d;
+			if (this->waitConnectionACK<2){
+				d=std::pair<bool,unsigned char>(false,0);
+			}
+			else{
+				std::lock_guard<std::mutex> lock(this->wsMutex);
+				constexpr unsigned short P=0b0110100110010110;
+				if ((bool)this->qTx.size()){
+					unsigned char v=this->qTx.front();
+					v^=((P>>(v&0x0F))^(P>>(v>>4)))<<7;
+					d=std::pair<bool,unsigned char>(true,v);
+					this->qTx.pop();
+				}
+				else{
+					d=std::pair<bool,unsigned char>(false,0);
+				}
+			}
+			return d;
+		}
+		
+		void Uninit() override final{
 			this->webSocket.stop();
+		}
+		
+		void Init() override final{
+			this->waitConnectionACK=0;
+			
 			{
 				std::lock_guard<std::mutex> lock(this->wsMutex);
 				this->qRx.clear();
 				std::queue<unsigned char> empty;
 				std::swap(qTx,empty);
-				this->TxState=0;
-				this->RxState=10;
 			}
-		}
-		
-		void Init(){
-			this->phoneLineStateOut=line_v23_1200bps_1;
-			this->sendPhoneLine(this->phoneLineStateOut);
 			
 			this->webSocket.setUrl(this->url);
 			this->webSocket.setPingInterval(45);
