@@ -372,7 +372,7 @@ class RTCDigitalService: public RTCService{
 				}
 			}
 			unsigned short mask=this->TxFast?(line_v23_75bps_0|line_v23_75bps_1):(line_v23_1200bps_0|line_v23_1200bps_1);
-			if ((bool)((s^this->phoneLineStateIn)&mask)){
+			if (((bool)(s&mask))!=((bool)(this->phoneLineStateIn&mask))){
 				this->RxStateChange((bool)(s&mask));
 			}
 			this->phoneLineStateIn=s;
