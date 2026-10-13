@@ -659,9 +659,9 @@ class VideotexSplitter{
 		std::vector<unsigned char> outerSequence;
 };
 
-std::vector<unsigned char>* DProtocolTranslationMode4Encode(const std::vector<unsigned char>* data,bool C0=false,bool space=false);
+void DProtocolTranslationMode4Encode(std::vector<unsigned char>* edata, const std::vector<unsigned char>* data,bool C0=false,bool space=false);
 
-std::vector<unsigned char>* DProtocolTranslationMode4Decode(const std::vector<unsigned char>* edata);
+bool DProtocolTranslationMode4Decode(std::vector<unsigned char>* data, const std::vector<unsigned char>* edata);
 
 char* Base64Encode(const unsigned char* data, size_t s);
 

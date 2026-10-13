@@ -133,8 +133,7 @@ char* videotex_to_utf8(std::vector<unsigned char>* vdt, bool G1){//SEP/REP/US/ES
 	return cstr;
 }
 
-std::vector<unsigned char>* DProtocolTranslationMode4Encode(const std::vector<unsigned char>* data,bool C0,bool space){
-	std::vector<unsigned char>* edata=new std::vector<unsigned char>;
+void DProtocolTranslationMode4Encode(std::vector<unsigned char>* edata, const std::vector<unsigned char>* data,bool C0,bool space){
 	edata->reserve(data->size()*2);
 	for (size_t i=0;i<data->size();i++){
 		switch ((*data)[i]){
@@ -168,11 +167,9 @@ std::vector<unsigned char>* DProtocolTranslationMode4Encode(const std::vector<un
 				break;
 		}
 	}
-	return edata;
 }
 
-std::vector<unsigned char>* DProtocolTranslationMode4Decode(const std::vector<unsigned char>* edata){
-	std::vector<unsigned char>* data=new std::vector<unsigned char>;
+bool DProtocolTranslationMode4Decode(std::vector<unsigned char>* data, const std::vector<unsigned char>* edata){
 	data->reserve(edata->size());
 	for (size_t i=0;i<edata->size();i++){
 		switch ((*edata)[i]){
@@ -183,8 +180,7 @@ std::vector<unsigned char>* DProtocolTranslationMode4Decode(const std::vector<un
 			case 0x1F:
 			case 0x7C:
 			case 0x7F:
-				delete data;
-				return NULL;
+				return false;
 			case 0x7B:
 				i++;
 				if (i<edata->size()&&(*edata)[i]>=0x23&&(*edata)[i]<=0x78){
@@ -192,8 +188,7 @@ std::vector<unsigned char>* DProtocolTranslationMode4Decode(const std::vector<un
 					
 				}
 				else{
-					delete data;
-					return NULL;
+					return false;
 				}
 				break;
 			case 0x7D:
@@ -205,13 +200,12 @@ std::vector<unsigned char>* DProtocolTranslationMode4Decode(const std::vector<un
 					data->push_back((*edata)[i]-0x50);
 				}
 				else{
-					delete data;
-					return NULL;
+					return false;
 				}
 				break;
 		}
 	}
-	return data;
+	return true;
 }
 
 char* Base64Encode(const unsigned char* data, size_t s){
