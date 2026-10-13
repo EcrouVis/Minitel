@@ -601,4 +601,339 @@ class RTCServiceWebsocket: public RTCDigitalService{
 			setCurrentThreadAffinity(getCurrentCPU());
 		}
 };
+
+
+class RTCServiceMessage: public RTCDigitalService{
+	public:
+		virtual enum PhoneNumberState isCalled(std::vector<unsigned char>* pPhoneNumber) override final {
+			if (pPhoneNumber->size()>this->phoneNumber.size()) return NOT_PHONE_NUMBER;
+			for (size_t i=0;i<pPhoneNumber->size();i++){
+				if (this->phoneNumber[i]!=(*pPhoneNumber)[i]) return NOT_PHONE_NUMBER;
+			}
+			if (pPhoneNumber->size()==this->phoneNumber.size()) return PHONE_NUMBER_FINISHED;
+			return PHONE_NUMBER_ONGOING;
+		}
+		
+	private:
+		std::vector<unsigned char> phoneNumber={0,0,0,1};
+		
+		VideotexSplitter VDTSplitter;
+		std::queue<unsigned char> qTx;
+		
+		bool service=false;
+		
+		virtual void RxUpdate(unsigned char d) override final{
+			constexpr unsigned short P=0b0110100110010110;
+			d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
+			if (this->VDTSplitter.updateSequence(d)){
+				switch (this->VDTSplitter.getSequenceType()){
+					case VideotexSplitter::SequenceType::SEP:
+						if (this->VDTSplitter.sequence[1]==0x53){//ACK connexion
+							constexpr unsigned char IRD[]={0x1B,0x23,0x20,0x2C,0x21,0x3C};
+							for (int i=0;i<sizeof(IRD)/sizeof(IRD[0]);i++) this->qTx.push(IRD[i]);
+						}
+						break;
+					case VideotexSplitter::SequenceType::ESC_nF:
+						if (this->VDTSplitter.sequence.back()==0x38){//DC
+							if (this->VDTSplitter.sequence.size()==5&&this->VDTSplitter.sequence[1]==0x20&&this->VDTSplitter.sequence[2]==0x2C&&this->VDTSplitter.sequence[3]==0x21){
+								constexpr unsigned char AC[]={0x1B,0x20,0x2C,0x21,0x39};
+								for (int i=0;i<sizeof(AC)/sizeof(AC[0]);i++) this->qTx.push(AC[i]);
+								this->service=true;
+							}
+						}
+						break;
+					case VideotexSplitter::SequenceType::US_STUTEL:
+						if (this->service){
+							this->parseDDU();
+						}
+						break;
+					default:
+						break;
+				}
+			}
+		}
+		
+		virtual std::pair<bool,unsigned char> TxNext() override final{
+			std::pair<bool,unsigned char> d;
+			constexpr unsigned short P=0b0110100110010110;
+			if ((bool)this->qTx.size()){
+				unsigned char v=this->qTx.front();
+				v^=((P>>(v&0x0F))^(P>>(v>>4)))<<7;
+				d=std::pair<bool,unsigned char>(true,v);
+				this->qTx.pop();
+			}
+			else{
+				d=std::pair<bool,unsigned char>(false,0);
+			}
+			return d;
+		}
+		
+		virtual void RxStateChange(bool carrier) override final{
+			printf("rx carrier %i\n",carrier);
+		};
+		
+		void Init() override final{
+			this->VDTSplitter.reset();
+			std::queue<unsigned char> empty;
+			std::swap(qTx,empty);
+			
+			this->service=false;
+			this->DSet=false;
+			this->TAssociate=false;
+		}
+		
+		bool DSet=false;
+		bool TAssociate=false;
+		size_t blockNumber=0;
+		std::vector<unsigned char> TWriteDataBuffer;
+		
+		void parseDDU(){
+			switch (this->VDTSplitter.sequence[2]){//CI
+				case 0x30://D-Response-positive
+					break;
+				case 0x31://D-Response-negative
+					break;
+				case 0x39://D-U abort
+					this->DSet=false;
+					this->TAssociate=false;
+					break;
+				case 0x50 ... 0x5F://D-Data
+					if (this->DSet){
+						{
+							std::vector<unsigned char> eFields(this->VDTSplitter.sequence.begin()+3,this->VDTSplitter.sequence.end()-1);
+							std::vector<unsigned char> dFields;
+							if (!DProtocolTranslationMode4Decode(&dFields,&eFields)) this->sendDUAbort();//error in the encoding
+							else{
+								this->parseTDU(&dFields);
+							}
+						}
+					}
+					break;
+				case 0x40 ... 0x4F://D-Set mode
+					if ((this->VDTSplitter.sequence[2]&0x03)!=0){//translation not in mode 4 / not handled
+						this->sendDUAbort();
+					}
+					else{
+						{
+							std::vector<unsigned char> eFields(this->VDTSplitter.sequence.begin()+3,this->VDTSplitter.sequence.end()-1);
+							std::vector<unsigned char> dFields;
+							if (!DProtocolTranslationMode4Decode(&dFields,&eFields)) this->sendDUAbort();//error in the encoding
+							else{
+								dFields.insert(dFields.begin(),0);
+								std::vector<unsigned char> DData;
+								if (this->nextTLV(&dFields, NULL, &DData)){
+									if (this->parseDSetModeParams(&DData)){
+										if ((this->VDTSplitter.sequence[2]&0x0C)==0x0C) this->sendDResponsePositive();
+										this->DSet=true;
+										this->TAssociate=false;
+										this->parseTDU(&dFields);
+									}
+									else this->sendDUAbort();
+								}
+								else this->sendDUAbort();
+							}
+						}
+					}
+					break;
+				case 0x60 ... 0x7F://D-Set mode / BCS/sequence code not handled at the moment
+					this->sendDUAbort();
+					break;
+				default:
+					this->sendDUAbort();
+					break;
+			}
+		}
+		
+		bool parseDSetModeParams(std::vector<unsigned char>* DParams){
+			bool CMode=false;
+			std::vector<unsigned char> pp;
+			unsigned char p;
+			while (this->nextTLV(DParams, &p, &pp)){
+				if (p==0x23&&pp.size()==1&&(pp[0]&0x07)==0x02){
+					CMode=true;
+					break;
+				}
+			}
+			return CMode;
+		}
+		
+		void parseTDU(std::vector<unsigned char>* DData){
+			std::vector<unsigned char> TDUParams;
+			unsigned char TDU;
+			while (this->nextTLV(DData,&TDU,&TDUParams)){
+				switch (TDU){
+					case 0x20:
+						this->parseTAssociateParams(&TDUParams);
+						break;
+					case 0x21:
+						this->TAssociate=false;
+						this->sendTResponsePositive();
+						break;
+					case 0x2F:
+						this->parseTWriteParams(&TDUParams);
+						break;
+					case 0x32:
+					case 0x33:
+						break;
+					default:
+						this->sendTAbort();
+						break;
+				}
+			}
+		}
+		
+		void parseTAssociateParams(std::vector<unsigned char>* TParams){
+			std::vector<unsigned char> pp;
+			unsigned char p;
+			bool name=false;
+			bool sclass=false;
+			bool confirm=false;
+			while (this->nextTLV(TParams,&p,&pp)){
+				switch(p){
+					case 0x45:
+						name=pp.size()==1&&pp[0]=='M';
+						break;
+					case 0x51:
+						sclass=pp.size()==1&&(pp[0]&0x03)==0x01;
+						break;
+					case 0x4C:
+						confirm=pp.size()==1&&(bool)(pp[0]&0x08);
+						break;
+				}
+			}
+			if (name&&sclass){
+				this->TAssociate=true;
+				if (confirm){
+					this->sendTResponsePositive();
+				}
+			}
+			else{
+				this->TAssociate=false;
+				if (confirm){
+					this->sendTResponseNegative();
+					this->blockNumber=0;
+				}
+				else{
+					this->sendTAbort();
+				}
+			}
+		}
+		
+		void parseTWriteParams(std::vector<unsigned char>* TParams){
+			if (this->TAssociate){
+				std::vector<unsigned char> pp;
+				unsigned char p;
+				if (this->nextTLV(TParams,&p,&pp)&&p==0x4C&&pp.size()==1&&TParams->size()<=1024){//basic kernel limitations
+					if ((pp[0]&0x01)==0x01) this->TWriteDataBuffer.clear();
+					this->TWriteDataBuffer.insert(this->TWriteDataBuffer.end(),TParams->begin(),TParams->end());
+					if ((pp[0]&0x02)==0x02){
+						this->TWriteDataCompleteCallback();
+						this->sendTResponsePositive();
+					}
+					else if ((bool)(pp[0]&0x08)){
+						this->sendTResponsePositive();
+					}
+				}
+				else{
+					this->sendTAbort();
+				}
+			}
+			else{
+				this->sendTAbort();
+			}
+		}
+		
+		void sendDUAbort(){
+			this->DSet=false;
+			this->TAssociate=false;
+			this->qTx.push(0x1F);
+			this->qTx.push(0x3E);
+			this->qTx.push(0x39);
+			this->qTx.push(0x0D);
+		}
+		void sendDResponsePositive(){
+			this->qTx.push(0x1F);
+			this->qTx.push(0x3E);
+			this->qTx.push(0x30);
+			this->qTx.push(0x0D);
+		}
+		void sendTResponsePositive(){
+			this->qTx.push(0x1F);
+			this->qTx.push(0x3E);
+			this->qTx.push(0x50);
+			this->qTx.push(0x32);
+			this->qTx.push(0x0D);
+		}
+		void sendTResponseNegative(){
+			this->qTx.push(0x1F);
+			this->qTx.push(0x3E);
+			this->qTx.push(0x50);
+			this->qTx.push(0x33);
+			this->qTx.push(0x0D);
+		}
+		void sendTAbort(){
+			this->TAssociate=false;
+			this->qTx.push(0x1F);
+			this->qTx.push(0x3E);
+			this->qTx.push(0x50);
+			this->qTx.push(0x38);
+			this->qTx.push(0x0D);
+		}
+		void sendTReadRestart(){
+			this->qTx.push(0x1F);
+			this->qTx.push(0x3E);
+			this->qTx.push(0x50);
+			this->qTx.push(0x37);
+			this->qTx.push(0x0D);
+			
+		}
+		
+		static bool nextTLV(std::vector<unsigned char>* sequence, unsigned char* type, std::vector<unsigned char>* value){
+			unsigned short tlvLength;
+			if (sequence->size()<3) return false;
+			if (type!=NULL) *type=(*sequence)[0];
+			if ((*sequence)[1]==0xFF){
+				if (sequence->size()<5) return false;
+				tlvLength=(((unsigned short)(*sequence)[2])<<8)+(*sequence)[3]+4;
+				if (sequence->size()<tlvLength) return false;
+				value->assign(sequence->begin()+4,sequence->begin()+tlvLength);
+			}
+			else{
+				tlvLength=(*sequence)[1]+2;
+				if (sequence->size()<tlvLength) return false;
+				value->assign(sequence->begin()+2,sequence->begin()+tlvLength);
+			}
+			sequence->erase(sequence->begin(),sequence->begin()+tlvLength);
+			return true;
+		}
+		
+		
+		
+		void TWriteDataCompleteCallback(){
+			printf("data ");
+			for(int i=0;i<this->TWriteDataBuffer.size();i++){
+				if (this->TWriteDataBuffer[i]<0x20||this->TWriteDataBuffer[i]>=0x7F) printf("\\x%02X",this->TWriteDataBuffer[i]);
+				else printf("%c",this->TWriteDataBuffer[i]);
+			}
+			printf("\n");
+		}
+		
+		void TResponseCallback(bool state){
+			
+		}
+		void TAbortCallback(){
+			
+		}
+		void DResponseCallback(bool state){
+			
+		}
+		void DAbortCallback(){
+			
+		}
+		
+		void sendMessageUpdateState(){
+			
+		}
+		
+};
 #endif
