@@ -352,11 +352,23 @@ class RTCDigitalService: public RTCService{
 		virtual std::pair<bool,unsigned char> TxNext()=0;
 		void setTxSpeed(bool fast){
 			if (fast!=this->TxFast){
+				this->TxFast=fast;
 				this->resetSerialState();
 			}
-			this->TxFast=fast;
+			else this->TxFast=fast;
+		}
+		bool getTxSpeed(){
+			return this->TxFast;
 		}
 		virtual void RxStateChange(bool carrier){};
+		
+		void reset(){
+			if (this->selected){
+				this->Uninit();
+				this->resetSerialState();
+				this->Init();
+			}
+		}
 		
 	public:
 		virtual void phoneLineChangeIn(unsigned short s) override final{
@@ -372,8 +384,9 @@ class RTCDigitalService: public RTCService{
 				}
 			}
 			unsigned short mask=this->TxFast?(line_v23_75bps_0|line_v23_75bps_1):(line_v23_1200bps_0|line_v23_1200bps_1);
-			if (((bool)(s&mask))!=((bool)(this->phoneLineStateIn&mask))){
-				this->RxStateChange((bool)(s&mask));
+			if (((bool)(s&mask))!=this->carrier){
+				this->carrier=(bool)(s&mask);
+				this->RxStateChange(this->carrier);
 			}
 			this->phoneLineStateIn=s;
 		};
@@ -381,10 +394,12 @@ class RTCDigitalService: public RTCService{
 		virtual void CLKTickIn9600Hz() override final{
 			this->Clk++;
 			if ((this->Clk&ClkDivMask75)==0){
-				this->RxClkTick();
+				if (this->TxFast) this->RxClkTick();
+				else this->TxClkTick();
 			}
 			if ((this->Clk&ClkDivMask1200)==0){
-				this->TxClkTick();
+				if (this->TxFast) this->TxClkTick();
+				else this->RxClkTick();
 			}
 			this->CLKTick9600();
 		}
@@ -404,6 +419,7 @@ class RTCDigitalService: public RTCService{
 	private:
 		bool selected=false;
 		bool TxFast=true;
+		bool carrier=false;
 		
 		unsigned short phoneLineStateIn=0;
 		unsigned short phoneLineStateOut=0;
@@ -619,27 +635,126 @@ class RTCServiceMessage: public RTCDigitalService{
 		
 		VideotexSplitter VDTSplitter;
 		std::queue<unsigned char> qTx;
+		bool TxEnable=true;
 		
 		bool service=false;
+		
+		
+		
+		unsigned short carrierLostTimer=0;
+		unsigned short carrierFoundTimer=0;
+		bool requestHighSpeed=false;
+		
+		virtual void CLKTick9600(){
+			if (this->carrierFoundTimer!=0){
+				if (this->carrierLostTimer==0) this->carrierFoundTimer=0;
+				else{
+					switch (this->carrierFoundTimer){
+						case 384://40ms
+							this->carrierFoundTimer=0;
+							this->carrierLostTimer=0;
+							this->requestHighSpeed=false;
+							break;
+					}
+					if (this->carrierFoundTimer!=0) this->carrierFoundTimer++;
+				}
+			}
+			
+			if (this->carrierLostTimer!=0){
+				switch (this->carrierLostTimer){
+					case 192://20ms
+						if (!this->requestHighSpeed){
+							this->carrierFoundTimer=0;
+							this->setTxSpeed(false);
+						}
+						break;
+					case 2304://220+20ms
+						if (!this->requestHighSpeed){
+							this->carrierFoundTimer=0;
+							this->setTxSpeed(true);
+						}
+						break;
+					case 4224://440ms
+						this->carrierLostTimer=0;
+						this->carrierFoundTimer=0;
+						this->requestHighSpeed=false;
+						this->reset();
+						break;
+				}
+				if (this->carrierLostTimer!=0) this->carrierLostTimer++;
+			}
+		}
+		
+		virtual void RxStateChange(bool carrier) override final{
+			if (carrier){
+				if (this->carrierLostTimer==0) this->carrierFoundTimer=0;
+				else this->carrierFoundTimer=1;
+			}
+			else{
+				this->TxEnable=false;
+				this->carrierFoundTimer=0;
+				if (this->carrierLostTimer==0) this->carrierLostTimer=1;
+			}
+		}
+		
+		void requestTxSpeedHigh(){
+			if (this->getTxSpeed()) return;
+			this->requestHighSpeed=true;
+			this->setTxSpeed(true);
+		}
+		
+		void resetTimers(){
+			this->setTxSpeed(true);
+			this->carrierFoundTimer=0;
+			this->carrierLostTimer=0;
+			this->requestHighSpeed=false;
+		}
+		
+		
 		
 		virtual void RxUpdate(unsigned char d) override final{
 			constexpr unsigned short P=0b0110100110010110;
 			d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 			if (this->VDTSplitter.updateSequence(d)){
+				constexpr unsigned char IRD[]={0x1B,0x23,0x20,0x2C,0x21,0x3C};
+				constexpr unsigned char PRO1_RET1[]={0x1B,0x39,0x6C};
+				constexpr unsigned char AC[]={0x1B,0x20,0x2C,0x21,0x39};
+				constexpr unsigned char STAT[]={0x1B,0x3A,0x73,0x40};//PCE deactivated
+				constexpr unsigned char PRO1_DECONNEXION[]={0,0,0,0x1B,0x39,0x67};
 				switch (this->VDTSplitter.getSequenceType()){
 					case VideotexSplitter::SequenceType::SEP:
-						if (this->VDTSplitter.sequence[1]==0x53){//ACK connexion
-							constexpr unsigned char IRD[]={0x1B,0x23,0x20,0x2C,0x21,0x3C};
-							for (int i=0;i<sizeof(IRD)/sizeof(IRD[0]);i++) this->qTx.push(IRD[i]);
+						switch (this->VDTSplitter.sequence[1]){
+							case 0x53://ACK connexion
+								for (size_t i=0;i<sizeof(IRD)/sizeof(IRD[0]);i++) this->qTx.push(IRD[i]);
+								break;
+							case 0x4C:
+								for (size_t i=0;i<sizeof(PRO1_RET1)/sizeof(PRO1_RET1[0]);i++) this->qTx.push(PRO1_RET1[i]);
+								break;
+							case 0x4D:
+								this->requestTxSpeedHigh();
+								break;
+							case 0x51:
+								this->TxEnable=true;
+								break;
 						}
 						break;
 					case VideotexSplitter::SequenceType::ESC_nF:
 						if (this->VDTSplitter.sequence.back()==0x38){//DC
-							if (this->VDTSplitter.sequence.size()==5&&this->VDTSplitter.sequence[1]==0x20&&this->VDTSplitter.sequence[2]==0x2C&&this->VDTSplitter.sequence[3]==0x21){
-								constexpr unsigned char AC[]={0x1B,0x20,0x2C,0x21,0x39};
-								for (int i=0;i<sizeof(AC)/sizeof(AC[0]);i++) this->qTx.push(AC[i]);
+							if ((!this->service)&&this->VDTSplitter.sequence.size()==5&&this->VDTSplitter.sequence[1]==0x20&&this->VDTSplitter.sequence[2]==0x2C&&this->VDTSplitter.sequence[3]==0x21){
+								for (size_t i=0;i<sizeof(AC)/sizeof(AC[0]);i++) this->qTx.push(AC[i]);
 								this->service=true;
 							}
+						}
+						if (this->VDTSplitter.sequence.back()==0x3A){//ILC
+							if (this->service&&this->VDTSplitter.sequence.size()==5&&this->VDTSplitter.sequence[1]==0x20&&this->VDTSplitter.sequence[2]==0x2C&&this->VDTSplitter.sequence[3]==0x21){
+								this->service=false;
+								for (size_t i=0;i<sizeof(PRO1_DECONNEXION)/sizeof(PRO1_DECONNEXION[0]);i++) this->qTx.push(PRO1_DECONNEXION[i]);
+							}
+						}
+						break;
+					case VideotexSplitter::SequenceType::ESC_Fp_PRO2:
+						if (this->VDTSplitter.sequence[2]==0x69&&this->VDTSplitter.sequence[3]==0x44){//PRO2 START PCE
+							for (size_t i=0;i<sizeof(STAT)/sizeof(STAT[0]);i++) this->qTx.push(STAT[i]);
 						}
 						break;
 					case VideotexSplitter::SequenceType::US_STUTEL:
@@ -656,7 +771,7 @@ class RTCServiceMessage: public RTCDigitalService{
 		virtual std::pair<bool,unsigned char> TxNext() override final{
 			std::pair<bool,unsigned char> d;
 			constexpr unsigned short P=0b0110100110010110;
-			if ((bool)this->qTx.size()){
+			if (this->TxEnable&&(bool)this->qTx.size()){
 				unsigned char v=this->qTx.front();
 				v^=((P>>(v&0x0F))^(P>>(v>>4)))<<7;
 				d=std::pair<bool,unsigned char>(true,v);
@@ -668,11 +783,8 @@ class RTCServiceMessage: public RTCDigitalService{
 			return d;
 		}
 		
-		virtual void RxStateChange(bool carrier) override final{
-			printf("rx carrier %i\n",carrier);
-		};
-		
 		void Init() override final{
+			this->TxEnable=true;
 			this->VDTSplitter.reset();
 			std::queue<unsigned char> empty;
 			std::swap(qTx,empty);
@@ -680,6 +792,8 @@ class RTCServiceMessage: public RTCDigitalService{
 			this->service=false;
 			this->DSet=false;
 			this->TAssociate=false;
+			
+			this->resetTimers();
 		}
 		
 		bool DSet=false;
@@ -885,7 +999,6 @@ class RTCServiceMessage: public RTCDigitalService{
 			this->qTx.push(0x50);
 			this->qTx.push(0x37);
 			this->qTx.push(0x0D);
-			
 		}
 		
 		static bool nextTLV(std::vector<unsigned char>* sequence, unsigned char* type, std::vector<unsigned char>* value){
