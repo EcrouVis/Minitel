@@ -6,6 +6,20 @@ Emulateur hardware d'un Minitel 12 Philips
 
 
 
+## Utilisation
+
+
+
+### Prérequis
+
+
+
+* Un processeur avec une puissance de calcul par coeur suffisante (testé avec un i5 6400T: 50% d'utilisation d'un coeur logique) et avec un minimum de 2 coeurs logiques de préférence
+* Un ordinateur supportant OpenGL version 3.3 au minimum ou une implémentation logicielle d'OpenGL comme [Mesa3D for Windows](https://fdossena.com/?p=mesa/index.frag) ou [LLVMpipe](https://github.com/jakoch/rasterizers) sous Windows (nécessite un processeur plus puissant et/ou plus de coeurs logiques)
+* Un système d'exploitation compatible: Windows ou Linux (avec quelques changements, l'émulateur peut fonctionner sous MacOS, ReactOS ou une distribution BSD mais il manque des outils et des connaisances)
+
+
+
 ## Compilation
 
 
@@ -16,6 +30,7 @@ Emulateur hardware d'un Minitel 12 Philips
 
 * Un compilateur gcc ou llvm (gcc de préférence) (pour windows mingw-w64)
 * CMake
+* Ninja (par défaut)
 * NSIS installé et configuré pour empaqueter un installateur
 * appimagetool installé et configuré pour empaqueter une appimage
 * MbedTLS compilé et installé pour windows (OpenSSL et LibreSSL peuvent normalement fonctionner mais cela demande plus d'efforts)
@@ -45,7 +60,7 @@ Pour simplifier la compilation et l'empaquetage, plusieurs scripts sont fournis:
 
   * GLFW pour simplifier l'affichage et le clavier (téléchargé et compilé automatiquement)
 
-    * glad et les définitions KHR pour charger OpenGL (inclus et compilé automatiquement)
+    * glad et les définitions KHR pour charger OpenGL (inclus et compilés automatiquement)
     * d'autres dépendances en fonction de la distribution (doivent être installées préalablement)
 * cJSON pour l'enregistrement des paramètres (inclus et compilé automatiquement)
 * IXWebsocket pour se connecter avec des websockets (téléchargé et compilé automatiquement)
