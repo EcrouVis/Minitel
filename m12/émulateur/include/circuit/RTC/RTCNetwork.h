@@ -653,6 +653,7 @@ class RTCServiceMessage: public RTCDigitalService{
 						case 384://40ms
 							this->carrierFoundTimer=0;
 							this->carrierLostTimer=0;
+							if ((!this->requestHighSpeed)&&this->getTxSpeed()) this->TxEnable=true;//carrier loss but recovered after switching speed 2 times
 							this->requestHighSpeed=false;
 							break;
 					}
@@ -716,6 +717,10 @@ class RTCServiceMessage: public RTCDigitalService{
 			constexpr unsigned short P=0b0110100110010110;
 			d=((bool)(((P>>(d&0x0F))^(P>>(d>>4)))&0x01))?0x1A:d&0x7F;
 			if (this->VDTSplitter.updateSequence(d)){
+				for (size_t i=0;i<this->VDTSplitter.sequence.size();i++){
+					printf("%02X ",this->VDTSplitter.sequence[i]);
+				}
+				printf("\n");
 				constexpr unsigned char IRD[]={0x1B,0x23,0x20,0x2C,0x21,0x3C};
 				constexpr unsigned char PRO1_RET1[]={0x1B,0x39,0x6C};
 				constexpr unsigned char AC[]={0x1B,0x20,0x2C,0x21,0x39};
@@ -888,6 +893,8 @@ class RTCServiceMessage: public RTCDigitalService{
 						break;
 					case 0x32:
 					case 0x33:
+					case 0x37:
+					case 0x2E:
 						break;
 					default:
 						this->sendTAbort();
@@ -1024,7 +1031,7 @@ class RTCServiceMessage: public RTCDigitalService{
 		
 		void TWriteDataCompleteCallback(){
 			printf("data ");
-			for(int i=0;i<this->TWriteDataBuffer.size();i++){
+			for(size_t i=0;i<this->TWriteDataBuffer.size();i++){
 				if (this->TWriteDataBuffer[i]<0x20||this->TWriteDataBuffer[i]>=0x7F) printf("\\x%02X",this->TWriteDataBuffer[i]);
 				else printf("%c",this->TWriteDataBuffer[i]);
 			}

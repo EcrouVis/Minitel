@@ -72,8 +72,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 	rtcn.subscribeService((RTCService*)&rtcsh);
 	RTCServiceAudio rtcsa(std::vector<unsigned char>{0,0,0,0});
 	rtcn.subscribeService((RTCService*)&rtcsa);
-	RTCServiceMessage rtcm;
-	rtcn.subscribeService((RTCService*)&rtcm);
+	/*RTCServiceMessage rtcm;
+	rtcn.subscribeService((RTCService*)&rtcm);*/
 	
 	
 	//construct circuit
