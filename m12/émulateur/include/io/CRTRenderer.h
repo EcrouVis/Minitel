@@ -90,6 +90,7 @@ class CRTRenderer{
 			}
 		}
 		void updateTexture(bool force=false){
+			if (this->p_buffer==NULL) return;
 			static unsigned char crtbuffer_data[VIDEO_FRAME_SIZE];
 			this->p_buffer->getVideoFrame(crtbuffer_data);
 			glBindTexture(GL_TEXTURE_2D,this->TextureID);

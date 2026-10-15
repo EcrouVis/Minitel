@@ -1316,52 +1316,60 @@ class M12Window{
 		}
 		
 		void setCharset(const char* cs){
+			if (this->PARAMETERS.io.crt.ts9347==NULL) return;
 			//constexpr char p2[]="/TS9347_Texture_Character_Set_Datasheet.bmp";
 			//char* path=(char*)malloc(sizeof(p2)+sizeof(RESOURCE_PATH)+1);
 			//strcpy(path,RESOURCE_PATH);
 			//strcat(path,p2);
 			//static const char* path=DATA_PATH"/ressources/TS9347_Texture_Character_Set_Datasheet.bmp";
-			int width, height, nrChannels;
-			unsigned char *data = stbi_load(cs, &width, &height, &nrChannels, 1);
-			//free(path);
-			if (data==NULL){
-				this->Notification.notify("La texture pour l'affichage vidéo n'a pas chargé correctement.",ImVec4(1,0,0,1));
+			if (cs==NULL||strlen(cs)==0||!std::filesystem::is_regular_file(cs)){
+				this->Notification.notify("La texture pour l'affichage vidéo est manquante.",ImVec4(1,0,0,1));
 				this->PARAMETERS.io.crt.error_loading_texture=true;
+				//printf("!null\n");
 			}
 			else{
-				this->PARAMETERS.io.crt.error_loading_texture=false;
-				int nW=width/8;
-				int nH=height/10;
-				int n=288;
-				unsigned char d[288*10]={0};
-				if ((nW*nH)<n) n=nW*nH;
-				if (nH>nW){
-					for (int i=0;i<n;i++){//char i
-						int j=(i%nH)*10*width+(i/nH)*8;//char 0,0 position
-						for (int s=0;s<10;s++){//slice
-							unsigned char sd=0;
-							for (int k=0;k<8;k++){//pixel in slice
-								sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
-							}
-							d[i*10+s]=sd;
-						}
-					}
+				int width, height, nrChannels;
+				unsigned char *data = stbi_load(cs, &width, &height, &nrChannels, 1);
+				//free(path);
+				if (data==NULL){
+					this->Notification.notify("La texture pour l'affichage vidéo n'a pas chargé correctement.",ImVec4(1,0,0,1));
+					this->PARAMETERS.io.crt.error_loading_texture=true;
 				}
 				else{
-					for (int i=0;i<n;i++){//char i
-						int j=(i%nW)*8+(i/nW)*10*width;//char 0,0 position
-						for (int s=0;s<10;s++){//slice
-							unsigned char sd=0;
-							for (int k=0;k<8;k++){//pixel in slice
-								sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+					this->PARAMETERS.io.crt.error_loading_texture=false;
+					int nW=width/8;
+					int nH=height/10;
+					int n=288;
+					unsigned char d[288*10]={0};
+					if ((nW*nH)<n) n=nW*nH;
+					if (nH>nW){
+						for (int i=0;i<n;i++){//char i
+							int j=(i%nH)*10*width+(i/nH)*8;//char 0,0 position
+							for (int s=0;s<10;s++){//slice
+								unsigned char sd=0;
+								for (int k=0;k<8;k++){//pixel in slice
+									sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+								}
+								d[i*10+s]=sd;
 							}
-							d[i*10+s]=sd;
 						}
 					}
+					else{
+						for (int i=0;i<n;i++){//char i
+							int j=(i%nW)*8+(i/nW)*10*width;//char 0,0 position
+							for (int s=0;s<10;s++){//slice
+								unsigned char sd=0;
+								for (int k=0;k<8;k++){//pixel in slice
+									sd=(sd>>1)|((data[j+s*width+k]==0)?0:0x80);
+								}
+								d[i*10+s]=sd;
+							}
+						}
+					}
+					((TS9347wVRAM*)this->PARAMETERS.io.crt.ts9347)->setROMCharset(d);
+						
+					stbi_image_free(data);
 				}
-				if (this->PARAMETERS.io.crt.ts9347!=NULL) ((TS9347wVRAM*)this->PARAMETERS.io.crt.ts9347)->setROMCharset(d);
-					
-				stbi_image_free(data);
 			}
 			
 		}

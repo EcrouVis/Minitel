@@ -151,7 +151,7 @@ class AudioIO{
 				return;
 			}
 			this->phoneOutput=true;
-			this->pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
+			if (this->pCLKs!=NULL) this->pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
 			printf("Sync emulator to phone line sample rate @%iHz\n",this->audioDevice.sampleRate);
 		}
 		void uninitPhoneLine(){
@@ -167,7 +167,7 @@ class AudioIO{
 				ma_device_uninit(&(this->audioDevice));
 				exit(-1);
 			}
-			this->pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
+			if (this->pCLKs!=NULL) this->pCLKs->setAudioSampleRate(this->audioDevice.sampleRate);
 			printf("Sync emulator to audio sample rate @%iHz\n",this->audioDevice.sampleRate);
 		}
 		
@@ -228,11 +228,11 @@ class AudioIO{
 			unsigned long maxSamples=0;
 			if (ma_device_get_state(&(this->audioDevice))==ma_device_state_started&&!this->phoneOutput){
 				ImGui::Text("Tampon audio (échantillons restants après lecture):");
-				maxSamples=this->ab->bufferLength;
+				if (this->ab!=NULL) maxSamples=this->ab->bufferLength;
 			}
 			if (ma_device_get_state(&(this->audioDevice))==ma_device_state_started&&this->phoneOutput){
 				ImGui::Text("Tampon ligne télphonique (échantillons restants après lecture):");
-				maxSamples=this->plb->bufferLength;
+				if (this->plb!=NULL) maxSamples=this->plb->bufferLength;
 			}
 			ImGui::PlotLines("##audio_buffer", this->samplesRemaining, sizeof(this->samplesRemaining)/sizeof(this->samplesRemaining[0]),0,NULL,0,(float)maxSamples, ImVec2(-1, 80.0f));
 		}
@@ -242,10 +242,10 @@ class AudioIO{
 			
 			if (AIO->ab!=NULL){
 				AIO->samplesRemaining[AIO->samplesRemainingIndex++]=(float)AIO->ab->AudioOut((float*)pOutput,frameCount);
-			}
 			
-			if (AIO->pCLKs!=NULL){
-				AIO->pCLKs->requestSamples(frameCount,AIO->ab->bufferLength);
+				if (AIO->pCLKs!=NULL){
+					AIO->pCLKs->requestSamples(frameCount,AIO->ab->bufferLength);
+				}
 			}
 		}
 		static void phone_line_data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount){//duplex
@@ -253,10 +253,10 @@ class AudioIO{
 			
 			if (AIO->plb!=NULL){
 				AIO->samplesRemaining[AIO->samplesRemainingIndex++]=(float)AIO->plb->AudioIO((float*)pInput,(float*)pOutput,frameCount);
-			}
 			
-			if (AIO->pCLKs!=NULL){
-				AIO->pCLKs->requestSamples(frameCount,AIO->plb->bufferLength);
+				if (AIO->pCLKs!=NULL){
+					AIO->pCLKs->requestSamples(frameCount,AIO->plb->bufferLength);
+				}
 			}
 		}
 };
