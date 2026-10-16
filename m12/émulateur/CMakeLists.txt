@@ -150,31 +150,10 @@ if (USE_TLS)
 		set(MbedTLS_DIR "${MbedTLS_ROOT_DIR}/lib/cmake/MbedTLS/")
 		find_package(MbedTLS REQUIRED)
 		get_target_property(MBEDTLS_INCLUDE_DIRS MbedTLS::mbedtls INTERFACE_INCLUDE_DIRECTORIES)
-		find_path(MBEDTLS_VERSION_GREATER_THAN_3 mbedtls/build_info.h PATHS ${MBEDTLS_INCLUDE_DIRS})
-		find_library(MBEDTLS_LIBRARY
-			NAMES
-				libmbedtls
-				NAMES_PER_DIR
-			PATHS ${MbedTLS_ROOT_DIR}
-			PATH_SUFFIXES
-				lib
-		)
-		find_library(MBEDX509_LIBRARY
-			NAMES
-				libmbedx509
-				NAMES_PER_DIR
-			PATHS ${MbedTLS_ROOT_DIR}
-			PATH_SUFFIXES
-				lib
-		)
-		find_library(MBEDCRYPTO_LIBRARY
-			NAMES
-				libtfpsacrypto
-				NAMES_PER_DIR
-			PATHS ${MbedTLS_ROOT_DIR}
-			PATH_SUFFIXES
-				lib
-		)
+		#find_path(MBEDTLS_VERSION_GREATER_THAN_3 mbedtls/build_info.h PATHS ${MBEDTLS_INCLUDE_DIRS})
+		get_target_property(MBEDTLS_LIBRARY MbedTLS::mbedtls INTERFACE_LINK_LIBRARIES)
+		get_target_property(MBEDX509_LIBRARY MbedTLS::mbedx509 INTERFACE_LINK_LIBRARIES)
+		get_target_property(MBEDCRYPTO_LIBRARY MbedTLS::tfpsacrypto INTERFACE_LINK_LIBRARIES)
 		list(APPEND 
 			OPT_LIB 
 				MbedTLS::mbedtls
@@ -593,7 +572,7 @@ elseif(LINUX)
 	
 	#AppImage specific
 	set(CPACK_PACKAGE_ICON "${CMAKE_PROJECT_NAME}.svg")
-	set(CPACK_APPIMAGE_TOOL_EXECUTABLE /home/yves/appimagetool-x86_64.AppImage)
+	set(CPACK_APPIMAGE_TOOL_EXECUTABLE appimagetool-x86_64.AppImage)
 	
 	#DEB specific
 	set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
