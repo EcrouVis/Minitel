@@ -46,6 +46,7 @@ Emulateur hardware d'un Minitel 12 Philips
 Pour simplifier la compilation et l'empaquetage, plusieurs scripts sont fournis:
 
 * build\_appimage.sh pour créer une appimage
+* build\_deb.sh pour créer un paquet .deb
 * build\_installer.bat pour créer un instalateur
 * build\_portable.bat pour créer un exécutable portable
 * build\_test.bat pour itérer facilement et tester le code

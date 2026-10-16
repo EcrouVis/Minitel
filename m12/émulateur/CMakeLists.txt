@@ -570,29 +570,38 @@ Delete '$DESKTOP\\\\${CMAKE_PROJECT_NAME}.lnk'\
 	")
 elseif(LINUX)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/icon/M12_icon_square.svg"
-		DESTINATION "usr/share/icons/hicolor/scalable/apps"
+		DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps"
 		RENAME "${CMAKE_PROJECT_NAME}.svg"
 	)
 	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.desktop"
-		DESTINATION "usr/share/applications"
+		DESTINATION "${CMAKE_INSTALL_DATADIR}/applications"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/desktop/${CMAKE_PROJECT_NAME}.appdata.xml"
-		DESTINATION "usr/share/metainfo"
+		DESTINATION "${CMAKE_INSTALL_DATADIR}/metainfo"
 	)
 	install(IMPORTED_RUNTIME_ARTIFACTS m12
-		DESTINATION "usr/bin"
+		TYPE BIN
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/TS9347/TS9347_Texture_Character_Set_Datasheet.bmp"
-		DESTINATION "usr/share/M12/ressources"
+		DESTINATION "${CMAKE_INSTALL_DATADIR}/M12/ressources"
 	)
 	install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/src/circuit/ROM_256k/Bz6.rom"
-		DESTINATION "usr/share/M12/rom"
+		DESTINATION "${CMAKE_INSTALL_DATADIR}/M12/rom"
 	)
 	
-	set(CPACK_GENERATOR AppImage)
+	set(CPACK_GENERATOR AppImage DEB)
 	
+	#AppImage specific
 	set(CPACK_PACKAGE_ICON "${CMAKE_PROJECT_NAME}.svg")
 	set(CPACK_APPIMAGE_TOOL_EXECUTABLE /home/yves/appimagetool-x86_64.AppImage)
+	
+	#DEB specific
+	set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+	set(CPACK_DEBIAN_PACKAGE_RELEASE 1)
+	set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Yves Landemarre")
+	set(CPACK_DEBIAN_PACKAGE_DESCRIPTION "Emulateur du Minitel 12 Philips")
+	set(CPACK_DEBIAN_PACKAGE_SECTION "games")
+	set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/EcrouVis/Minitel")
 endif()
 
 set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${CMAKE_PROJECT_VERSION}-${CMAKE_SYSTEM_PROCESSOR}")
