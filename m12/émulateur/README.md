@@ -16,7 +16,7 @@ Emulateur hardware d'un Minitel 12 Philips
 
 * Un processeur avec une puissance de calcul par coeur suffisante (testé avec un i5 6400T: 50% d'utilisation d'un coeur logique) et avec un minimum de 2 coeurs logiques de préférence
 * Un ordinateur supportant OpenGL version 3.3 au minimum ou une implémentation logicielle d'OpenGL comme [Mesa3D for Windows](https://fdossena.com/?p=mesa/index.frag) ou [LLVMpipe](https://github.com/jakoch/rasterizers) sous Windows (nécessite un processeur plus puissant et/ou plus de coeurs logiques)
-* Un système d'exploitation compatible: Windows ou Linux (avec quelques changements, l'émulateur peut fonctionner sous MacOS, ReactOS ou une distribution BSD mais il manque des outils et des connaisances)
+* Un système d'exploitation compatible: Windows (Windows 7 au minimum) ou Linux (avec quelques changements, l'émulateur peut fonctionner sous MacOS, ReactOS ou une distribution BSD mais il manque des outils et des connaisances)
 
 
 
@@ -97,3 +97,20 @@ Arborescence du code:
 * install: dossier contenant l'exécutable créé par build\_test.bat et ses fichiers
 * out: dossier contenant les paquets créés par les autres scripts
 
+
+
+## Incompatibilités et portage
+
+
+
+* ReactOS / Windows XP:
+
+  * GLFW 3.5 ne supporte plus Windows XP &rarr; Solution: Utiliser GLFW 3.4
+  * dwmapi.dll n'existait pas sous Windows XP (utilisé seulement pour colorer la fenêtre) &rarr; Solution: Suprimer la partie du code qui l'utilisait ou charger dynamiquement la bibliothèque
+  * IXWebsocket utilise certaines fonctions de WS2_32.dll qui n'existaient pas comme inet_pton &rarr; Solution: Créer un dll proxy qui intercepte et implémente les fonctions manquantes (ex: https://stackoverflow.com/questions/13475993/is-it-possible-to-replace-a-system-dll-with-a-proxy-dll et https://fdossena.com/?p=mesa/index.frag)
+* MacOS:
+
+  * Il me manque de quoi compiler et créer des paquets pour MacOS ainsi que d'un environnement pour pouvoir tester l'application
+* Distributions BSD:
+
+  * Il n'y a pas de problèmes à première vue, il faut juste que j'étudie comment configurer CMake pour créer un paquet compatible
