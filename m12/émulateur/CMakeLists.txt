@@ -10,11 +10,10 @@ set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/CMake;${CMAKE_MODULE_PATH}")
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED On)
 set(CMAKE_CXX_EXTENSIONS On)
-#set(CMAKE_CXX_COMPILER g++)#TODO: works with gcc and clang but not msvc
+#TODO: works with gcc and clang but not msvc
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED On)
 set(CMAKE_C_EXTENSIONS On)
-#set(CMAKE_C_COMPILER gcc)
 
 project(M12 VERSION 0.1.8.0 LANGUAGES CXX C)
 
@@ -144,13 +143,14 @@ if (USE_TLS)
     if (USE_MBED_TLS)
 		if (WIN32)
 			set(CACHE{MbedTLS_ROOT_DIR} TYPE PATH HELP "Install path of MbedTLS" VALUE "C:/Program Files (x86)/Mbed TLS")
+			#set(CMAKE_PREFIX_PATH "C:/Program Files (x86)/")
 		else()
 			set(CACHE{MbedTLS_ROOT_DIR} TYPE PATH HELP "Install path of MbedTLS" VALUE)
 		endif()
 		set(MbedTLS_DIR "${MbedTLS_ROOT_DIR}/lib/cmake/MbedTLS/")
 		find_package(MbedTLS REQUIRED)
 		get_target_property(MBEDTLS_INCLUDE_DIRS MbedTLS::mbedtls INTERFACE_INCLUDE_DIRECTORIES)
-		#find_path(MBEDTLS_VERSION_GREATER_THAN_3 mbedtls/build_info.h PATHS ${MBEDTLS_INCLUDE_DIRS})
+		find_path(MBEDTLS_VERSION_GREATER_THAN_3 mbedtls/build_info.h PATHS ${MBEDTLS_INCLUDE_DIRS})
 		get_target_property(MBEDTLS_LIBRARY MbedTLS::mbedtls INTERFACE_LINK_LIBRARIES)
 		get_target_property(MBEDX509_LIBRARY MbedTLS::mbedx509 INTERFACE_LINK_LIBRARIES)
 		get_target_property(MBEDCRYPTO_LIBRARY MbedTLS::tfpsacrypto INTERFACE_LINK_LIBRARIES)
@@ -254,7 +254,6 @@ if (WIN32)
 	file(COPY_FILE src/icon/M12_icon_square.ico "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/M12_icon_square.ico")#preferred compared to generating the file path to the icon in app.rc because of string encoding of .rc files
 	file(COPY_FILE src/desktop/M12.manifest "${CMAKE_CURRENT_BINARY_DIR}/src/desktop/M12.manifest")
 	
-	set(CMAKE_RC_COMPILER windres)
 	enable_language(RC)
 	
 	add_library(wicon OBJECT)

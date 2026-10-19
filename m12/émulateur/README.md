@@ -103,11 +103,11 @@ Arborescence du code:
 
 
 
-* ReactOS / Windows XP:
+* ReactOS / Windows XP (pour l'instant impossible):
 
   * GLFW 3.5 ne supporte plus Windows XP &rarr; Solution: Utiliser GLFW 3.4
   * dwmapi.dll n'existait pas sous Windows XP (utilisé seulement pour colorer la fenêtre) &rarr; Solution: Suprimer la partie du code qui l'utilisait ou charger dynamiquement la bibliothèque
-  * IXWebsocket utilise certaines fonctions de WS2_32.dll qui n'existaient pas comme inet_pton &rarr; Solution: Créer un dll proxy qui intercepte et implémente les fonctions manquantes (ex: https://stackoverflow.com/questions/13475993/is-it-possible-to-replace-a-system-dll-with-a-proxy-dll et https://fdossena.com/?p=mesa/index.frag)
+  * IXWebsocket utilise certaines fonctions de WS2_32.dll qui n'existaient pas comme inet_pton &rarr; Solution: Créer un dll proxy qui intercepte et implémente les fonctions manquantes (ex: https://stackoverflow.com/questions/13475993/is-it-possible-to-replace-a-system-dll-with-a-proxy-dll et https://fdossena.com/?p=mesa/index.frag) ou utiliser une autre bibliothèque
 * MacOS:
 
   * Il me manque de quoi compiler et créer des paquets pour MacOS ainsi que d'un environnement pour pouvoir tester l'application
