@@ -7,13 +7,29 @@
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
+//typedef HRESULT (__stdcall *f_DwmSetWindowAttribute)(HWND hwnd,DWORD dwAttribute,LPCVOID pvAttribute,DWORD cbAttribute);
 #endif
 
 
 void WindowsDarkTitleBar(GLFWwindow* window){
 #ifdef _WIN32
 	//black titlebar for windows
-	//DwmSetWindowAttribute defined since Windows Vista
+	//DwmSetWindowAttribute defined since Windows
+	
+	/*
+	HINSTANCE hGetProcIDDLL = LoadLibrary("dwmapi.dll");
+	if (hGetProcIDDLL){
+		f_DwmSetWindowAttribute DwmSetWindowAttribute = reinterpret_cast<f_DwmSetWindowAttribute>(GetProcAddress(hGetProcIDDLL, "DwmSetWindowAttribute"));
+		if (DwmSetWindowAttribute!=NULL){
+			BOOL USE_DARK_MODE = true;
+			BOOL SET_IMMERSIVE_DARK_MODE_SUCCESS = SUCCEEDED((*DwmSetWindowAttribute)(glfwGetWin32Window(window), DWMWA_USE_IMMERSIVE_DARK_MODE,&USE_DARK_MODE, sizeof(USE_DARK_MODE)));
+			if (!SET_IMMERSIVE_DARK_MODE_SUCCESS) printf("Dark mode titlebar failed\n");
+		}
+		else printf("Could not find DwmSetWindowAttribute inside dwmapi.dll\n");
+	}
+	else printf("Could not load dwmapi.dll\n");
+	*/
+	
 	BOOL USE_DARK_MODE = true;
 	BOOL SET_IMMERSIVE_DARK_MODE_SUCCESS = SUCCEEDED(DwmSetWindowAttribute(glfwGetWin32Window(window), DWMWA_USE_IMMERSIVE_DARK_MODE,&USE_DARK_MODE, sizeof(USE_DARK_MODE)));
 	if (!SET_IMMERSIVE_DARK_MODE_SUCCESS) printf("Dark mode titlebar failed");
