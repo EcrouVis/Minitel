@@ -24,10 +24,13 @@ include(GNUInstallDirs)
 if(CMAKE_BUILD_TYPE_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
-#if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
-#    set(CMAKE_INSTALL_PREFIX "${PROJECT_SOURCE_DIR}/install/" CACHE PATH "Force path to set CMAKE_INSTALL_PREFIX" FORCE)
-#endif()
-#set(FETCHCONTENT_FULLY_DISCONNECTED On)
+
+add_compile_definitions(
+	$<$<CONFIG:Debug>:_GLIBCXX_DEBUG>
+	$<$<CONFIG:Debug>:_GLIBCXX_DEBUG_PEDANTIC>
+	$<$<CONFIG:RelWithDebInfo>:_GLIBCXX_DEBUG>
+	$<$<CONFIG:RelWithDebInfo>:_GLIBCXX_DEBUG_PEDANTIC>
+)
 
 
 
@@ -408,9 +411,6 @@ target_link_libraries(m12
 
 target_compile_definitions(m12
 	PRIVATE
-		_GLIBCXX_DEBUG
-		_GLIBXX_DEBUG_PEDANTIC
-		
 		M12_VERSION="${CMAKE_PROJECT_VERSION}"
 		
 		${OPT_DEF}

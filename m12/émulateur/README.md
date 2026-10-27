@@ -16,7 +16,7 @@ Emulateur hardware d'un Minitel 12 Philips
 
 * Un processeur avec une puissance de calcul par coeur suffisante (testé avec un i5 6400T: 50% d'utilisation d'un coeur logique) et avec un minimum de 2 coeurs logiques de préférence
 * Un ordinateur supportant OpenGL version 3.3 au minimum ou une implémentation logicielle d'OpenGL comme [Mesa3D for Windows](https://fdossena.com/?p=mesa/index.frag) ou [LLVMpipe](https://github.com/jakoch/rasterizers) sous Windows (nécessite un processeur plus puissant et/ou plus de coeurs logiques)
-* Un système d'exploitation compatible: Windows (Windows 7 au minimum) ou Linux (avec quelques changements, l'émulateur peut fonctionner sous MacOS, ReactOS ou une distribution BSD mais il manque des outils et des connaisances)
+* Un système d'exploitation compatible: Windows (Windows 7 au minimum avec la mise à jour [KB2999226](https://www.microsoft.com/fr-FR/download/details.aspx?id=49093)) ou Linux (avec quelques changements, l'émulateur peut fonctionner sous MacOS, ReactOS ou une distribution BSD mais il manque des outils et des connaisances)
 
 
 
