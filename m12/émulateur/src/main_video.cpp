@@ -59,6 +59,7 @@
 
 #include "desktop/data_path.h"
 #include "encoding.h"
+#include "desktop/check_update.h"
 
 
 
@@ -1246,6 +1247,29 @@ class M12Window{
 					ImGui::BeginChild("Child", ImGui::GetContentRegionAvail(), ImGuiChildFlags_None, ImGuiWindowFlags_None);
 					
 					ImGui::Text("%s (ver.:%s)",this->PARAMETERS.info.title,this->PARAMETERS.info.version);
+					//TODO: add parameter to select prerelease
+					if(ImGui::Button("Vérifier les mises à jour")){
+						int major=0;
+						int minor=0;
+						int patch=0;
+						int tweak=0;
+						getLatestVersionNumber(this->PARAMETERS.info.check_prerelease,&major,&minor,&patch,&tweak);
+						this->PARAMETERS.info.update_available=true;
+						if (major==M12_VERSION_MAJOR){
+							if (minor==M12_VERSION_MINOR){
+								if (patch==M12_VERSION_PATCH){
+									if (tweak<=M12_VERSION_TWEAK) this->PARAMETERS.info.update_available=false;
+								}
+								else if (patch<M12_VERSION_PATCH) this->PARAMETERS.info.update_available=false;
+							}
+							else if (minor<M12_VERSION_MINOR) this->PARAMETERS.info.update_available=false;
+						}
+						else if (major<M12_VERSION_MAJOR) this->PARAMETERS.info.update_available=false;
+					}
+					if (this->PARAMETERS.info.update_available){
+						ImGui::SameLine();
+						ImGui::Text("Une nouvelle version est disponible!");
+					}
 					ImGui::TextLinkOpenURL("Ouvrir la page des mises à jour",this->PARAMETERS.info.releases);
 					ImGui::SeparatorText("Développeurs");
 					ImGui::Text("%s",this->PARAMETERS.info.programmers);

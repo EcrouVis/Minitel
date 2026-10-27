@@ -412,6 +412,12 @@ target_link_libraries(m12
 target_compile_definitions(m12
 	PRIVATE
 		M12_VERSION="${CMAKE_PROJECT_VERSION}"
+		M12_VERSION_MAJOR=${PROJECT_VERSION_MAJOR}
+		M12_VERSION_MINOR=${PROJECT_VERSION_MINOR}
+		M12_VERSION_PATCH=${PROJECT_VERSION_PATCH}
+		M12_VERSION_TWEAK=${PROJECT_VERSION_TWEAK}
+		
+		M12_USE_GITHUB_REPO
 		
 		${OPT_DEF}
 )
@@ -425,6 +431,7 @@ target_sources(m12
 		src/desktop/data_path.cpp
 		src/FileAccess.cpp
 		src/desktop/window_creation.cpp
+		src/desktop/check_update.cpp
 		
 		src/main_circuit.cpp
 		
@@ -456,6 +463,7 @@ target_sources(m12
 		include/thread_messaging.h
 		include/desktop/thread_affinity.h
 		include/desktop/window_creation.h
+		include/desktop/check_update.h
 		
 		include/circuit/80C32.h
 		include/circuit/AudioBuffer.h
