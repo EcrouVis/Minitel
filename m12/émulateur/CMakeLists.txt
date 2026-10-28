@@ -36,8 +36,11 @@ add_compile_definitions(
 
 
 
-
-add_executable(m12)
+if (WIN32)
+	add_executable(m12 $<$<CONFIG:Release>:WIN32>)
+else()
+	add_executable(m12)
+endif()
 set_target_properties(m12 PROPERTIES OUTPUT_NAME "${CMAKE_PROJECT_NAME}")
 add_library(miniaudio STATIC)
 add_library(cjson STATIC)
