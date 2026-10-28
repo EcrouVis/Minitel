@@ -242,6 +242,16 @@ class M12Window{
 						this->CHRS.Select(c_param->valuestring);
 					}
 					//start if possible later when emulator ready
+					
+					//Update
+					
+					subconfig=cJSON_GetObjectItemCaseSensitive(this->JSONConfig,"Update");
+					
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"at startup");
+					if (cJSON_IsBool(c_param)) this->PARAMETERS.info.check_update_startup=cJSON_IsTrue(c_param);
+					
+					c_param=cJSON_GetObjectItemCaseSensitive(subconfig,"include prerelease");
+					if (cJSON_IsBool(c_param)) this->PARAMETERS.info.check_update_prerelease=cJSON_IsTrue(c_param);
 				}
 			}
 			
@@ -310,7 +320,7 @@ class M12Window{
 			
 			this->keyboardIndicator.Init();
 			
-			this->p_UpdateChecker=new UpdateChecker(&(this->PARAMETERS));
+			this->p_UpdateChecker=new UpdateChecker(p_mb_video,&(this->PARAMETERS));
 			
 			//audio
 			
@@ -412,6 +422,11 @@ class M12Window{
 					if (this->PARAMETERS.io.other.os_rtc!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"os rtc",this->PARAMETERS.io.other.os_rtc->load(std::memory_order_relaxed));
 					if (this->PARAMETERS.io.other.auto_start!=NULL) cJSON_AddBoolToObject(JSONSubconfig2,"auto start",this->PARAMETERS.io.other.auto_start->load(std::memory_order_relaxed));
 				}
+			}
+			JSONSubconfig1=cJSON_AddObjectToObject(JSONConfigOut,"Update");
+			if (JSONSubconfig1!=NULL){
+				cJSON_AddBoolToObject(JSONSubconfig1,"at startup",this->PARAMETERS.info.check_update_startup);
+				cJSON_AddBoolToObject(JSONSubconfig1,"include prerelease",this->PARAMETERS.info.check_update_prerelease);
 			}
 			char* configString=cJSON_Print(JSONConfigOut);
 			constexpr char p2[]="config.json";
