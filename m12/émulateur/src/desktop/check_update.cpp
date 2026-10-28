@@ -42,35 +42,27 @@ void getLatestVersionNumber(bool prerelease,int* major,int* minor,int* patch,int
 	ix::HttpClient httpClient;
 	ix::HttpRequestArgsPtr args = httpClient.createRequest();
 	args->extraHeaders["Accept"]="application/vnd.github+json";
-	if (prerelease){
-		ix::HttpResponsePtr response=httpClient.get("https://api.github.com/repos/EcrouVis/Minitel/releases?per_page=1&page=1",args);
-		if (response->statusCode==200){
-			cJSON* json=cJSON_Parse(response->body.c_str());
-			if (json!=NULL){
-				if (cJSON_IsArray(json)&&cJSON_GetArraySize(json)!=0){
-					cJSON* jtn=cJSON_GetArrayItem(json,0);
+	ix::HttpResponsePtr response=httpClient.get(
+		prerelease?"https://api.github.com/repos/EcrouVis/Minitel/releases?per_page=1&page=1":
+				   "https://api.github.com/repos/EcrouVis/Minitel/releases/latest",
+		args
+	);
+	if (response->statusCode==200){
+		cJSON* json=cJSON_Parse(response->body.c_str());
+		if (json!=NULL){
+			if (cJSON_IsArray(json)&&cJSON_GetArraySize(json)!=0){
+				cJSON* jtn;
+				if (prerelease){
+					jtn=cJSON_GetArrayItem(json,0);
 					jtn=cJSON_GetObjectItemCaseSensitive(jtn,"tag_name");
-					if (cJSON_IsString(jtn)){
-						std::string tn=jtn->valuestring;
-						parseTagName(tn,major,minor,patch,tweak);
-					}
 				}
-				cJSON_Delete(json);
-			}
-		}
-	}
-	else{
-		ix::HttpResponsePtr response=httpClient.get("https://api.github.com/repos/EcrouVis/Minitel/releases/latest",args);
-		if (response->statusCode==200){
-			cJSON* json=cJSON_Parse(response->body.c_str());
-			if (json!=NULL){
-				cJSON* jtn=cJSON_GetObjectItemCaseSensitive(json,"tag_name");
+				else jtn=cJSON_GetObjectItemCaseSensitive(json,"tag_name");
 				if (cJSON_IsString(jtn)){
 					std::string tn=jtn->valuestring;
 					parseTagName(tn,major,minor,patch,tweak);
 				}
-				cJSON_Delete(json);
 			}
+			cJSON_Delete(json);
 		}
 	}
 }
