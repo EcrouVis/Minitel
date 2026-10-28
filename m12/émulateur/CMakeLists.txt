@@ -464,6 +464,7 @@ target_sources(m12
 		include/MemoryWindow.h
 		include/Parameters.h
 		include/thread_messaging.h
+		include/UpdateChecker.h
 		include/desktop/thread_affinity.h
 		include/desktop/window_creation.h
 		include/desktop/check_update.h

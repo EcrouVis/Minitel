@@ -168,8 +168,8 @@ struct P_Info{
 	const char* version=M12_VERSION;
 	const char* programmers="Yves Landemarre";
 	const char* releases="https://github.com/EcrouVis/Minitel/releases";
-	bool update_available=false;
-	bool check_prerelease=true;
+	bool check_update_startup=false;
+	bool check_update_prerelease=true;
 	constexpr static License lib_licenses[]={
 		{lib_imgui,license_imgui},
 		{lib_glfw,license_glfw},
