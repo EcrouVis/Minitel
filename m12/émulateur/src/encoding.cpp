@@ -208,9 +208,10 @@ bool DProtocolTranslationMode4Decode(std::vector<unsigned char>* data, const std
 	return true;
 }
 
-char* Base64Encode(const unsigned char* data, size_t s){
-	constexpr char V[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-	
+char* Base64Encode(const unsigned char* data, size_t s, bool url){
+	constexpr char V1[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	constexpr char V2[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+	const char* V=url?V2:V1;
 	size_t t_size=s/3;
 	if ((bool)(s%3)){
 		t_size++;
@@ -230,7 +231,7 @@ char* Base64Encode(const unsigned char* data, size_t s){
 	}
 	
 	for (unsigned char i=0;i<s%3;i++){
-		edata[t_size*4-1-i]='=';
+		edata[t_size*4-1-i]=url?'\0':'=';
 	}
 	
 	return edata;
@@ -284,4 +285,28 @@ unsigned char* Base64Decode(const char* edata, size_t* ps){
 	}
 	
 	return data;
+}
+
+char* URLEncode(const char* data){
+	char* edata=(char*)malloc(sizeof(char)*strlen(data)*3+1);
+    
+    constexpr char hex[]="0123456789abcdef";
+    
+    size_t pos = 0;
+    for (size_t i = 0; i < strlen(data); i++) {
+		switch (data[i]){
+			case 'a' ... 'z':
+			case 'A' ... 'Z':
+			case '0' ... '9':
+				edata[pos++]=data[i];
+				break;
+			default:
+				edata[pos++]='%';
+				edata[pos++]=hex[data[i] >> 4];
+				edata[pos++]=hex[data[i] & 15];
+				break;
+		}
+    }
+    edata[pos] = '\0';
+    return edata;
 }

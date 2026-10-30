@@ -663,8 +663,10 @@ void DProtocolTranslationMode4Encode(std::vector<unsigned char>* edata, const st
 
 bool DProtocolTranslationMode4Decode(std::vector<unsigned char>* data, const std::vector<unsigned char>* edata);
 
-char* Base64Encode(const unsigned char* data, size_t s);
+char* Base64Encode(const unsigned char* data, size_t s, bool url=false);
 
 unsigned char* Base64Decode(const char* edata, size_t* ps);
+
+char* URLEncode(const char* data);
 
 #endif
