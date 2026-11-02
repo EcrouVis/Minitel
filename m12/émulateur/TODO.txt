@@ -33,6 +33,6 @@ Fonctionnalités:
 
 - Ajouter un système de patch ? (format .ups ?)
 
-- Créer un module pour l'échange de mails / s'interfacer avec le forum ?
+- Créer un module pour l'échange de mails / s'interfacer avec le forum (https://docs.discourse.org/ et https://meta.discourse.org/t/user-api-keys-specification/48536 / impossible car la création de clé est désactivée)
 
 - Clavier configurable
