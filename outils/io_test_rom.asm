@@ -36,7 +36,7 @@
 ;	0x34: command input counter
 ;	0x35: command output counter write
 ;	0x36: command output counter serial
-;	0x38 - 0x3F: command output queue
+;	0x40 - 0x4F: command output queue
 ;0x80 - 0xFF: indirect addressing memory
 ;	0xA0 - 0xFF: stack
 
@@ -103,7 +103,7 @@ command_data_msb equ command_type.0
 command_address_msb equ command_type.1
 command_read equ command_type.2
 command_write equ command_type.3
-p_output_buffer equ #0x38
+p_output_buffer equ #0x40
 
 ;data
 nak equ #0b01010000
@@ -117,8 +117,7 @@ start:
 .org 0x0003
 external0_isr:;watchdog timer warn
 	clr TxD;force Tx to 0
-	wait_rst:
-	ajmp wait_rst
+	sjmp $;while(true) loop
 
 w_io:;@R0=A / C used
 	cjne R0,#0x70,w_io_ism
@@ -155,7 +154,12 @@ serial_isr:
 timer2_isr:
 	setb PT2;set the watchdog timer priority to be higher than the serial priority while inside the watchdog timer interrupt (avoid accessing IO70 simultaneously)
 	clr TF2
-	acall kick_watchdog
+	
+	mov R0,#0x70
+	cpl IO70.3
+	mov A,IO70
+	movx @R0,A
+	
 	clr PT2
 	reti
 
@@ -163,9 +167,10 @@ main:
 	mov SP,#0xA0;set SP to point to a location in memory that is not reachable by a big part of the instructions (stack: 0xA0 - 0xFF)
 	
 	;init variables
-	mov input_counter,#0
-	mov output_counter_write,#0
-	mov output_counter_serial,#0
+	mov R0,#0xFF
+	init_mem_0:
+	mov @R0,#0;init all memory (including input_counter, output_counter_write and output_counter_serial) to 0
+	djnz R0,init_mem_0
 	
 	clr nIO;select IO
 	
@@ -202,16 +207,8 @@ main:
 	
 	setb TR2;enable timer 2
 	
-	do_nothing:
-	ajmp do_nothing
-
-kick_watchdog:
-	mov R0,#0x70
-	cpl IO70.3
-	mov A,IO70
-	movx @R0,A
-	ret
-
+	sjmp $;while(true) loop
+	
 serial_rx:
 	clr RI;clear interrupt
 	
@@ -221,7 +218,7 @@ serial_rx:
 	
 	mov B,PSW;copy parity to B.0
 	mov C,RB8
-	rlc A;set RB8 to A.0
+	rlc A;set RB8 to A.0 (with rotate left with carry)
 	xrl A,B;A.0=P XOR RB8
 	
 	jb ACC.0,no_parity_error
@@ -256,9 +253,8 @@ serial_rx:
 		
 		mov A,p_command_input
 		add A,input_counter
-		mov R0,A
-		mov A,R1
-		mov @R0,A;construct command
+		xch A,R1
+		mov @R1,A;construct command
 		
 		;execute command
 		
@@ -306,9 +302,8 @@ serial_rx:
 		jnb command_read,end_cmd
 			mov A,p_output_buffer
 			add A,output_counter_write
-			mov R0,A
-			mov A,R1
-			mov @R0,A
+			xch A,R1
+			mov @R1,A
 			inc output_counter_write
 			anl output_counter_write,#0x0F;
 		end_cmd:
@@ -319,26 +314,24 @@ serial_tx:
 	;could send data if TI or TxFree
 	mov C,TI
 	orl C,TxFree
-	jc tx_could_send
-		ret
-	tx_could_send:
-	clr TI;clear flag
-	
-	;check if there is data in the buffer
-	mov A,output_counter_serial
-	cjne A,output_counter_write,tx_send
-		ret
-	tx_send:
-	
-	add A,p_output_buffer
-	mov R0,A
-	mov A,@R0;read output buffer
-	
-	mov C,P
-	mov TB8,C
-	mov SBUF,A;send data
-	
-	inc output_counter_serial
-	anl output_counter_serial,#0x0F;increment read pointer
-	
+	jnc tx_end
+		clr TI;clear flag
+		
+		;check if there is data in the buffer
+		mov A,output_counter_serial
+		cjne A,output_counter_write,tx_send
+			ret
+		tx_send:
+		
+		add A,p_output_buffer
+		mov R0,A
+		mov A,@R0;read output buffer
+		
+		mov C,P
+		mov TB8,C
+		mov SBUF,A;send data
+		
+		inc output_counter_serial
+		anl output_counter_serial,#0x0F;increment read pointer
+	tx_end:
 	ret
