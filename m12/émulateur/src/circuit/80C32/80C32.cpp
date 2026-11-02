@@ -399,20 +399,20 @@ void m80C32::PCONChange(){
 =============== SERIAL + TIMERS/COUNTERS ===============
 */
 void m80C32::CLKTickIn(){
-	constexpr unsigned char t2con_mask1=1<<(C_nT2&0x07);
-	constexpr unsigned char t2con_mask2=(1<<(C_nT2&0x07))|(1<<(RCLK&0x07))|(1<<(TCLK&0x07));
+	constexpr unsigned char t2con_count=1<<(C_nT2&0x07);
+	constexpr unsigned char t2con_baudrate_generator=(1<<(RCLK&0x07))|(1<<(TCLK&0x07));
 	
 	this->fixedSerialClockTick();
 	
 	this->period++;
 	if ((bool)(this->period&0x01)){// f/2->state time
 		unsigned char t2con=this->getSFRByteIn(this->T2CON);
-		if ((t2con&t2con_mask1)==0&&(t2con&t2con_mask2)!=0) this->T2Tick();
+		if ((t2con&t2con_count)==0&&(t2con&t2con_baudrate_generator)!=0) this->T2Tick();
 	}
 	else if (this->period>=this->periodPerCycle){//avoid reloading this->period from memory (because of call to T2Tick()) -> branch faster but cause T2Tick() to be shifted a little in time (not noticeable because the emulation ~ cycle accurate and not period accurate)
 		this->period=0;
 		unsigned char t2con=this->getSFRByteIn(this->T2CON);
-		if ((t2con&t2con_mask2)==0) this->T2Tick();
+		if ((t2con&t2con_count)==0&&(t2con&t2con_baudrate_generator)==0) this->T2Tick();
 		unsigned char tmod=this->getSFRByteIn(this->TMOD);
 		if (!(bool)(tmod&(1<<this->C_T_0))) this->T0Tick();
 		if (!(bool)(tmod&(1<<this->C_T_1))) this->T1Tick();
@@ -454,6 +454,8 @@ void m80C32::T2Tick(){
 		unsigned short t2=(unsigned short)this->getSFRByteIn(this->TL2);
 		t2|=((unsigned short)this->getSFRByteIn(this->TH2))<<8;
 		t2++;
+		this->setSFRByte(this->TL2,t2&0xFF);
+		this->setSFRByte(this->TH2,t2>>8);
 		if (t2==0){
 			bool t2rx=this->getBitIn(this->RCLK);
 			bool t2tx=this->getBitIn(this->TCLK);
