@@ -90,7 +90,7 @@ class ROMSelector{
 		bool isCandidate(const char* f){
 			if (!std::filesystem::is_regular_file(f)) return false;
 			
-			if (std::filesystem::file_size(f)!=this->file_size) return false;
+			if (std::filesystem::file_size(f)>this->file_size) return false;
 			
 			for (long long unsigned int i=0;i<sizeof(this->ext)/sizeof(this->ext[0]);i++){
 				if (strcmp(this->ext[i],std::filesystem::path(f).extension().string().c_str())==0) return true;

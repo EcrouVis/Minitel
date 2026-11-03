@@ -11,7 +11,7 @@ void loadROM(std::mutex* mtx, FILE** ppf,const char* filename);
 
 void loadRAM(std::mutex* mtx, FILE** ppf,const char* filename);
 
-void readM(std::mutex* mtx, FILE* pf, unsigned char* array, size_t size);
+size_t readM(std::mutex* mtx, FILE* pf, unsigned char* array, size_t size);
 
 void writeM(std::mutex* mtx, FILE* pf, unsigned char* array, size_t size);
 

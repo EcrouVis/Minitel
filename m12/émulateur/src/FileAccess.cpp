@@ -25,14 +25,15 @@ void loadRAM(std::mutex* mtx, FILE** ppf,const char* filename){
 	*ppf=fopen(filename,"rb+");
 }
 
-void readM(std::mutex* mtx, FILE* pf, unsigned char* array, size_t size){
+size_t readM(std::mutex* mtx, FILE* pf, unsigned char* array, size_t size){
 	const std::lock_guard<std::mutex> lock(*mtx);
 	
 	std::fill_n(array,size,0);
 	if (pf!=NULL){
 		fseek(pf,0,SEEK_SET);
-		if (fread(array,sizeof(char),size,pf)!=size) printf("fail to read all the content of the file\n");
+		return fread(array,sizeof(char),size,pf);
 	}
+	else return 0;
 }
 
 void writeM(std::mutex* mtx, FILE* pf, unsigned char* array, size_t size){

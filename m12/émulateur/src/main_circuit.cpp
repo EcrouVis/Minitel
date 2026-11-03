@@ -435,19 +435,47 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		//pause_emu=p_gState->stepByStep.load(std::memory_order_relaxed);
 		if (!p_gState->stepByStep.load(std::memory_order_relaxed)) CLKs.setPause(false);
 		thread_message ms;
-		static unsigned char erom_cpy[EROM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
-		static unsigned char eram_cpy[ERAM_SIZE];
+		
 		while (p_mb_circuit->receive(&ms)){
 			switch(ms.cmd){
 				case EMU_ON:
+				{
+					static unsigned char erom_cpy[EROM_SIZE];//static var to avoid reinitializing at each loop even if there is no messages (because gcc optimizations)
+					static unsigned char eram_cpy[ERAM_SIZE];
+					size_t s=0;
 					//load rom/ram files
-					readM(p_gState->p_thread_mutex,p_gState->erom,erom_cpy,EROM_SIZE);
+					s=readM(p_gState->p_thread_mutex,p_gState->erom,erom_cpy,EROM_SIZE);
+					switch (s){
+						case 0:
+							printf("fail to read all the content of the rom file\n");
+							break;
+						case 1 ... (EROM_SIZE>>2):
+							printf("16bits address rom\n");
+							memcpy(&(erom_cpy[EROM_SIZE>>2]),erom_cpy,EROM_SIZE>>2);
+							memcpy(&(erom_cpy[EROM_SIZE>>1]),erom_cpy,EROM_SIZE>>1);
+							break;
+						case (EROM_SIZE>>2)+1 ... (EROM_SIZE>>1):
+							printf("17bits address rom\n");
+							memcpy(&(erom_cpy[EROM_SIZE>>1]),erom_cpy,EROM_SIZE>>1);
+							break;
+						default:
+							printf("18bits address rom\n");
+							break;
+					}
+					if (s==0){
+						printf("fail to read all the content of the file\n");
+					}
+					else if (s<EROM_SIZE){
+						
+					}
 					erom.set((unsigned char*)erom_cpy);
-					readM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
+					s=readM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
+					if (s==0) printf("fail to read all the content of the ram file\n");
 					eram.set((unsigned char*)eram_cpy);
 					//reset
 					wt.PWRChangeIn(true);
 					break;
+				}
 				case EMU_OFF:
 					//wait RST signal before saving the ram
 					modem.Reset();
