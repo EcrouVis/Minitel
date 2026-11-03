@@ -462,15 +462,8 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 							printf("18bits address rom\n");
 							break;
 					}
-					if (s==0){
-						printf("fail to read all the content of the file\n");
-					}
-					else if (s<EROM_SIZE){
-						
-					}
 					erom.set((unsigned char*)erom_cpy);
 					s=readM(p_gState->p_thread_mutex,p_gState->eram,eram_cpy,ERAM_SIZE);
-					if (s==0) printf("fail to read all the content of the ram file\n");
 					eram.set((unsigned char*)eram_cpy);
 					//reset
 					wt.PWRChangeIn(true);
