@@ -76,8 +76,6 @@ SBUF equ 0x99
 PSW equ 0xD0
 
 TR1 equ 0x88.6
-REN equ SCON.4
-TR2 equ T2CON.2
 TF2 equ T2CON.7
 RI equ SCON.0
 TI equ SCON.1
@@ -192,20 +190,18 @@ main:
 	;SMOD already 0
 	mov TH1,#0xFC;9600bauds
 	
-	mov SCON,#0b11000000;set serial to mode 3
-	
 	mov RCAP2H,#0xE8
-	mov RCAP2L,#0x00;200Hz
-	mov T2CON,#0b00000000;set timer 2 in auto reload mode
+	;mov RCAP2L,#0x00;200Hz / RCAP2L initialized at 0 when reset
 
 	mov IP,#0b00000001;priority to nINT0 then serial then watchdog timer kick
 	mov IE,#0b10110001
 	
 	setb TxFree
-	setb TR1;enable serial clock
-	setb REN;enable serial Rx
 	
-	setb TR2;enable timer 2
+	setb TR1;enable serial clock
+	mov SCON,#0b11010000;set serial to mode 3 and enable serial Rx
+	
+	mov T2CON,#0b00000100;set timer 2 in auto reload mode and enable timer 2
 	
 	sjmp $;while(true) loop
 	
@@ -320,8 +316,10 @@ serial_tx:
 		;check if there is data in the buffer
 		mov A,output_counter_serial
 		cjne A,output_counter_write,tx_send
+			setb TxFree
 			ret
 		tx_send:
+		clr TxFree
 		
 		add A,p_output_buffer
 		mov R0,A
