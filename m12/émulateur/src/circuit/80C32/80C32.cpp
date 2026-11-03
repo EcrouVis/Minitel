@@ -412,7 +412,7 @@ void m80C32::CLKTickIn(){
 	else if (this->period>=this->periodPerCycle){//avoid reloading this->period from memory (because of call to T2Tick()) -> branch faster but cause T2Tick() to be shifted a little in time (not noticeable because the emulation ~ cycle accurate and not period accurate)
 		this->period=0;
 		unsigned char t2con=this->getSFRByteIn(this->T2CON);
-		if ((t2con&t2con_count)==0&&(t2con&t2con_baudrate_generator)==0) this->T2Tick();
+		if ((t2con&(t2con_count|t2con_baudrate_generator))==0) this->T2Tick();
 		unsigned char tmod=this->getSFRByteIn(this->TMOD);
 		if (!(bool)(tmod&(1<<this->C_T_0))) this->T0Tick();
 		if (!(bool)(tmod&(1<<this->C_T_1))) this->T1Tick();
