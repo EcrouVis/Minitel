@@ -183,7 +183,7 @@ main:
 	;acall w_io
 	
 	mov R0,#0x70
-	mov A,#0x00
+	clr A;mov A,#0x00
 	acall w_io;init IO70 and activate DIN power pin
 
 	mov TMOD,#0b00100000;set timer 1 to mode 2 for serial clock generation
@@ -212,10 +212,10 @@ serial_rx:
 	mov R1,A
 	;mov @R0,A
 	
-	mov B,PSW;copy parity to B.0
+	mov R0,PSW;copy parity to B.0
 	mov C,RB8
 	rlc A;set RB8 to A.0 (with rotate left with carry)
-	xrl A,B;A.0=P XOR RB8
+	xrl A,R0;A.0=P XOR RB8
 	
 	jb ACC.0,no_parity_error
 	cmd_error:
@@ -234,8 +234,7 @@ serial_rx:
 	cjne A,#0x50,cmd_args
 	;command type -> resync if needed
 		mov A,R1
-		mov R0,p_command_input
-		mov @R0,A
+		mov command_type,A
 		
 		anl A,#0x0C
 		jz cmd_error;command type cannot have R==0 and W==0
@@ -267,6 +266,7 @@ serial_rx:
 		
 			mov A,input_counter
 			cjne A,#1,execute_command_w
+				inc input_counter
 				ret
 			execute_command_w:
 				jb command_read,execute_command_wr
