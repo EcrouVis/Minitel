@@ -246,8 +246,9 @@ serial_rx:
 		mov A,R1
 		jnb ACC.7,cmd_error;command argument cannot have msb==0
 		
-		mov A,p_command_input
-		add A,input_counter
+		mov A,input_counter
+		jz cmd_error
+		add A,p_command_input
 		xch A,R1
 		mov @R1,A;construct command
 		
