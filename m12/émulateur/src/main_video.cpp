@@ -1253,12 +1253,7 @@ class M12Window{
 					this->AIO->BufferWidget();
 					ImGui::Text("Répertoire de travail:");
 					ImGui::Indent();
-					ImGui::Text("%s",std::filesystem::current_path().string().c_str());
-					ImGui::SameLine();
-					if (ImGui::Button("Copier")){
-						glfwSetClipboardString(this->window,std::filesystem::current_path().string().c_str());
-						this->Notification.notify("Texte copié dans le presse-papier",ImVec4(0,1,1,1));
-					}
+					ImGui::TextLinkOpenURL(std::filesystem::current_path().string().c_str());
 					ImGui::Unindent();
 					
 					ImGui::EndChild();
