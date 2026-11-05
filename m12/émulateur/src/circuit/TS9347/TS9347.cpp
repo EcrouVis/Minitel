@@ -862,7 +862,7 @@ void TS9347wVRAM::executeCommand(){
 					case 0x07:
 						this->CLS();
 						break;
-					default:
+					default://0x04 0x06 0x0C 0x0D 0x0E 0x0F
 						this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 						//printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 						break;
@@ -897,18 +897,14 @@ void TS9347wVRAM::executeCommand(){
 				break;
 			case 0x90://NOP/VRM/VSM
 				switch (this->Rx[0].load(std::memory_order_relaxed)&0x0F){
-					case 0x01:
+					case 0x00 ... 0x03:
 						this->NOP();
 						break;
-					case 0x05:
+					case 0x04 ... 0x07:
 						this->VRM();
 						break;
-					case 0x09:
+					case 0x08 ... 0x0F:
 						this->VSM();
-						break;
-					default:
-						this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
-						//printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 						break;
 				}
 				break;
@@ -924,7 +920,7 @@ void TS9347wVRAM::executeCommand(){
 			case 0xF0://MVT
 				this->MVT();
 				break;
-			default:
+			default://0x1X 0xAX 0xCX
 				this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 				//printf("error %02X\n",this->Rx[0].load(std::memory_order_relaxed));
 				break;
@@ -1053,7 +1049,7 @@ void TS9347wVRAM::MVB(){
 			
 			this->cmd_step=2;
 			if (this->incrementX(true)){
-				if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x01)){//stop
+				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
 					this->cmd_step=6;
 				}
 				else{
@@ -1061,7 +1057,7 @@ void TS9347wVRAM::MVB(){
 				}
 			}
 			if (this->incrementX(false)){
-				if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x01)){//stop
+				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
 					this->cmd_step=6;
 				}
 			}
@@ -1100,7 +1096,7 @@ void TS9347wVRAM::MVD(){
 			this->addB(true,3);
 			this->addB(false,3);
 			if (this->incrementX(true)){
-				if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x01)){//stop
+				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
 					this->cmd_step=10;
 				}
 				else{
@@ -1108,7 +1104,7 @@ void TS9347wVRAM::MVD(){
 				}
 			}
 			if (this->incrementX(false)){
-				if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x01)){//stop
+				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
 					this->cmd_step=10;
 				}
 			}
@@ -1156,7 +1152,7 @@ void TS9347wVRAM::MVT(){
 			this->addB(true,2);
 			this->addB(false,2);
 			if (this->incrementX(true)){
-				if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x01)){//stop
+				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
 					this->cmd_step=14;
 				}
 				else{
@@ -1164,7 +1160,7 @@ void TS9347wVRAM::MVT(){
 				}
 			}
 			if (this->incrementX(false)){
-				if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x01)){//stop
+				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
 					this->cmd_step=14;
 				}
 			}
