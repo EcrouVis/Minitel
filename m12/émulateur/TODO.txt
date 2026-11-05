@@ -14,8 +14,6 @@ Code:
 
 - Nettoyage du code
 
-- Plein écran sur l'écran contenant la fenêtre (attendre que https://github.com/glfw/glfw/issues/1699 soit résolu)
-
 
 
 Fonctionnalités:

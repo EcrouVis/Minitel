@@ -1292,7 +1292,28 @@ class M12Window{
 		void setWindowFullscreen(){
 			glfwGetWindowPos(this->window,&(this->PARAMETERS.imgui.window_position[0]),&(this->PARAMETERS.imgui.window_position[1]));
 			glfwGetWindowSize(this->window,&(this->PARAMETERS.imgui.window_size[0]),&(this->PARAMETERS.imgui.window_size[1]));
-			GLFWmonitor* monitor=glfwGetPrimaryMonitor();//TODO: get current monitor: https://github.com/glfw/glfw/issues/1699
+			
+			//choose fullscreen monitor workaround (https://github.com/glfw/glfw/issues/1699)
+			int window_center[2]={this->PARAMETERS.imgui.window_position[0]+this->PARAMETERS.imgui.window_size[0]/2,
+								  this->PARAMETERS.imgui.window_position[1]+this->PARAMETERS.imgui.window_size[1]/2};
+			int count;
+			GLFWmonitor** monitors = glfwGetMonitors(&count);
+			GLFWmonitor* monitor=NULL;
+			for (int i=0;i<count;i++){
+				int xpos, ypos;
+				glfwGetMonitorPos(monitors[i], &xpos, &ypos);
+				if (xpos<window_center[0]&&ypos<window_center[1]){
+					const GLFWvidmode* videoMode=glfwGetVideoMode(monitors[i]);
+					xpos+=videoMode->width;
+					ypos+=videoMode->height;
+					if (xpos>=window_center[0]&&ypos>=window_center[1]){
+						monitor=monitors[i];
+						break;
+					}
+				}
+			}
+			if (monitor==NULL) monitor=glfwGetPrimaryMonitor();
+			
 			const GLFWvidmode* mode=glfwGetVideoMode(monitor);
 			glfwSetWindowMonitor(this->window, monitor, 0, 0, mode->width, mode->height, mode->refreshRate);
 		}
