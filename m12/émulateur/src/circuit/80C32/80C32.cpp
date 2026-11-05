@@ -151,9 +151,15 @@ void m80C32::setRAMByte(unsigned char address, unsigned char d){
 void m80C32::setSFRByte(unsigned char address, unsigned char d){
 	switch (address){
 		case ACC:
-			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
-			this->setACCParity();
+		{
+			this->SFR[ACC&0x7F].store(d,std::memory_order_relaxed);
+			
+			constexpr unsigned short p=0b0110100110010110;
+			d=((p>>(d&0x0F))^(p>>(d>>4)))&0x01;
+			d|=(this->SFR[PSW&0x7F].load(std::memory_order_relaxed))&0xFE;
+			this->SFR[PSW&0x7F].store(d,std::memory_order_relaxed);//set PSW directly
 			break;
+		}
 		case IE:
 		case IP:
 			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
@@ -161,32 +167,37 @@ void m80C32::setSFRByte(unsigned char address, unsigned char d){
 			break;
 		case P0:
 			this->PX_out[0]=d;
-			if ((this->getSFRByteIn(address)^d)!=0){
+			if ((this->getSFRByteIn(P0)^d)!=0){
 				this->sendP0(d);
 			}
 			break;
 		case P1:
 			this->PX_out[1]=d;
-			if ((this->getSFRByteIn(address)^d)!=0){
+			if ((this->getSFRByteIn(P1)^d)!=0){
 				this->sendP1(d);
 			}
 			break;
 		case P2:
 			this->PX_out[2]=d;
-			if ((this->getSFRByteIn(address)^d)!=0){
+			if ((this->getSFRByteIn(P2)^d)!=0){
 				this->sendP2(d);
 			}
 			break;
 		case P3:
 			this->PX_out[3]=d;
 			d=d&this->P3_out_alt;
-			if ((this->getSFRByteIn(address)^d)!=0){
+			if ((this->getSFRByteIn(P3)^d)!=0){
 				this->sendP3(d);
 			}
 			break;
 		case PCON:
-			this->SFR[address&0x7F].store(d,std::memory_order_relaxed);
+			this->SFR[PCON&0x7F].store(d,std::memory_order_relaxed);
 			this->PCONChange();
+			break;
+		case PSW:
+			d&=0xFE;
+			d|=(this->SFR[PSW&0x7F].load(std::memory_order_relaxed))&0x01;
+			this->SFR[PSW&0x7F].store(d,std::memory_order_relaxed);
 			break;
 		case SBUF:
 			//printf("SBUF %02X\n",d);
@@ -196,7 +207,6 @@ void m80C32::setSFRByte(unsigned char address, unsigned char d){
 		case B:
 		case DPH:
 		case DPL:
-		case PSW:
 		case RCAP2H:
 		case RCAP2L:
 		case SCON:
@@ -949,12 +959,6 @@ void m80C32::nextCycleALU(){
 	}
 	
 	
-}
-void m80C32::setACCParity(){
-	unsigned short p=0b0110100110010110;
-	unsigned char a=this->getSFRByteIn(this->ACC);
-	p=((p>>(a&0x0F))^(p>>(a>>4)))&0x01;
-	this->setBitIn(this->P,(bool)p);
 }
 void m80C32::execInstruction(){
 	unsigned char d;

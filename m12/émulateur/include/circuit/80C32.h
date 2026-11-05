@@ -289,7 +289,6 @@ class m80C32{
 		
 		void nextCycleALU();
 		void execInstruction();
-		void setACCParity();
 		
 		
 		unsigned char interrupt_level=0;
