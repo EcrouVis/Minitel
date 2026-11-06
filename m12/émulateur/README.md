@@ -33,8 +33,7 @@ Emulateur hardware d'un Minitel 12 Philips
 * Ninja (par défaut)
 * NSIS installé et configuré pour empaqueter un installateur
 * appimagetool installé et configuré pour empaqueter une appimage
-* MbedTLS compilé et installé pour windows (OpenSSL et LibreSSL peuvent normalement fonctionner mais cela demande plus d'efforts)
-* MbedTLS, OpenSSL ou LibreSSL installé pour les autres distributions
+* MbedTLS, OpenSSL ou LibreSSL installé (sauf Windows où MbedTLS est téléchargé automatiquement)
 * Les dépendances de GLFW (pour toutes les distributions excepté windows / voir: https://www.glfw.org/docs/latest/compile.html)
 
 
@@ -110,7 +109,7 @@ Arborescence du code:
   * IXWebsocket utilise certaines fonctions de WS2_32.dll qui n'existaient pas comme inet_pton &rarr; Solution: Créer un dll proxy qui intercepte et implémente les fonctions manquantes (ex: https://stackoverflow.com/questions/13475993/is-it-possible-to-replace-a-system-dll-with-a-proxy-dll et https://fdossena.com/?p=mesa/index.frag) ou utiliser une autre bibliothèque
 * MacOS:
 
-  * Il me manque de quoi compiler et créer des paquets pour MacOS ainsi que d'un environnement pour pouvoir tester l'application
+  * Il me manque de quoi compiler et créer des paquets pour MacOS ainsi que d'un environnement pour pouvoir tester l'application (https://github.com/tpoechtrager/osxcross / https://github.com/phracker/MacOSX-SDKs / https://www.darlinghq.org/)
 * Distributions BSD:
 
   * Il n'y a pas de problèmes à première vue, il faut juste que j'étudie comment configurer CMake pour créer un paquet compatible

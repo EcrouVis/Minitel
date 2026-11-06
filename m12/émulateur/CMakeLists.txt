@@ -36,8 +36,32 @@ add_compile_definitions(
 
 
 
+option(USE_TLS "Use TLS for secure websockets" On)
+option(USE_OPEN_SSL "Use OpenSSL" Off)
+option(USE_LIBRE_SSL "Use LibreSSL" Off)
+option(USE_MBED_TLS "Use MbedTLS" Off)
+if (USE_MBED_TLS)
+	option(USE_EXISTING_MBED_TLS_LIB "Use existing MbedTLS library" Off)
+endif()
+option(USE_DECOMP_TOOLS "Whether to compile with tools to help decompile the ROM" Off)
+option(USE_SSE2 "Whether to use SSE2 for audio computation" On)
+option(USE_AVX2 "Whether to use AVX2 for audio computation" On)
+option(USE_EXISTING_IXWEBSOCKET_LIB "Use existing IXWebSocket library" Off)
+option(USE_EXISTING_GLFW_LIB "Use existing GLFW library" Off)
+if (LINUX)
+	option(APPIMAGE_BUILD "Build for an AppImage" On)
+endif()
 if (WIN32)
-	add_executable(m12 $<$<CONFIG:Release>:WIN32>)
+	option(PORTABLE_BUILD "Build a portable executable" On)
+	option(USE_WINMAIN "Use WinMain instead of main for program entry point" Off)
+endif()
+
+
+
+
+
+if (WIN32 AND USE_WINMAIN)
+	add_executable(m12 WIN32)
 else()
 	add_executable(m12)
 endif()
@@ -54,26 +78,6 @@ add_library(imgui STATIC)
 set(OPT_LIB )
 set(OPT_DEF )
 set(OPT_OPT )
-
-
-
-
-
-option(USE_TLS "Use TLS for secure websockets" On)
-option(USE_OPEN_SSL "Use OpenSSL" Off)
-option(USE_LIBRE_SSL "Use LibreSSL" Off)
-option(USE_MBED_TLS "Use MbedTLS" Off)
-option(USE_DECOMP_TOOLS "Whether to compile with tools to help decompile the ROM" Off)
-option(USE_SSE2 "Whether to use SSE2 for audio computation" On)
-option(USE_AVX2 "Whether to use AVX2 for audio computation" On)
-option(USE_EXISTING_IXWEBSOCKET_LIB "Use existing IXWebSocket library" Off)
-option(USE_EXISTING_GLFW_LIB "Use existing GLFW library" Off)
-if (LINUX)
-	option(APPIMAGE_BUILD "Build for an AppImage" On)
-endif()
-if (WIN32)
-	option(PORTABLE_BUILD "Build a portable executable" On)
-endif()
 
 
 
@@ -147,34 +151,41 @@ if (USE_TLS)
     endif()
 
     if (USE_MBED_TLS)
-		if (WIN32)
-			set(CACHE{MbedTLS_ROOT_DIR} TYPE PATH HELP "Install path of MbedTLS" VALUE "C:/Program Files (x86)/Mbed TLS")
-			#set(CMAKE_PREFIX_PATH "C:/Program Files (x86)/")
+		if (USE_EXISTING_MBED_TLS_LIB)
+			if (CMAKE_HOST_WIN32)
+				set(CACHE{MbedTLS_ROOT_DIR} TYPE PATH HELP "Install path of MbedTLS" VALUE "C:/Program Files (x86)/Mbed TLS")
+				set(MbedTLS_DIR "${MbedTLS_ROOT_DIR}/lib/cmake/MbedTLS/")
+			endif()
+			find_package(MbedTLS REQUIRED)
 		else()
-			set(CACHE{MbedTLS_ROOT_DIR} TYPE PATH HELP "Install path of MbedTLS" VALUE)
+			set(ENABLE_PROGRAMS Off)
+			set(ENABLE_TESTING Off)
+			set(MBEDTLS_AS_SUBPROJECT On)
+			FetchContent_Declare(MbedTLS
+				URL https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-4.2.0/mbedtls-4.2.0.tar.bz2
+				URL_HASH SHA256=2bed9d713b4668f76553b097e72b8aa30bc8f112a940d7ae228d524bbde6ffea
+				EXCLUDE_FROM_ALL
+			)
+			FetchContent_MakeAvailable(MbedTLS)
 		endif()
-		set(MbedTLS_DIR "${MbedTLS_ROOT_DIR}/lib/cmake/MbedTLS/")
-		find_package(MbedTLS REQUIRED)
 		get_target_property(MBEDTLS_INCLUDE_DIRS MbedTLS::mbedtls INTERFACE_INCLUDE_DIRECTORIES)
 		find_path(MBEDTLS_VERSION_GREATER_THAN_3 mbedtls/build_info.h PATHS ${MBEDTLS_INCLUDE_DIRS})
 		get_target_property(MBEDTLS_LIBRARY MbedTLS::mbedtls INTERFACE_LINK_LIBRARIES)
 		get_target_property(MBEDX509_LIBRARY MbedTLS::mbedx509 INTERFACE_LINK_LIBRARIES)
-		get_target_property(MBEDCRYPTO_LIBRARY MbedTLS::tfpsacrypto INTERFACE_LINK_LIBRARIES)
+		get_target_property(MBEDCRYPTO_LIBRARY tfpsacrypto INTERFACE_LINK_LIBRARIES)
 		list(APPEND 
 			OPT_LIB 
 				MbedTLS::mbedtls
 				MbedTLS::mbedx509
-				MbedTLS::tfpsacrypto
+				tfpsacrypto
 		)
 		list(APPEND 
 			OPT_DEF
 				M12_USE_MBEDTLS
 		)
     elseif (USE_OPEN_SSL)
-		if (WIN32)
+		if (CMAKE_HOST_WIN32)
 			set(CACHE{OPENSSL_ROOT_DIR} TYPE PATH HELP "Install path of OpenSSL" VALUE "C:/Program Files (x86)/OpenSSL")
-		else()
-			set(CACHE{OPENSSL_ROOT_DIR} TYPE PATH HELP "Install path of OpenSSL" VALUE)
 		endif()
 		find_package(OpenSSL REQUIRED)
 		list(APPEND 
@@ -187,10 +198,8 @@ if (USE_TLS)
 				M12_USE_OPENSSL
 		)
 	elseif (USE_LIBRE_SSL)
-		if (WIN32)
+		if (CMAKE_HOST_WIN32)
 			set(CACHE{LIBRESSL_ROOT_DIR} TYPE PATH HELP "Install path of LibreSSL" VALUE "C:/Program Files (x86)/LibreSSL")
-		else()
-			set(CACHE{LIBRESSL_ROOT_DIR} TYPE PATH HELP "Install path of LibreSSL" VALUE)
 		endif()
 		find_package(LibreSSL REQUIRED)
 		list(APPEND 
@@ -211,10 +220,8 @@ endif()
 
 
 if (USE_EXISTING_IXWEBSOCKET_LIB)
-	if (WIN32)
+	if (CMAKE_HOST_WIN32)
 		set(CACHE{IXWEBSOCKET_ROOT_DIR} TYPE PATH HELP "Install path of IXWebSocket (compiled with USE_ZLIB=0, USE_TLS=1 if compiled with wss support and the same TLS library)" VALUE "C:/Program Files (x86)/ixwebsocket")
-	else()
-		set(CACHE{IXWEBSOCKET_ROOT_DIR} TYPE PATH HELP "Install path of IXWebSocket (compiled with USE_ZLIB=0, USE_TLS=1 if compiled with wss support and the same TLS library)" VALUE)
 	endif()
 	find_package(IXWebSocket REQUIRED)
 else()
@@ -234,10 +241,8 @@ else()
 endif()
 
 if (USE_EXISTING_GLFW_LIB)
-	if (WIN32)
+	if (CMAKE_HOST_WIN32)
 		set(CACHE{GLFW3_ROOT_DIR} TYPE PATH HELP "Install path of Glfw3" VALUE "C:/Program Files (x86)/GLFW")
-	else()
-		set(CACHE{GLFW3_ROOT_DIR} TYPE PATH HELP "Install path of Glfw3" VALUE)
 	endif()
 	find_package(Glfw3 REQUIRED)
 else()
