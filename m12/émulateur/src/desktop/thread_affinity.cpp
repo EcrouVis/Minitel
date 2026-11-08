@@ -1,5 +1,8 @@
 #if defined(_WIN32)
 #include <windows.h>
+#if (_WIN32_WINNT < 0x0600)||(WINVER < 0x0600)
+typedef DWORD (__stdcall *f_GetCurrentProcessorNumber)();
+#endif
 #else
 #include <pthread.h>
 #endif
@@ -24,7 +27,21 @@ long setCurrentThreadAffinity(long i){
 
 long getCurrentCPU(){
 #if defined(_WIN32)
+#if (_WIN32_WINNT < 0x0600)||(WINVER < 0x0600)
+	long cpu=0;
+	HINSTANCE hGetProcIDDLL = LoadLibrary("Kernel32.dll");
+	if (hGetProcIDDLL){
+		f_GetCurrentProcessorNumber GetCurrentProcessorNumber = reinterpret_cast<f_GetCurrentProcessorNumber>(GetProcAddress(hGetProcIDDLL, "GetCurrentProcessorNumber"));
+		if (GetCurrentProcessorNumber!=NULL){
+			cpu = (*GetCurrentProcessorNumber)();
+		}
+		else printf("Could not find GetCurrentProcessorNumber inside Kernel32.dll\n");
+	}
+	else printf("Could not load Kernel32.dll\n");
+	return cpu;
+#else
 	return GetCurrentProcessorNumber();
+#endif
 #elif defined(unix) || defined(__unix__)
 	long cpu=sched_getcpu();
 	if (cpu<0) cpu=0;
