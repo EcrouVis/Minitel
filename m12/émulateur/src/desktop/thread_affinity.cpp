@@ -7,6 +7,7 @@ typedef DWORD (__stdcall *f_GetCurrentProcessorNumber)();
 #include <pthread.h>
 #endif
 #include <thread>
+#include <cstdio>
 
 long setCurrentThreadAffinity(long i){
 #if defined(_WIN32)

@@ -25,17 +25,11 @@ if(CMAKE_BUILD_TYPE_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-add_compile_definitions(
-	$<$<CONFIG:Debug>:_GLIBCXX_DEBUG>
-	$<$<CONFIG:Debug>:_GLIBCXX_DEBUG_PEDANTIC>
-	$<$<CONFIG:RelWithDebInfo>:_GLIBCXX_DEBUG>
-	$<$<CONFIG:RelWithDebInfo>:_GLIBCXX_DEBUG_PEDANTIC>
-)
 
 
 
 
-
+#Configuration
 option(USE_TLS "Use TLS for secure websockets" On)
 option(USE_OPEN_SSL "Use OpenSSL" Off)
 option(USE_LIBRE_SSL "Use LibreSSL" Off)
@@ -43,18 +37,52 @@ option(USE_MBED_TLS "Use MbedTLS" Off)
 if (USE_MBED_TLS)
 	option(USE_EXISTING_MBED_TLS_LIB "Use existing MbedTLS library" Off)
 endif()
-option(USE_DECOMP_TOOLS "Whether to compile with tools to help decompile the ROM" Off)
-option(USE_SSE2 "Whether to use SSE2 for audio computation" On)
-option(USE_AVX2 "Whether to use AVX2 for audio computation" On)
 option(USE_EXISTING_IXWEBSOCKET_LIB "Use existing IXWebSocket library" Off)
+if (NOT USE_EXISTING_IXWEBSOCKET_LIB)
+	set(CACHE{IXWEBSOCKET_TAG} TYPE STRING HELP "Version tag to use for IXWebsocket" VALUE "master")
+endif()
 option(USE_EXISTING_GLFW_LIB "Use existing GLFW library" Off)
+if (NOT USE_EXISTING_GLFW_LIB)
+	set(CACHE{GLFW_TAG} TYPE STRING HELP "Version tag to use for GLFW" VALUE "master")
+endif()
+
 if (LINUX)
 	option(APPIMAGE_BUILD "Build for an AppImage" On)
 endif()
 if (WIN32)
 	option(PORTABLE_BUILD "Build a portable executable" On)
-	option(USE_WINMAIN "Use WinMain instead of main for program entry point" Off)
+	option(USE_WINMAIN "Use WinMain instead of main for program entry point - disable stdout" On)
+	set(CACHE{WINDOWS_VERSION} TYPE STRING HELP "Windows version (Windows 7 by default)" VALUE "0x0601")
 endif()
+
+option(FORCE_STATIC_LINKING "Force static linking with C, C++ and thread libraries (do not use with libc on linux)" Off)
+set(CACHE{COMPILER_RUNTIME_LIB_DIR} TYPE STRING HELP "Additional path where to search for compiler specific runtime libraries" VALUE)
+set(CACHE{CPU_ARCHITECTURE} TYPE STRING HELP "The CPU architecture (see https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html)" VALUE "x86-64")
+
+set(CACHE{PROJECT_NAME_SUFFIX} TYPE STRING HELP "Project name package suffix" VALUE)
+
+option(USE_DECOMP_TOOLS "Whether to compile with tools to help decompile the ROM" Off)
+option(DEBUG_TS9347 "Whether to print TS9347 operations to stdout" Off)
+option(DEBUG_80C32 "Whether to print 80C32 instructions to stdout when manually stepping the instructions" Off)
+
+
+
+add_compile_definitions(
+	$<$<CONFIG:Debug>:_GLIBCXX_DEBUG>
+	$<$<CONFIG:Debug>:_GLIBCXX_DEBUG_PEDANTIC>
+	$<$<CONFIG:RelWithDebInfo>:_GLIBCXX_DEBUG>
+	$<$<CONFIG:RelWithDebInfo>:_GLIBCXX_DEBUG_PEDANTIC>
+)
+if (WIN32)
+	add_compile_definitions(
+		"WINVER=${WINDOWS_VERSION}"
+		"_WIN32_WINNT=${WINDOWS_VERSION}"
+	)
+endif()
+if (FORCE_STATIC_LINKING)
+	add_link_options(-static)#could be use as a compiler specific runtime library not found workaround on windows
+endif()
+add_compile_options("-march=${CPU_ARCHITECTURE}")
 
 
 
@@ -82,20 +110,6 @@ set(OPT_OPT )
 
 
 
-
-if (USE_SSE2)
-	list(APPEND 
-		OPT_OPT
-			-msse2
-	)
-endif()
-
-if (USE_AVX2)
-	list(APPEND 
-		OPT_OPT
-			-mavx2
-	)
-endif()
 
 if (USE_DECOMP_TOOLS)
 	list(APPEND 
@@ -234,7 +248,7 @@ else()
 	FetchContent_Declare(
 		IXWebSocket
 		GIT_REPOSITORY https://github.com/machinezone/IXWebSocket.git
-		GIT_TAG master
+		GIT_TAG ${IXWEBSOCKET_TAG}
 	)
 	#GIT_TAG -> master to use MbedTLS under windows (v12.0.1 does not work)
 	FetchContent_MakeAvailable(IXWebSocket)
@@ -252,7 +266,7 @@ else()
 	set(GLFW_BUILD_DOCS Off)
 	FetchContent_Declare(Glfw3
 		GIT_REPOSITORY https://github.com/glfw/glfw.git
-		GIT_TAG master
+		GIT_TAG ${GLFW_TAG}
 		EXCLUDE_FROM_ALL
 	)
 	FetchContent_MakeAvailable(Glfw3)
@@ -394,12 +408,7 @@ target_sources(imgui
 
 
 
-list(APPEND 
-	OPT_OPT
-		$<$<CONFIG:Release>:-flto>
-)
-
-target_compile_options(m12 PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers  ${OPT_OPT})
+target_compile_options(m12 PRIVATE -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-missing-field-initializers $<$<CONFIG:Release>:-flto> ${OPT_OPT})
 
 target_link_libraries(m12
 	PRIVATE
@@ -531,7 +540,7 @@ if(WIN32)
 	#TODO: rewrite for cross compiling
 	install(
 		RUNTIME_DEPENDENCY_SET _dependency_set
-		DIRECTORIES "C:/mingw64/x86_64-w64-mingw32/lib" "C:/llvm-mingw/x86_64-w64-mingw32/bin"
+		DIRECTORIES "${COMPILER_RUNTIME_LIB_DIR}"
 		PRE_EXCLUDE_REGEXES "api-ms-" "ext-ms-"
 		POST_EXCLUDE_REGEXES  ".*system32/.*\\.dll" ".*SysWOW64/.*\\.dll"
 		UNRESOLVED_DEPENDENCIES_VAR UNRES
@@ -599,7 +608,7 @@ elseif(LINUX)
 	set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://github.com/EcrouVis/Minitel")
 endif()
 
-set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}-${CMAKE_PROJECT_VERSION}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_PACKAGE_FILE_NAME "${CMAKE_PROJECT_NAME}${PROJECT_NAME_SUFFIX}-${CMAKE_PROJECT_VERSION}-${CPU_ARCHITECTURE}")
 set(CPACK_PACKAGE_VENDOR "")
 SET(CPACK_OUTPUT_FILE_PREFIX ./out)
 include(CPack)
