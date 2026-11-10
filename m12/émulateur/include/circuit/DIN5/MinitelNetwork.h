@@ -716,6 +716,7 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 			}
 			switch (this->subState){
 				case 0:
+				{
 					this->moveCursor(0,1);
 					this->printString("` ");
 					{
@@ -731,8 +732,11 @@ class SimplifiedMinitelNetworkAppLocalWebsocket: public SimplifiedMinitelNetwork
 					
 					this->moveCursor(0,1);
 					this->disconnect();
-					this->connect(this->getURL());
+					char* url=this->getURL();
+					this->connect(url);
+					free(url);
 					break;
+				}
 				case 1:
 					if (this->qTx.empty()){//could not use this->TxEmpty -> deadlock
 						this->connection_poll_anim=(this->connection_poll_anim+1)%4;

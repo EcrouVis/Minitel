@@ -17,6 +17,13 @@ class TS7514{//TODO: correct sample gains
 		TS7514(){
 			this->setSampleRate(48000);
 		}
+		~TS7514(){
+			if (this->RxBufferSamples!=NULL) free(RxBufferSamples);
+			if (this->RxConvFilter75bps1!=NULL) free(this->RxConvFilter75bps1);
+			if (this->RxConvFilter75bps0!=NULL) free(this->RxConvFilter75bps0);
+			if (this->RxConvFilter1200bps1!=NULL) free(this->RxConvFilter1200bps1);
+			if (this->RxConvFilter1200bps0!=NULL) free(this->RxConvFilter1200bps0);
+		}
 		
 		//std::atomic<float> buzzer_amplitude=0.;
 		std::atomic_uchar REG[8];

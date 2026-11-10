@@ -59,7 +59,10 @@ void setLocalDirectoryExe(){
 	}
 	while (exePathSize==buffer_size);
 	if (exePathSize<=0) exePathSize=-1;
-	else exePath=std::filesystem::path(path);
+	else{
+		path[exePathSize]=0;
+		exePath=std::filesystem::path(path);
+	}
 	free(path);
 	
 #endif
