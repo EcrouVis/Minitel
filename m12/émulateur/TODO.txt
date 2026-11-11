@@ -1,18 +1,20 @@
 Simulation:
 
 - Rechercher plus en profondeur comment fonctionne le MBSL-4000FH5-5 et le clavier
-	- création d'une alimentation basse tension (pour travailler en toute sécurité)
-	- achat d'une EEPROM compatible (pins, TTL, …)
-	- création d'une rom de test
+	- programmer la rom de test sur une EEPROM compatible
 	- mesure des signaux sur tout le pcb
 
 - Vérifier le fonctionnement du TS9347 quand X>=40 (accès en mémoire seulement / retour à 0 fixé)
+
+- Vérifier toutes les combinaisons de commandes du TS9347
 
 
 
 Code:
 
 - Nettoyage du code
+
+- Utiliser le répertoire de travail que par une instance à la fois (LockFile/flock) (+ajout d'un argument pour spécifier un répertoir de travail alternatif?)
 
 
 
