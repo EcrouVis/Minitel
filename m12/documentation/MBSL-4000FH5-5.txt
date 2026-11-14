@@ -22,11 +22,15 @@ MOVX A, @R0 ;On vient lire le registre
 ;ou bien
 MOVX @R0, A ;On vient écrire dans le registre
 
+La puce est cadencée par un cristal externe à 38.4kHz qui continue d'osciller même si le minitel n'est pas branché tant qu'il y a une source d'énergie de secours.
+
 
 
 	Le circuit de gestion du reset
 
-Il permet d'une part de mettre en dormance toute la puce excepté l'horloge temps réel lorsque le minitel n'est plus alimenté par l'alimentation générale et d'autre part il renvoi le signal de reset au 80C32 quand le système a terminé de s'initialiser (supposition).
+Il permet d'une part de mettre en dormance toute la puce excepté l'horloge temps réel lorsque le minitel n'est plus alimenté par l'alimentation générale et d'autre part il renvoi le signal de reset au 80C32 quand le système a terminé de s'initialiser.
+
+Quand le signal de reset venant du chien de garde / détecteur de sous tension dépasse 2.5V, il envoie un signal de reset au 80C32 et quand le signal redevient 0V, il attend 130ms avant de désactiver le signal de reset.
 
 
 
@@ -46,6 +50,8 @@ Voici à quoi sont liés probablement les bits du registre dans le circuit (supp
 	b5: met sous tension le tube cathodique
 	b6: active l'alimentation sur la prise DIN (M/V L6720)
 	b7: non utilisé, l'utilisateur est dans les menus du M12 (dialogue local)?
+
+A l'allumage, chaque sortie reste à 0V. Ce port est peut-être désactivé au démarrage.
 
 
 
@@ -85,7 +91,7 @@ Ce registre est en lecture/écriture et donne l'état général de la puce. Chaq
 Voici ce qui a été déduit à ce jour:
 	b0 et b1: bits liés à la réception de la liaison série (mis à 1 et 0 respectivement lors de l'initialisation / les données du tampon ne sont gardées que si les 2 bits sont à 0)
 	b2 et b3: bits liés à la transmission de la liaison série - en attente de transmission? (supposition) (mis à 0 lors de l'initialisation / les données ne sont envoyées que si les 2 bits sont à 1)
-	b4: autorise l'activation du signal de reset du 80C32 si la puce reçoit un signal de reset? (supposition/très peu probable) (mis à 1 au début puis 0 après le premier reset?) (mis à 1 lors de l'initialisation / jamais utilisé ou modifié par la suite)
+	b4: la date de l'horloge temps réel n'est plus à jour/premier démarrage du cpld? (supposition) (mis à 1 au début puis 0 après le premier reset?) (réinitialise la date de l'horloge temps réel si 1)
 	b5: un message est arrivé sur Rx et se trouve dans le tampon d'entrée - se met à 1 automatiquement et est remis à 0 quand 0x50 est lue (le programme du minitel continue de lire 0x50 jusqu'à ce que ce bit soit mis à 0)
 	b6: la date de l'horloge temps réel a changé (une minute a passé) - se met à 1 automatiquement et est remis à 0 quand la date est lue (sûrement quand 0x40 est lue)
 	b7: initialisation de la puce? (mis à 1, attente puis mis à 0 lors de l'initialisation / action effectuée si 1 - à investiguer)
