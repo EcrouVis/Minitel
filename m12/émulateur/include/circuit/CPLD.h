@@ -17,7 +17,7 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		void WATCHDOGChangeIn(bool b);
 		void serialChangeIn(bool b);
 		
-		void CLKTickIn();
+		void CLKTickIn9600Hz();
 		
 		void subscribenCSRAM(std::function<void(bool)> f);
 		void subscribeAL(std::function<void(unsigned char)> f);
@@ -26,19 +26,19 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		void subscribeRST(std::function<void(bool)> f);
 		void subscribeSerial(std::function<void(bool)> f);
 		
-		void updateRx();
-		void updateTx();
-		void checkRTCChange();
-		
 	private:
 		bool nCS=true;
 		bool nOE=true;
 		bool nWE=true;
 		bool ALE=true;
 		bool WATCHDOG=true;
+		bool RST_out=true;
+		unsigned short RST_div=0;
 		
 		unsigned char S_in_step=0;
 		unsigned char S_out_step=0;
+		unsigned char S_in_div=0;
+		unsigned char S_out_div=0;
 		bool S_in=false;
 		
 		unsigned char address=0;
@@ -50,8 +50,9 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		std::function<void(bool)> sendRST=[](bool b){};
 		std::function<void(bool)> sendSerial=[](bool b){};
 		
-		unsigned char STATUS=0x10;
-		unsigned char IO=0xFF;//0x70
+		unsigned char STATUS=0x80;
+		unsigned char SCON=0;
+		unsigned char IO=0x80;//0x70
 		unsigned char SBUF_in;
 		unsigned char SBUF_in_tmp;
 		unsigned char SBUF_out;
@@ -63,5 +64,9 @@ class MBSL_4000FH5_5{//work in progress - logic circuit deduced with the 80C32 b
 		
 		void UC2CPLD();
 		void CPLD2UC();
+		
+		void updateRx();
+		void updateTx();
+		void checkRTCChange();
 };
 #endif

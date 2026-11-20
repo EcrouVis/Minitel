@@ -503,13 +503,13 @@ void thread_circuit_main(Mailbox* p_mb_circuit,Mailbox* p_mb_video,GlobalState* 
 		modem.CLKTickIn();//to resample ATxI input
 	};
 	CLKs.subscribe14745600Hz(CLKTick14745600);
-	auto CLKTick600=[&kb,&cpld,&rtcn](){
-		cpld.CLKTickIn();
+	auto CLKTick600=[&kb,&rtcn](){
 		kb.CLKTickIn();
 		rtcn.CLKTickIn600Hz();
 	};
 	CLKs.subscribe600Hz(CLKTick600);
-	auto CLKTick9600=[&smn,&wt,&rtcn](){
+	auto CLKTick9600=[&smn,&wt,&rtcn,&cpld](){
+		cpld.CLKTickIn9600Hz();
 		smn.CLKTickIn9600Hz();
 		wt.incrementTimer();
 		rtcn.CLKTickIn9600Hz();

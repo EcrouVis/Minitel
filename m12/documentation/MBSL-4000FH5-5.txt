@@ -117,8 +117,8 @@ Adresse: 0x51 (lecture seule)
 Ce registre donne l'état général de la puce.
 
 Voici ce qui a été déduit à ce jour:
-	b0: bit de stop non trouvé
-	b1: perte de données / débordement de mémoire
+	b0: bit de stop non trouvé - se met à 1 automatiquement et est remis à 0 après que ce registre soit lu
+	b1: perte de données / débordement de mémoire - se met à 1 automatiquement et est remis à 0 après que ce registre soit lu
 	b2: émission activée
 	b3: émission terminée / envoi possible
 	b4: ? (la rom Bz6 réinitialise la date de l'horloge temps réel si 1)

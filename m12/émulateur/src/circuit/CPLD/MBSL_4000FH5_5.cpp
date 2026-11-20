@@ -65,12 +65,15 @@ void MBSL_4000FH5_5::nCSChangeIn(bool b){
 	this->sendnCSRAM(!b);
 }
 void MBSL_4000FH5_5::WATCHDOGChangeIn(bool b){
-	//if ((bool)(this->STATUS&0x10)) 
-		this->sendRST(b);
-	if ((!this->WATCHDOG)&&b){
-		this->STATUS&=~0x10;
-		this->IO=0;//TODO: fix/guess
+	if (b&&!this->WATCHDOG){
 		this->sendPIO(this->IO);
+		this->RST_out=true;
+		this->sendRST(this->RST_out);
+	}
+	if(this->WATCHDOG&&!b){
+		this->RST_out=true;
+		this->sendRST(this->RST_out);
+		this->RST_div=0;
 	}
 	this->WATCHDOG=b;
 }
@@ -100,10 +103,27 @@ void MBSL_4000FH5_5::serialChangeIn(bool b){
 	this->S_in=b;
 }
 
-void MBSL_4000FH5_5::CLKTickIn(){
+void MBSL_4000FH5_5::CLKTickIn9600Hz(){
+	constexpr unsigned char step[8]={1,4,8,16,32,64,0,0};
+	this->S_out_div+=step[this->SCON&0x07];
+	this->S_in_div+=step[(this->SCON>>3)&0x07];
+	if (this->S_out_div>=128){
+		this->S_out_div-=128;
+		this->updateTx();
+	}
+	if (this->S_in_div>=128){
+		this->S_in_div-=128;
+		this->updateRx();
+	}
 	
-	this->updateRx();
-	this->updateTx();
+	if (this->RST_out&&!this->WATCHDOG){
+		this->RST_div++;
+		if (this->RST_div>=1248){//130ms
+			this->RST_div=0;
+			this->RST_out=false;
+			this->sendRST(this->RST_out);
+		}
+	}
 	
 	this->checkRTCChange();
 }
@@ -124,8 +144,12 @@ void MBSL_4000FH5_5::updateRx(){
 			
 			case 10:
 				this->SBUF_in=this->SBUF_in_tmp;
-				if (((bool)(this->STATUS&(1<<5)))||(!this->S_in)) this->STATUS|=0x03;
-				else this->STATUS&=0xFC;
+				if ((bool)(this->STATUS&(1<<5))){
+					this->STATUS|=0x02;
+				}
+				else this->STATUS&=~0x02;
+				if (!this->S_in) this->STATUS|=0x01;
+				else this->STATUS&=~0x01;
 				this->STATUS|=1<<5;
 				this->S_in_step=0;
 				break;
@@ -140,35 +164,23 @@ void MBSL_4000FH5_5::updateTx(){
 			case 1:this->sendSerial(false);this->S_out_step++;break;
 			
 			case 2:
-			case 4:
-			case 6:
-			case 8:
-			case 10:
-			case 12:
-			case 14:
-			case 16:
-			case 18:
-			case 20:
-			case 21:
-			case 22:
-			case 23:this->S_out_step++;break;
-			
 			case 3:
+			case 4:
 			case 5:
+			case 6:
 			case 7:
+			case 8:
 			case 9:
-			case 11:
-			case 13:
-			case 15:
-			case 17:
 				this->sendSerial((bool)(this->SBUF_out&1));
 				this->SBUF_out=this->SBUF_out>>1;
 				this->S_out_step++;
 				break;
 			
-			case 19:this->sendSerial(true);this->S_out_step++;break;
-			
-			case 24:this->S_out_step=0;this->STATUS|=0x0C;break;
+			case 10:
+				this->sendSerial(true);
+				this->S_out_step=0;
+				this->STATUS|=0x08;
+				break;
 		}
 	}
 }
@@ -202,19 +214,21 @@ void MBSL_4000FH5_5::UC2CPLD(){
 	switch(this->address){
 		case 0x50://serial buffer out
 			//printf("to keyboard %02X\n",this->data);
-			this->STATUS&=0xF3;
-			//this->STATUS|=(1<<4);
+			this->STATUS&=~0x08;
 			this->SBUF_out=this->data;
 			this->S_out_step=1;
 			break;
-		case 0x51:
-			if ((bool)((this->data^this->STATUS)&0x10)){
-				//this->sendRST(this->WATCHDOG&&(bool)(this->data&0x10));
+		case 0x51://SCON
+			this->SCON=this->data;
+			if (this->data&0x80){
+				this->STATUS&=0xF4;
+				this->STATUS|=0x08;
+				this->SBUF_in=0;//TODO: clean serial state
 			}
-			this->STATUS=this->data;
-			this->STATUS|=0x0C;
+			if (((bool)(this->data&0x40))&&(this->data&0x07)<6) this->STATUS|=0x04;
+			else this->STATUS&=~0x04;
 			break;
-		case 0x70://speculations: 
+		case 0x70:
 		// 0: MC/nBC 
 		// 1: modem/nDMTF 
 		// 2: enable comunication to keyboard and reset keyboard
@@ -222,10 +236,10 @@ void MBSL_4000FH5_5::UC2CPLD(){
 		// 4: close modem line
 		// 5: enable CRT 
 		// 6: M/V - power to DIN plug
-		// 7: not used???
+		// 7: NC
 			//printf("to CPLD IO %02X\n",this->data);
-			this->IO=this->data;
-			this->sendPIO(this->data);
+			this->IO=this->data|0x80;
+			this->sendPIO(this->IO);
 			break;
 		case 0x40:
 			this->STATUS&=~(1<<6);
@@ -280,26 +294,14 @@ void MBSL_4000FH5_5::CPLD2UC(){
 	struct tm date;
 	switch(this->address){
 		case 0x50://serial buffer in
-		{
 			this->sendD(this->SBUF_in);
 			this->STATUS&=~(1<<5);
 			break;
-		}
-		case 0x51://0x51: R/W
-		// 0/1: stop bit not detected? / other error? - if both bits aren't set, set i25.6 after reading SBUFin (accept data)
-		// 2/3: wait for data? / transmit succed? - accept data to SBUFout when both bits and i22.6 are set
-		// 4: enable watchdog timer output? 
-		// 5: data in SBUFin 
-		// 6: RTC time change 
-		// 7: reset/power up?
-		{
-			unsigned char d=this->STATUS;
-			//printf("from CPLD status %02X\n",d);
-			this->sendD(d);
+		case 0x51://STATUS
+			this->sendD(this->STATUS);
+			this->STATUS&=0x3C;
 			break;
-		}
 		case 0x40://Minutes BCD format
-			this->STATUS&=~(1<<6);
 			ts=std::time(NULL);
 			if (this->OS_RTC.load(std::memory_order_relaxed)) date=*std::localtime(&ts);
 			else{
@@ -354,9 +356,6 @@ void MBSL_4000FH5_5::CPLD2UC(){
 			}
 			date.tm_year+=1900;
 			this->sendD(this->D2BCD((unsigned char)(date.tm_year/100)));
-			break;
-		case 0x70:
-			this->sendD(this->IO);
 			break;
 		default:
 			break;
