@@ -219,14 +219,19 @@ void MBSL_4000FH5_5::UC2CPLD(){
 			this->S_out_step=1;
 			break;
 		case 0x51://SCON
-			this->SCON=this->data;
 			if (this->data&0x80){
-				this->STATUS&=0xF4;
-				this->STATUS|=0x08;
-				this->SBUF_in=0;//TODO: clean serial state
+				this->SCON=0x80;
+				this->STATUS&=0xD0;
+				this->SBUF_in=0;//clearing SBUF takes time in reality
+				this->S_in_step=0;
+				this->S_out_step=0;
+				this->sendSerial(true);
 			}
-			if (((bool)(this->data&0x40))&&(this->data&0x07)<6) this->STATUS|=0x04;
-			else this->STATUS&=~0x04;
+			else{
+				this->SCON=this->data;
+				if (((bool)(this->data&0x40))&&(this->data&0x07)<6) this->STATUS|=0x04;
+				else this->STATUS&=~0x04;
+			}
 			break;
 		case 0x70:
 		// 0: MC/nBC 

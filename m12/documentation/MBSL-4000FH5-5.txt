@@ -99,7 +99,7 @@ Voici ce qui a été déduit:
 		6: non défini, bloque la réception
 		7: non défini, bloque la réception
 	b6: active l'émission (supposition/très probable)
-	b7: remet à zéro l'émission et la réception (drapeaux + registres) et bloque l'émission
+	b7: remet à zéro l'émission et la réception (drapeaux + registres à 0 pour tout ce qui est lié à la liaison série) et bloque l'émission (prioritaire par rapport aux autres bits)
 
 
 	L'horloge temps réel
