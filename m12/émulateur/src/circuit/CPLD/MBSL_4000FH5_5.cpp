@@ -357,6 +357,10 @@ void MBSL_4000FH5_5::CPLD2UC(){
 			date.tm_year+=1900;
 			this->sendD(this->D2BCD((unsigned char)(date.tm_year/100)));
 			break;
+		case 0x46 ... 0x4F:
+		case 0x52 ... 0x5F:
+			this->sendD(0x00);
+			break;
 		default:
 			break;
 	}

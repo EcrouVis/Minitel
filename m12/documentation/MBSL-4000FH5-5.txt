@@ -30,6 +30,14 @@ La patte non connectée est toujours à 1.
 
 
 
+	Le circuit de démultiplexage et de sélection de puce
+
+Ce circuit permet de garder en mémoire la partie basse de l'adresse et le renvoie au reste du circuit pendant que le bus est occupé par des données grâce au signal ALE. Il permet aussi de choisir une entrée sortie si l'adresse est valide, le signal de sélection de la puce est bas et nRD ou nWR est bas.
+
+Le signal de sélection de la puce est inversée et renvoyé à la mémoire volatile externe pour choisir soit la mémoire externe soit les entrées sorties.
+
+
+
 	Le circuit de gestion du reset
 
 Il permet d'une part de mettre en dormance toute la puce excepté l'horloge temps réel lorsque le minitel n'est plus alimenté par l'alimentation générale et d'autre part il renvoi le signal de reset au 80C32 quand le système a terminé de s'initialiser.
