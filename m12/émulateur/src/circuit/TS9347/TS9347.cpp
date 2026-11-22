@@ -801,7 +801,6 @@ unsigned char TS9347wVRAM::getD(bool MP){
 int TS9347wVRAM::pointer2RAMAddress(bool MP){
 	unsigned char r1=this->Rx[MP?6:4].load(std::memory_order_relaxed);
 	unsigned char r2=this->Rx[MP?7:5].load(std::memory_order_relaxed);
-	//TODO: get the ram address when X>=40 / case when in 80 column mode and returning from the local dialog (fnct+T F mem mem)
 	
 	int A=(r1&0xE0)<<7;
 	A|=(r2&0x40)<<5;
@@ -1036,137 +1035,169 @@ void TS9347wVRAM::IND(){
 }
 
 void TS9347wVRAM::MVB(){
+	int s=!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08);
+	int d=!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x04);
 	switch (this->cmd_step){
-		default:
-			this->cmd_step++;
-			break;
-			
-		case 5:
-		{
-			bool b=(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x04);
-			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(b)].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			this->VRAM[this->pointer2RAMAddress(!b)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			
+		case 1:
+			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(s)].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			this->cmd_step=2;
-			if (this->incrementX(true)){
-				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
-					this->cmd_step=6;
-				}
-				else{
-					this->incrementY(true);
-				}
-			}
-			if (this->incrementX(false)){
-				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
-					this->cmd_step=6;
-				}
-			}
 			break;
-		}
-		
-		case 6:
+		case 2:
+			this->incrementX(s);
+			this->cmd_step=3;
+			break;
+		case 3:
+			this->VRAM[this->pointer2RAMAddress(d)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+			this->cmd_step=4;
+			break;
+		case 4:
+			this->incrementX(d);
+			if ((bool)(this->STATUS.load(std::memory_order_relaxed)&(this->LXm_MASK|this->LXa_MASK))){
+				this->cmd_step=5;
+				break;
+			}
+			[[fallthrough]];
+		case 0:
+			this->STATUS.fetch_and((unsigned char)~(this->LXm_MASK|this->LXa_MASK|this->Al_MASK));
+			if((this->getX(s)&39)==39){
+				this->STATUS.fetch_or((unsigned char)(s?this->LXm_MASK:this->LXa_MASK));
+			}
+			if((this->getX(d)&39)==39){
+				this->STATUS.fetch_or((unsigned char)(d?this->LXm_MASK:this->LXa_MASK));
+			}
+			this->cmd_step=1;
+			break;
+		case 5:
 			this->STATUS.fetch_and((unsigned char)~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
 			break;
 	}
 }
 
 void TS9347wVRAM::MVD(){
+	int s=!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08);
+	int d=!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x04);
 	switch (this->cmd_step){
-		default:
-			this->cmd_step++;
-			break;
-			
-		case 5:
-		{
-			bool b=(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x04);
-			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(b)].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			this->VRAM[this->pointer2RAMAddress(!b)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			this->incrementB(true);
-			this->incrementB(false);
-			this->cmd_step++;
-			break;
-		}
-		case 9:
-		{
-			bool b=(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x04);
-			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(b)].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			this->VRAM[this->pointer2RAMAddress(!b)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			
+		case 1:
+			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(s)].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			this->cmd_step=2;
-			this->addB(true,3);
-			this->addB(false,3);
-			if (this->incrementX(true)){
-				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
-					this->cmd_step=10;
-				}
-				else{
-					this->incrementY(true);
-				}
-			}
-			if (this->incrementX(false)){
-				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
-					this->cmd_step=10;
-				}
-			}
 			break;
-		}	
-		case 10:
+		case 2:
+			this->incrementB(s);
+			this->cmd_step=3;
+			break;
+		case 3:
+			this->VRAM[this->pointer2RAMAddress(d)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+			this->cmd_step=4;
+			break;
+		case 4:
+			this->incrementB(d);
+			this->cmd_step=5;
+			break;
+		case 5:
+			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(s)].load(std::memory_order_relaxed),std::memory_order_relaxed);
+			this->cmd_step=6;
+			break;
+		case 6:
+			this->addB(s,3);
+			this->incrementX(s);
+			this->cmd_step=7;
+			break;
+		case 7:
+			this->VRAM[this->pointer2RAMAddress(d)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+			this->cmd_step=8;
+			break;
+		case 8:
+			this->addB(d,3);
+			this->incrementX(d);
+			if ((bool)(this->STATUS.load(std::memory_order_relaxed)&(this->LXm_MASK|this->LXa_MASK))){
+				this->cmd_step=9;
+				break;
+			}
+			[[fallthrough]];
+		case 0:
+			this->STATUS.fetch_and((unsigned char)~(this->LXm_MASK|this->LXa_MASK|this->Al_MASK));
+			if((this->getX(s)&39)==39){
+				this->STATUS.fetch_or((unsigned char)(s?this->LXm_MASK:this->LXa_MASK));
+			}
+			if((this->getX(d)&39)==39){
+				this->STATUS.fetch_or((unsigned char)(d?this->LXm_MASK:this->LXa_MASK));
+			}
+			this->cmd_step=1;
+			break;
+		case 9:
 			this->STATUS.fetch_and((unsigned char)~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
 			break;
 	}
 }
 
 void TS9347wVRAM::MVT(){
+	int s=!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08);
+	int d=!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x04);
 	switch (this->cmd_step){
-		default:
-			this->cmd_step++;
-			break;
-			
-		case 5:
-		{
-			bool b=(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x04);
-			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(b)].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			this->VRAM[this->pointer2RAMAddress(!b)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			this->incrementB(true);
-			this->incrementB(false);
-			this->cmd_step++;
-			break;
-		}
-		case 9:
-		{
-			bool b=(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x04);
-			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(b)].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			this->VRAM[this->pointer2RAMAddress(!b)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			this->incrementB(true);
-			this->incrementB(false);
-			this->cmd_step++;
-			break;
-		}
-		case 13:
-		{
-			bool b=(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x04);
-			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(b)].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			this->VRAM[this->pointer2RAMAddress(!b)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
-			
+		case 1:
+			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(s)].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			this->cmd_step=2;
-			this->addB(true,2);
-			this->addB(false,2);
-			if (this->incrementX(true)){
-				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
-					this->cmd_step=14;
-				}
-				else{
-					this->incrementY(true);
-				}
-			}
-			if (this->incrementX(false)){
-				if (!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02)){//stop
-					this->cmd_step=14;
-				}
-			}
 			break;
-		}
-		case 14:
+		case 2:
+			this->incrementB(s);
+			this->cmd_step=3;
+			break;
+		case 3:
+			this->VRAM[this->pointer2RAMAddress(d)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+			this->cmd_step=4;
+			break;
+		case 4:
+			this->incrementB(d);
+			this->cmd_step=5;
+			break;
+		case 5:
+			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(s)].load(std::memory_order_relaxed),std::memory_order_relaxed);
+			this->cmd_step=6;
+			break;
+		case 6:
+			this->incrementB(s);
+			this->cmd_step=7;
+			break;
+		case 7:
+			this->VRAM[this->pointer2RAMAddress(d)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+			this->cmd_step=8;
+			break;
+		case 8:
+			this->incrementB(d);
+			this->cmd_step=9;
+			break;
+		case 9:
+			this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(s)].load(std::memory_order_relaxed),std::memory_order_relaxed);
+			this->cmd_step=10;
+			break;
+		case 10:
+			this->addB(s,2);
+			this->incrementX(s);
+			this->cmd_step=11;
+			break;
+		case 11:
+			this->VRAM[this->pointer2RAMAddress(d)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
+			this->cmd_step=12;
+			break;
+		case 12:
+			this->addB(d,2);
+			this->incrementX(d);
+			if ((bool)(this->STATUS.load(std::memory_order_relaxed)&(this->LXm_MASK|this->LXa_MASK))){
+				this->cmd_step=13;
+				break;
+			}
+			[[fallthrough]];
+		case 0:
+			this->STATUS.fetch_and((unsigned char)~(this->LXm_MASK|this->LXa_MASK|this->Al_MASK));
+			if((this->getX(s)&39)==39){
+				this->STATUS.fetch_or((unsigned char)(s?this->LXm_MASK:this->LXa_MASK));
+			}
+			if((this->getX(d)&39)==39){
+				this->STATUS.fetch_or((unsigned char)(d?this->LXm_MASK:this->LXa_MASK));
+			}
+			this->cmd_step=1;
+			break;
+		case 13:
 			this->STATUS.fetch_and((unsigned char)~(this->BUSY_MASK|this->Al_MASK|this->LXm_MASK|this->LXa_MASK),std::memory_order_relaxed);
 			break;
 	}
