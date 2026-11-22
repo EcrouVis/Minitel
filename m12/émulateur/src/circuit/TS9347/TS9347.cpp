@@ -1043,7 +1043,9 @@ void TS9347wVRAM::MVB(){
 			this->cmd_step=2;
 			break;
 		case 2:
-			this->incrementX(s);
+			if(this->incrementX(s)){
+				this->STATUS.fetch_or((unsigned char)(s?this->LXm_MASK:this->LXa_MASK));
+			}
 			this->cmd_step=3;
 			break;
 		case 3:
@@ -1051,20 +1053,16 @@ void TS9347wVRAM::MVB(){
 			this->cmd_step=4;
 			break;
 		case 4:
-			this->incrementX(d);
-			if ((bool)(this->STATUS.load(std::memory_order_relaxed)&(this->LXm_MASK|this->LXa_MASK))){
+			if(this->incrementX(d)){
+				this->STATUS.fetch_or((unsigned char)(d?this->LXm_MASK:this->LXa_MASK));
+			}
+			if ((!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02))&&(bool)(this->STATUS.load(std::memory_order_relaxed)&(this->LXm_MASK|this->LXa_MASK))){
 				this->cmd_step=5;
 				break;
 			}
 			[[fallthrough]];
 		case 0:
 			this->STATUS.fetch_and((unsigned char)~(this->LXm_MASK|this->LXa_MASK|this->Al_MASK));
-			if((this->getX(s)&39)==39){
-				this->STATUS.fetch_or((unsigned char)(s?this->LXm_MASK:this->LXa_MASK));
-			}
-			if((this->getX(d)&39)==39){
-				this->STATUS.fetch_or((unsigned char)(d?this->LXm_MASK:this->LXa_MASK));
-			}
 			this->cmd_step=1;
 			break;
 		case 5:
@@ -1099,7 +1097,9 @@ void TS9347wVRAM::MVD(){
 			break;
 		case 6:
 			this->addB(s,3);
-			this->incrementX(s);
+			if(this->incrementX(s)){
+				this->STATUS.fetch_or((unsigned char)(s?this->LXm_MASK:this->LXa_MASK));
+			}
 			this->cmd_step=7;
 			break;
 		case 7:
@@ -1108,20 +1108,16 @@ void TS9347wVRAM::MVD(){
 			break;
 		case 8:
 			this->addB(d,3);
-			this->incrementX(d);
-			if ((bool)(this->STATUS.load(std::memory_order_relaxed)&(this->LXm_MASK|this->LXa_MASK))){
+			if(this->incrementX(d)){
+				this->STATUS.fetch_or((unsigned char)(d?this->LXm_MASK:this->LXa_MASK));
+			}
+			if ((!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02))&&(bool)(this->STATUS.load(std::memory_order_relaxed)&(this->LXm_MASK|this->LXa_MASK))){
 				this->cmd_step=9;
 				break;
 			}
 			[[fallthrough]];
 		case 0:
 			this->STATUS.fetch_and((unsigned char)~(this->LXm_MASK|this->LXa_MASK|this->Al_MASK));
-			if((this->getX(s)&39)==39){
-				this->STATUS.fetch_or((unsigned char)(s?this->LXm_MASK:this->LXa_MASK));
-			}
-			if((this->getX(d)&39)==39){
-				this->STATUS.fetch_or((unsigned char)(d?this->LXm_MASK:this->LXa_MASK));
-			}
 			this->cmd_step=1;
 			break;
 		case 9:
@@ -1172,7 +1168,9 @@ void TS9347wVRAM::MVT(){
 			break;
 		case 10:
 			this->addB(s,2);
-			this->incrementX(s);
+			if(this->incrementX(s)){
+				this->STATUS.fetch_or((unsigned char)(s?this->LXm_MASK:this->LXa_MASK));
+			}
 			this->cmd_step=11;
 			break;
 		case 11:
@@ -1181,20 +1179,16 @@ void TS9347wVRAM::MVT(){
 			break;
 		case 12:
 			this->addB(d,2);
-			this->incrementX(d);
-			if ((bool)(this->STATUS.load(std::memory_order_relaxed)&(this->LXm_MASK|this->LXa_MASK))){
+			if(this->incrementX(d)){
+				this->STATUS.fetch_or((unsigned char)(d?this->LXm_MASK:this->LXa_MASK));
+			}
+			if ((!(bool)(this->Rx[0].load(std::memory_order_relaxed)&0x02))&&(bool)(this->STATUS.load(std::memory_order_relaxed)&(this->LXm_MASK|this->LXa_MASK))){
 				this->cmd_step=13;
 				break;
 			}
 			[[fallthrough]];
 		case 0:
 			this->STATUS.fetch_and((unsigned char)~(this->LXm_MASK|this->LXa_MASK|this->Al_MASK));
-			if((this->getX(s)&39)==39){
-				this->STATUS.fetch_or((unsigned char)(s?this->LXm_MASK:this->LXa_MASK));
-			}
-			if((this->getX(d)&39)==39){
-				this->STATUS.fetch_or((unsigned char)(d?this->LXm_MASK:this->LXa_MASK));
-			}
 			this->cmd_step=1;
 			break;
 		case 13:
