@@ -1431,10 +1431,6 @@ void TS9347wVRAM::TSM(){
 			this->cmd_step++;
 			break;
 		case 3:
-		{
-			bool b=this->getB(true);
-			if (b) this->addB(true,3);
-			
 			if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)){//read
 				this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(true)].load(std::memory_order_relaxed),std::memory_order_relaxed);
 				this->incrementB(true);
@@ -1446,7 +1442,6 @@ void TS9347wVRAM::TSM(){
 				this->VRAM[this->pointer2RAMAddress(true)].store(this->Rx[2].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			}
 			
-			//if (!b) 
 			this->addB(true,3);
 			
 			if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x01)){//inc
@@ -1463,7 +1458,6 @@ void TS9347wVRAM::TSM(){
 			
 			this->cmd_step++;
 			break;
-		}
 		case 5:
 			this->late_cmd_end=true;
 			break;
@@ -1480,10 +1474,6 @@ void TS9347wVRAM::TSA(){
 			this->cmd_step++;
 			break;
 		case 3:
-		{
-			bool b=this->getB(false);
-			if (b) this->addB(false,3);
-			
 			if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)){//read
 				this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(false)].load(std::memory_order_relaxed),std::memory_order_relaxed);
 				this->incrementB(false);
@@ -1495,7 +1485,6 @@ void TS9347wVRAM::TSA(){
 				this->VRAM[this->pointer2RAMAddress(false)].store(this->Rx[2].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			}
 			
-			//if (!b) 
 			this->addB(false,3);
 			
 			if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x01)){//inc
@@ -1510,7 +1499,6 @@ void TS9347wVRAM::TSA(){
 			
 			this->cmd_step++;
 			break;
-		}
 		case 5:
 			this->late_cmd_end=true;
 			break;
@@ -1527,15 +1515,10 @@ void TS9347wVRAM::CLS(){
 			this->cmd_step++;
 			break;
 		case 3:
-		{
-			bool b=this->getB(true);
-			if (b) this->addB(true,3);
-			
 			this->VRAM[this->pointer2RAMAddress(true)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			this->incrementB(true);
 			this->VRAM[this->pointer2RAMAddress(true)].store(this->Rx[2].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			
-			//if (!b) 
 			this->addB(true,3);
 			
 			if (this->incrementX(true)){
@@ -1546,7 +1529,6 @@ void TS9347wVRAM::CLS(){
 				this->cmd_step=0;
 			}
 			break;
-		}
 		case 5:
 			this->incrementY(true);
 			this->cmd_step=0;
@@ -1564,10 +1546,6 @@ void TS9347wVRAM::TLM(){
 			this->cmd_step++;
 			break;
 		case 4:
-		{
-			bool b=this->getB(true);
-			if (b) this->addB(true,3);
-			
 			if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)){//read
 				this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(true)].load(std::memory_order_relaxed),std::memory_order_relaxed);
 				this->incrementB(true);
@@ -1599,7 +1577,6 @@ void TS9347wVRAM::TLM(){
 			
 			this->cmd_step++;
 			break;
-		}
 		case 7:
 			this->late_cmd_end=true;
 			break;
@@ -1616,10 +1593,6 @@ void TS9347wVRAM::TLA(){
 			this->cmd_step++;
 			break;
 		case 4:
-		{
-			bool b=this->getB(false);
-			if (b) this->addB(false,3);
-			
 			if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x08)){//read
 				this->Rx[1].store(this->VRAM[this->pointer2RAMAddress(false)].load(std::memory_order_relaxed),std::memory_order_relaxed);
 				this->incrementB(false);
@@ -1635,8 +1608,6 @@ void TS9347wVRAM::TLA(){
 				this->VRAM[this->pointer2RAMAddress(false)].store(this->Rx[3].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			}
 			
-			//if (b) this->addB(false,3);
-			//else 
 			this->addB(false,2);
 			
 			if ((bool)(this->Rx[0].load(std::memory_order_relaxed)&0x01)){//inc
@@ -1651,7 +1622,6 @@ void TS9347wVRAM::TLA(){
 			
 			this->cmd_step++;
 			break;
-		}
 		case 7:
 			this->late_cmd_end=true;
 			break;
@@ -1668,18 +1638,12 @@ void TS9347wVRAM::CLL(){
 			this->cmd_step++;
 			break;
 		case 4:
-		{
-			bool b=this->getB(true);
-			if (b) this->addB(true,3);
-			
 			this->VRAM[this->pointer2RAMAddress(true)].store(this->Rx[1].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			this->incrementB(true);
 			this->VRAM[this->pointer2RAMAddress(true)].store(this->Rx[2].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			this->incrementB(true);
 			this->VRAM[this->pointer2RAMAddress(true)].store(this->Rx[3].load(std::memory_order_relaxed),std::memory_order_relaxed);
 			
-			//if (b) this->addB(true,3);
-			//else 
 			this->addB(true,2);
 			
 			if (this->incrementX(true)){
@@ -1690,7 +1654,6 @@ void TS9347wVRAM::CLL(){
 				this->cmd_step=0;
 			}
 			break;
-		}
 		case 6:
 			this->incrementY(true);
 			this->cmd_step=0;
