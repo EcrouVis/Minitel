@@ -21,7 +21,9 @@ void TS9347wVRAM::DSChangeIn(bool b){
 					unsigned int addr=this->ADDR_BUF.load(std::memory_order_relaxed);
 					if ((addr&0x07)==0){
 						this->debug_cmd((unsigned char)(addr&0xFF),this->STATUS.load(std::memory_order_relaxed),true);
-						this->sendD(this->STATUS.load(std::memory_order_relaxed));
+						unsigned char s=this->STATUS.load(std::memory_order_relaxed);
+						if ((bool)(s&this->BUSY_MASK)) this->sendD(s&(~this->RESET_MASK));
+						else this->sendD(s);
 					}
 					else{
 						this->debug_cmd((unsigned char)(addr&0xFF),this->Rx[addr&0x07].load(std::memory_order_relaxed),true);
@@ -919,8 +921,15 @@ void TS9347wVRAM::executeCommand(){
 			case 0xF0://MVT
 				this->MVT();
 				break;
-			default://0x1X 0xAX 0xCX
-				this->NOP();
+				
+			case 0x10:
+				this->C1X();
+				break;
+			case 0xA0:
+				this->CAX();
+				break;
+			case 0xC0://MV no buffer
+				this->CCX();
 				break;
 		}
 	}
@@ -1685,6 +1694,76 @@ void TS9347wVRAM::CLL(){
 		case 6:
 			this->incrementY(true);
 			this->cmd_step=0;
+			break;
+	}
+}
+
+void TS9347wVRAM::C1X(){//TODO: investigate timmings/changes / not accurate
+	switch (this->cmd_step){
+		case 0:
+			this->STATUS.fetch_and((unsigned char)~this->RESET_MASK,std::memory_order_relaxed);
+			this->cmd_step=1;
+			break;
+		case 1:
+		{
+			unsigned char cmd=this->Rx[0].load(std::memory_order_relaxed);
+			if ((bool)(cmd&0x08)){
+				this->STATUS.fetch_or(this->LXm_MASK,std::memory_order_relaxed);
+				if ((bool)(cmd&0x01)){
+					this->incrementY(true);
+					this->STATUS.fetch_or(this->Al_MASK,std::memory_order_relaxed);
+				}
+			}
+			if (!(bool)(cmd&0x04)) this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
+			break;
+		}
+	}
+}
+
+void TS9347wVRAM::CAX(){//TODO: investigate timmings/changes / not accurate at all
+	//R1 (work register), R6 and R7 can change
+	switch (this->cmd_step){
+		case 0:
+			this->STATUS.fetch_and((unsigned char)~this->RESET_MASK,std::memory_order_relaxed);
+			this->cmd_step=1;
+			break;
+		case 1:
+		{
+			unsigned char cmd=this->Rx[0].load(std::memory_order_relaxed);
+			if ((bool)(((bool)(cmd&0x80))?(cmd&0x02):cmd)){
+				//cmd 0xA1, 0xA4 and 0xA5 mess with the video output while they are running
+				if (cmd!=0x21&&cmd!=0x24&&cmd!=0x25){
+					this->VRAM[this->pointer2RAMAddress(true)].store(0x00,std::memory_order_relaxed);//not accurate
+					this->cmd_step=2;
+				}
+			}
+			else this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
+			break;
+		}
+		case 2:
+			if (this->incrementX(true)) this->incrementY(true);
+			this->cmd_step=1;
+			break;
+	}
+}
+
+void TS9347wVRAM::CCX(){//MV no buffer / execution time: 2+1*n? / TODO: investigate timmings/changes / not accurate
+	switch (this->cmd_step){
+		case 0:
+			this->STATUS.fetch_and((unsigned char)~this->RESET_MASK,std::memory_order_relaxed);
+			this->cmd_step=1;
+			break;
+		case 1:
+		{
+			unsigned char cmd=this->Rx[0].load(std::memory_order_relaxed);
+			if ((bool)(cmd&0x02)){
+				this->incrementY(true);
+			}
+			else this->cmd_step=2;
+			break;
+		}
+		case 2:
+			this->STATUS.fetch_and((unsigned char)~this->BUSY_MASK,std::memory_order_relaxed);
 			break;
 	}
 }

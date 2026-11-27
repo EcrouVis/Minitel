@@ -118,5 +118,8 @@ class TS9347wVRAM{
 		void TLM();
 		void TLA();
 		void CLL();
+		void C1X();
+		void CAX();
+		void CCX();
 };
 #endif
